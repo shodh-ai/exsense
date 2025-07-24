@@ -4,6 +4,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { micEventEmitter } from '@/lib/MicEventEmitter';
+import { musicEventEmitter } from '@/lib/MusicEventEmitter'; // NEW: Import musicEventEmitter
 
 // --- GLSL & SHADERS (Unchanged) ---
 const snoise = `
@@ -229,6 +230,8 @@ const Sphere: React.FC = () => {
     const mountRef = useRef<HTMLDivElement>(null);
     const [isAudioActive, setIsAudioActive] = useState(false);
     const [currentEmotion, setCurrentEmotion] = useState<Emotion>('default');
+    // NEW: State to control if music is explicitly paused by the button
+    const [isMusicExplicitlyPaused, setIsMusicExplicitlyPaused] = useState(false);
 
     // Refs for audio playback and state
     const isAudioActiveRef = useRef(isAudioActive);
@@ -290,7 +293,21 @@ const Sphere: React.FC = () => {
     useEffect(() => {
         micEventEmitter.subscribe(handleStartListen);
         return () => { micEventEmitter.unsubscribe(handleStartListen); };
-    }, [handleStartListen, handleStopListen]);
+    }, [handleStartListen]);
+
+
+    // NEW: Effect to handle music play/pause commands from the footer button
+    useEffect(() => {
+        const handleTogglePlayback = () => {
+            setIsMusicExplicitlyPaused(prev => !prev);
+        };
+
+        musicEventEmitter.subscribe(handleTogglePlayback);
+
+        return () => {
+            musicEventEmitter.unsubscribe(handleTogglePlayback);
+        };
+    }, []); // Empty dependency array means this effect runs once on mount/unmount
 
 
     // --- Effect for handling background music changes ---
@@ -308,7 +325,16 @@ const Sphere: React.FC = () => {
 
         const fadeOutAndSwitch = () => {
             if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-            if (audio.paused || audio.volume === 0) {
+
+            // If explicitly paused by the button, just ensure it's stopped and exit.
+            if (isMusicExplicitlyPaused) {
+                audio.pause();
+                audio.volume = 0;
+                audio.src = ''; // Clear source to prevent accidental restart
+                return;
+            }
+
+            if (audio.paused || audio.volume === 0) { // If already paused/silent, proceed to fade in
                 fadeIn();
                 return;
             }
@@ -330,10 +356,16 @@ const Sphere: React.FC = () => {
 
         const fadeIn = () => {
             if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-            if (!newMusicUrl) {
+
+            // If no music URL for this emotion, or explicitly paused, stop and exit.
+            if (!newMusicUrl || isMusicExplicitlyPaused) {
                 audio.src = '';
+                audio.pause();
+                audio.volume = 0;
                 return;
             }
+            
+            // Only update src if it's different from the current one
             if (audio.src !== newMusicUrl) {
                 audio.src = newMusicUrl;
             }
@@ -353,12 +385,26 @@ const Sphere: React.FC = () => {
             }, 50);
         };
 
-        fadeOutAndSwitch();
+        // This determines the music state:
+        // If explicitly paused, stop music. Otherwise, manage based on emotion.
+        if (isMusicExplicitlyPaused) {
+            if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+            if (audio.src) { // Only if there was an active src
+                audio.pause();
+                audio.volume = 0;
+                audio.src = ''; // Clear source to prevent accidental restart
+            }
+        } else {
+            // If not explicitly paused, then emotion dictates playback
+            fadeOutAndSwitch();
+        }
 
         return () => {
             if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+            // On unmount or dependency change, clear interval but don't force stop/src clear
+            // as the explicit pause state might handle it already.
         };
-    }, [currentEmotion]);
+    }, [currentEmotion, isMusicExplicitlyPaused]); // Add isMusicExplicitlyPaused to dependency array
 
 
     // --- Main Three.js setup and animation loop ---
@@ -551,7 +597,7 @@ const Sphere: React.FC = () => {
                 currentMount.removeChild(renderer.domElement);
             }
         };
-    }, [currentEmotion]);
+    }, [currentEmotion, isMusicExplicitlyPaused]); // Add isMusicExplicitlyPaused to the main useEffect dependencies as well
 
     return (
         <>

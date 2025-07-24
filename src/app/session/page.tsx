@@ -74,31 +74,25 @@ export default function Session() {
             <div className='flex flex-col w-full h-full items-center justify-between'>
 
                 <div className='w-full h-full flex flex-col items-center justify-between'>
-                    <div className="w-full flex justify-center pt-[40px]">
-                        {/* Original Top navigation bar - now centered */}
-                        {/* Changed background, border, padding, gap and added rounded-full */}
-                        {/* Adjusted width to 457px to perfectly fit 3 buttons of 147px each with 2 gaps of 8px */}
-                        <div className="p-2 w-[457px] h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center gap-2 ">
+                    <div className="w-full flex justify-center pt-[20px]">
+                        <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center">
                             {componentButtons.map(({ key, label, inactiveImagePath, activeImagePath }) => (
                                 <button
                                     key={key}
                                     onClick={() => setActiveView(key)}
-                                    // Updated button classes for fixed size, content alignment, and active/inactive states
-                                    className={`w-[147px] h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
+                                    className={`w-[32.5%] h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
                                 >
                                     <img
-                                        // Dynamically change the image source based on active state
                                         src={activeView === key ? activeImagePath : inactiveImagePath}
                                         alt={label}
-                                        className="w-24 h-24" // Set a fixed size for the image
+                                        className="w-[20px] h-[20px]"
                                     />
                                     {label}
                                 </button>
                             ))}
                         </div>
-                    </div> {/* End of wrapper div */}
+                    </div>
 
-                    {/* --- RENDER AREA --- */}
                     <div className="flex-grow relative w-full h-full">
                         <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
                             <ExcalidrawWrapper />

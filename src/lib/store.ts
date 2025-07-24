@@ -14,6 +14,7 @@ interface SessionState {
     isStudentTurn: boolean;
     suggestedStudentTool: string | null;
     isMicEnabled: boolean; // <-- NEW STATE PROPERTY
+    isMusicButtonPlaying: boolean; // <-- Music button state
 
     // --- Actions ---
     setActiveView: (view: SessionView) => void;
@@ -23,6 +24,7 @@ interface SessionState {
     setIsStudentTurn: (isTurn: boolean) => void;
     setSuggestedStudentTool: (tool: string | null) => void;
     setIsMicEnabled: (isEnabled: boolean) => void; // <-- NEW ACTION
+    setIsMusicButtonPlaying: (isPlaying: boolean) => void; // <-- Music button action
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -36,6 +38,7 @@ export const useSessionStore = create<SessionState>()(
             isStudentTurn: false,
             suggestedStudentTool: null,
             isMicEnabled: false, // <-- Mic is off by default
+            isMusicButtonPlaying: false, // <-- Music is off by default
 
             // --- Actions Implementation ---
             setActiveView: (view) => set({ activeView: view }),
@@ -45,6 +48,7 @@ export const useSessionStore = create<SessionState>()(
             setIsStudentTurn: (isTurn) => set({ isStudentTurn: isTurn }),
             setSuggestedStudentTool: (tool) => set({ suggestedStudentTool: tool }),
             setIsMicEnabled: (isEnabled) => set({ isMicEnabled: isEnabled }), // <-- NEW ACTION IMPLEMENTATION
+            setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }), // <-- Music button action implementation
         }),
         { name: "SessionUIStore" }
     )

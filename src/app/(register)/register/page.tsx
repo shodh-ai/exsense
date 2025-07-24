@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
-// import { signIn } from "next-auth/react";
+import { signIn } from "next-auth/react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
 // import type { RegisterResponsePayload } from "@/types/register-payload";
 // import type { ErrorPayload } from "@/types/error-payload";
@@ -100,11 +100,11 @@ export default function Register() {
                         <div className="flex w-full gap-3">
                             <button
                                 type="button"
-                                // onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+                                onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
                                 className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
                             >
                                 <Image
-                                    src="/google.png"
+                                    src="/Google.svg"
                                     alt="Google"
                                     height={20}
                                     width={20}
@@ -115,7 +115,7 @@ export default function Register() {
 
                             <button
                                 type="button"
-                                // onClick={() => signIn("facebook", { callbackUrl: "/dashboard" })}
+                                onClick={() => signIn("facebook", { callbackUrl: "/dashboard" })}
                                 className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
                             >
                                 <Image

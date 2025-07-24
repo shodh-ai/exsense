@@ -35,7 +35,7 @@ export const MicButton = ({ className }: { className?: string }): JSX.Element =>
 
     return (
         <button onClick={handleMicToggle} className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center ... ${buttonStyle} ${className || ''}`} aria-label={ariaLabel}>
-            <img className="w-16 h-16" alt={ariaLabel} src={iconSrc} />
+            <img className="w-[24px] h-[24px]" alt={ariaLabel} src={iconSrc} />
         </button>
     );
 };
