@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
-// import type { LoginResponsePayload } from "@/types/login-payload";
-// import type { ErrorPayload } from "@/types/error-payload";
-// import { signIn } from "next-auth/react";
+import type { LoginResponsePayload } from "@/types/login-payload";
+import type { ErrorPayload } from "@/types/error-payload";
+import { signIn } from "next-auth/react";
 import Sphere from "@/components/Sphere";
 
 export default function Login() {
@@ -17,39 +17,39 @@ export default function Login() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
-    // const handleSubmit = async (e: FormEvent) => {
-    //     e.preventDefault();
-    //     setLoading(true);
-    //     setError("");
+    const handleSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError("");
 
-    //     try {
-    //         const response = await fetch("/api/auth/login", {
-    //             method: "POST",
-    //             headers: {
-    //                 "Content-Type": "application/json",
-    //             },
-    //             body: JSON.stringify({ email, password }),
-    //         });
+        try {
+            const response = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email, password }),
+            });
 
-    //         const data = await response.json();
+            const data = await response.json();
 
-    //         if (!response.ok) {
-    //             const errorData = data as ErrorPayload;
-    //             throw new Error(
-    //                 errorData.message || `HTTP error! status: ${response.status}`
-    //             );
-    //         }
+            if (!response.ok) {
+                const errorData = data as ErrorPayload;
+                throw new Error(
+                    errorData.message || `HTTP error! status: ${response.status}`
+                );
+            }
 
-    //         const successData = data as LoginResponsePayload;
-    //         console.log("Login Token:", successData.data);
-    //         localStorage.setItem("authToken", successData.data);
-    //         router.push("/dashboard");
-    //     } catch (err: any) {
-    //         setError(err.message || "An error occurred during login");
-    //     } finally {
-    //         setLoading(false);
-    //     }
-    // };
+            const successData = data as LoginResponsePayload;
+            console.log("Login Token:", successData.data);
+            localStorage.setItem("authToken", successData.data);
+            router.push("/dashboard");
+        } catch (err: any) {
+            setError(err.message || "An error occurred during login");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <div className="w-full h-full overflow-hidden flex items-center justify-center flex-col p-4 sm:p-6 lg:p-8">
@@ -61,7 +61,7 @@ export default function Login() {
                 {/* Form */}
                 <form
                     className="flex flex-col mt-6 md:mt-8 w-full"
-                // onSubmit={handleSubmit}
+                onSubmit={handleSubmit}
                 >
                     <div className="flex flex-col gap-5 w-full pl-2 pr-2">
                         <input
@@ -102,11 +102,11 @@ export default function Login() {
                     <div className="flex w-full gap-3">
                         <button
                             type="button"
-                            // onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+                            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
                             className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
                         >
                             <Image
-                                src="/google.png"
+                                src="/Google.svg"
                                 alt="Google"
                                 height={20}
                                 width={20}
@@ -117,7 +117,7 @@ export default function Login() {
 
                         <button
                             type="button"
-                            // onClick={() => signIn("facebook", { callbackUrl: "/dashboard" })}
+                            onClick={() => signIn("facebook", { callbackUrl: "/dashboard" })}
                             className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
                         >
                             <Image
