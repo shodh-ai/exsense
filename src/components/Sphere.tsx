@@ -1,7 +1,7 @@
 // src/components/ui/Sphere.tsx
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import * as THREE from '../../node_modules/@types/three';
+import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { micEventEmitter } from '@/lib/MicEventEmitter';
 import { musicEventEmitter } from '@/lib/MusicEventEmitter';

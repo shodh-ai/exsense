@@ -5,8 +5,25 @@ interface VideoViewerProps {
 }
 export default function VideoViewer({ videoSrc, className }: VideoViewerProps) {
   return (
-    <div className={`video-viewer w-full h-full ${className || ''}`}>
-      <div style={{position: 'relative', aspectRatio: '16/9', width: '100%', height: '100%'}}>
+    <div className={`video-viewer ${className || ''}`} style={{ 
+      position: 'relative',
+      width: '100%', 
+      height: '100%',
+      display: 'flex', 
+      justifyContent: 'center', 
+      alignItems: 'center' 
+    }}>
+      <div style={{
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: '1080px',
+        height: '620px',
+        borderRadius: '50%',
+        overflow: 'hidden',
+        zIndex: 1
+      }}>
         <iframe 
           loading="lazy" 
           title="Gumlet video player"
@@ -17,7 +34,8 @@ export default function VideoViewer({ videoSrc, className }: VideoViewerProps) {
             top: 0, 
             left: 0, 
             height: '100%', 
-            width: '100%'
+            width: '100%',
+            borderRadius: '50%'
           }}
           allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
         />
