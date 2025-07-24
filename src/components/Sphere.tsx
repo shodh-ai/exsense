@@ -1,7 +1,7 @@
 // src/components/ui/Sphere.tsx
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import * as THREE from 'three';
+import * as THREE from '../../node_modules/@types/three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { micEventEmitter } from '@/lib/MicEventEmitter';
 import { musicEventEmitter } from '@/lib/MusicEventEmitter';
@@ -617,7 +617,7 @@ const Sphere: React.FC = () => {
                     <button onClick={() => setCurrentEmotion('angry')}>Angry</button>
                 </div>
             </div>
-            <div ref={mountRef} style={{ width: '100vw', height: '100vh', position: 'fixed', top: 0, left: 0, zIndex: -1 }} />
+            <div ref={mountRef} style={{ width: '100vw', height: '100vh', position: 'fixed', top: 0, left: 0, zIndex: 1000, pointerEvents: 'none' }} />
         </>
     );
 };
