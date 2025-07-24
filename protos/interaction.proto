@@ -231,6 +231,13 @@ enum ClientUIActionType {
   REPLACE_TEXT_RANGE = 46;             // Action to replace a range of text
   SHOW_FEEDBACK = 47;
   HIGHLIGHT_ELEMENT = 48;
+  
+  // NEW FRONTEND VOCABULARY ACTIONS (for advanced interactive capabilities)
+  GENERATE_VISUALIZATION = 49;          // Generate professional visualization on canvas
+  HIGHLIGHT_ELEMENTS = 50;              // Highlight multiple UI elements (plural)
+  GIVE_STUDENT_CONTROL = 51;            // Transfer control to student with message
+  TAKE_AI_CONTROL = 52;                 // AI regains control with message
+  CLEAR_ALL_ANNOTATIONS = 53;           // Clear all visual annotations and highlights
 }
 // Request from Agent to Client to perform a UI action
 message AgentToClientUIActionRequest {
