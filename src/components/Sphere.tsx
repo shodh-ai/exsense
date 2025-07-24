@@ -4,7 +4,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { micEventEmitter } from '@/lib/MicEventEmitter';
-import { musicEventEmitter } from '@/lib/MusicEventEmitter'; // NEW: Import musicEventEmitter
+import { musicEventEmitter } from '@/lib/MusicEventEmitter';
 
 // --- GLSL & SHADERS (Unchanged) ---
 const snoise = `
@@ -132,6 +132,9 @@ const BREATHING_SMOOTHING_DOWN = 0.1;
 const MIN_BREATHING_SCALE = 0.95;
 const MAX_BREATHING_SCALE = 0.96;
 
+// NEW: Variable for background music volume
+const BACKGROUND_MUSIC_VOLUME = 0.003; // Set to a low value as requested (0.0 - 1.0)
+
 // --- EMOTION DEFINITIONS ---
 type Emotion = 'default' | 'happy' | 'sad' | 'angry' | 'calm';
 
@@ -230,7 +233,7 @@ const Sphere: React.FC = () => {
     const mountRef = useRef<HTMLDivElement>(null);
     const [isAudioActive, setIsAudioActive] = useState(false);
     const [currentEmotion, setCurrentEmotion] = useState<Emotion>('default');
-    // NEW: State to control if music is explicitly paused by the button
+    // State to control if music is explicitly paused by the button
     const [isMusicExplicitlyPaused, setIsMusicExplicitlyPaused] = useState(false);
 
     // Refs for audio playback and state
@@ -296,7 +299,7 @@ const Sphere: React.FC = () => {
     }, [handleStartListen]);
 
 
-    // NEW: Effect to handle music play/pause commands from the footer button
+    // Effect to handle music play/pause commands from the footer button
     useEffect(() => {
         const handleTogglePlayback = () => {
             setIsMusicExplicitlyPaused(prev => !prev);
@@ -321,7 +324,8 @@ const Sphere: React.FC = () => {
         const audio = musicAudioRef.current;
         const newMusicUrl = emotionMusicMap[currentEmotion];
         const FADE_TIME = 1000; // 1 second
-        const MAX_VOLUME = 0.4; // Not too loud
+        // Changed to use the new BACKGROUND_MUSIC_VOLUME variable
+        const MAX_VOLUME = BACKGROUND_MUSIC_VOLUME; 
 
         const fadeOutAndSwitch = () => {
             if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
