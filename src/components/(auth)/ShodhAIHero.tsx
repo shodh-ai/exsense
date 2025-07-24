@@ -4,7 +4,7 @@ export default function ShodhAIHero() {
     return (
         <div className="flex flex-col justify-center items-center gap-2 sm:gap-3">
             <Image
-                src="/logo-full.png"
+                src="/Shodh-logo1.svg"
                 alt="Shodh Logo"
                 height={42}
                 width={176}

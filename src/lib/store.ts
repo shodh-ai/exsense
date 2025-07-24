@@ -1,3 +1,5 @@
+// START OF FILE store.ts
+
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
@@ -13,7 +15,9 @@ interface SessionState {
     isAgentSpeaking: boolean;
     isStudentTurn: boolean;
     suggestedStudentTool: string | null;
-    isMicEnabled: boolean; // <-- NEW STATE PROPERTY
+    isMicEnabled: boolean;
+    isMusicButtonPlaying: boolean;
+    isMicActivatingPending: boolean; // <-- NEW STATE PROPERTY
 
     // --- Actions ---
     setActiveView: (view: SessionView) => void;
@@ -22,7 +26,9 @@ interface SessionState {
     setIsAgentSpeaking: (isSpeaking: boolean) => void;
     setIsStudentTurn: (isTurn: boolean) => void;
     setSuggestedStudentTool: (tool: string | null) => void;
-    setIsMicEnabled: (isEnabled: boolean) => void; // <-- NEW ACTION
+    setIsMicEnabled: (isEnabled: boolean) => void;
+    setIsMusicButtonPlaying: (isPlaying: boolean) => void;
+    setIsMicActivatingPending: (isPending: boolean) => void; // <-- NEW ACTION
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -35,7 +41,9 @@ export const useSessionStore = create<SessionState>()(
             isAgentSpeaking: false,
             isStudentTurn: false,
             suggestedStudentTool: null,
-            isMicEnabled: false, // <-- Mic is off by default
+            isMicEnabled: false,
+            isMusicButtonPlaying: false,
+            isMicActivatingPending: false, // <-- Mic activation not pending by default
 
             // --- Actions Implementation ---
             setActiveView: (view) => set({ activeView: view }),
@@ -44,8 +52,12 @@ export const useSessionStore = create<SessionState>()(
             setIsAgentSpeaking: (isSpeaking) => set({ isAgentSpeaking: isSpeaking }),
             setIsStudentTurn: (isTurn) => set({ isStudentTurn: isTurn }),
             setSuggestedStudentTool: (tool) => set({ suggestedStudentTool: tool }),
-            setIsMicEnabled: (isEnabled) => set({ isMicEnabled: isEnabled }), // <-- NEW ACTION IMPLEMENTATION
+            setIsMicEnabled: (isEnabled) => set({ isMicEnabled: isEnabled }),
+            setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
+            setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }), // <-- NEW ACTION IMPLEMENTATION
         }),
         { name: "SessionUIStore" }
     )
 );
+
+// END OF FILE store.ts
