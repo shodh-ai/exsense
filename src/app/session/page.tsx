@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Footer from '@/components/Footer';
 import { Room } from 'livekit-client';
 import { RoomContext } from '@livekit/components-react';
 import { RoomAudioRenderer } from '@livekit/components-react';
 import dynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
+import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import Sphere from '@/components/Sphere';
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
@@ -14,7 +15,8 @@ const ExcalidrawWrapper = dynamic(() => import('@/components/session/ExcalidrawW
 const VncViewer = dynamic(() => import('@/components/session/VncViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
 
-const mockRoom = new Room();
+// Fallback room for when LiveKit is not connected
+const fallbackRoom = new Room();
 type ViewKey = ReturnType<typeof useSessionStore.getState>['activeView'];
 
 // Define a type for button configuration, including both active and inactive icon paths
@@ -26,12 +28,24 @@ interface ButtonConfig {
 }
 
 export default function Session() {
-    const isLoading = false;
-    const connectionError = null;
-    const vncUrl = `ws://localhost:6901`;
     const { activeView, setActiveView } = useSessionStore();
     const [isIntroActive, setIsIntroActive] = useState(true);
     const handleIntroComplete = () => setIsIntroActive(false);
+    
+    // Generate unique room and user identifiers
+    const roomName = `session-${Date.now()}`;
+    const userName = `student-${Date.now()}`;
+    
+    // Initialize LiveKit session
+    const {
+        room,
+        isConnected,
+        isLoading,
+        connectionError,
+        startTask
+    } = useLiveKitSession(roomName, userName);
+    
+    const vncUrl = `ws://localhost:6901`;
 
     console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 
@@ -67,7 +81,7 @@ export default function Session() {
     }
 
     return (
-        <RoomContext.Provider value={mockRoom}>
+        <RoomContext.Provider value={room || fallbackRoom}>
             <RoomAudioRenderer />
             <Sphere />
             <div className='flex flex-col w-full h-full items-center justify-between'>

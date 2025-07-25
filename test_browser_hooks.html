@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Hooks Test - No LiveKit Required</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .section {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            background: #007cba;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #005a87;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .event-item {
+            background: #f8f9fa;
+            border-left: 4px solid #007cba;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        .event-time {
+            font-size: 11px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Browser Automation Hooks Test</h1>
+        <p>Test the browser automation hooks without requiring LiveKit service</p>
+    </div>
+
+    <div class="grid">
+        <!-- Browser Action Executor Test -->
+        <div class="container">
+            <h2>🎯 Browser Action Executor</h2>
+            
+            <div class="section">
+                <h3>Connection Status</h3>
+                <div id="executor-status" class="status info">Not connected</div>
+                <button onclick="connectExecutor()">Connect to VNC</button>
+                <button onclick="disconnectExecutor()">Disconnect</button>
+            </div>
+
+            <div class="section">
+                <h3>Send Browser Commands</h3>
+                <div class="form-group">
+                    <label>Action Type:</label>
+                    <select id="action-type">
+                        <option value="browser_navigate">Navigate</option>
+                        <option value="browser_click">Click</option>
+                        <option value="browser_type">Type</option>
+                        <option value="browser_scroll">Scroll</option>
+                        <option value="browser_hover">Hover</option>
+                        <option value="browser_screenshot">Screenshot</option>
+                        <option value="browser_get_element">Get Element</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>URL (for navigate):</label>
+                    <input type="text" id="action-url" placeholder="https://example.com">
+                </div>
+                
+                <div class="form-group">
+                    <label>CSS Selector:</label>
+                    <input type="text" id="action-selector" placeholder="#button or .class">
+                </div>
+                
+                <div class="form-group">
+                    <label>Text (for type):</label>
+                    <input type="text" id="action-text" placeholder="Text to type">
+                </div>
+                
+                <button onclick="sendBrowserCommand()">Send Command</button>
+                <button onclick="simulateRPCCall()">Simulate RPC Call</button>
+            </div>
+
+            <div class="section">
+                <h3>Executor Log</h3>
+                <div id="executor-log" class="log"></div>
+            </div>
+        </div>
+
+        <!-- Browser Interaction Sensor Test -->
+        <div class="container">
+            <h2>👁️ Browser Interaction Sensor</h2>
+            
+            <div class="section">
+                <h3>Sensor Status</h3>
+                <div id="sensor-status" class="status info">Not listening</div>
+                <button onclick="startSensorListening()">Start Listening</button>
+                <button onclick="stopSensorListening()">Stop Listening</button>
+                <button onclick="connectSensor()">Connect to Sensor</button>
+            </div>
+
+            <div class="section">
+                <h3>Simulate Browser Events</h3>
+                <button onclick="simulateClick()">Simulate Click</button>
+                <button onclick="simulateType()">Simulate Type</button>
+                <button onclick="simulateHover()">Simulate Hover</button>
+                <button onclick="simulateNavigation()">Simulate Navigation</button>
+            </div>
+
+            <div class="section">
+                <h3>Recent Events</h3>
+                <div id="sensor-events"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>📊 Test Results</h2>
+        <div id="test-results" class="log"></div>
+    </div>
+
+    <script>
+        // Mock LiveKit Room class
+        class MockRoom {
+            constructor() {
+                this.localParticipant = new MockLocalParticipant();
+                this.remoteParticipants = new Map();
+                
+                // Add a mock agent participant
+                const mockAgent = new MockRemoteParticipant('agent-conductor-123');
+                this.remoteParticipants.set('agent-conductor-123', mockAgent);
+            }
+        }
+
+        class MockLocalParticipant {
+            constructor() {
+                this.rpcMethods = new Map();
+            }
+
+            registerRpcMethod(method, handler) {
+                this.rpcMethods.set(method, handler);
+                console.log(`Registered RPC method: ${method}`);
+            }
+
+            async performRpc({ destinationIdentity, method, payload }) {
+                console.log(`Mock RPC call to ${destinationIdentity}: ${method}`);
+                console.log('Payload:', payload);
+                
+                // Simulate response
+                return JSON.stringify({
+                    success: true,
+                    message: `Mock response for ${method}`,
+                    timestamp: Date.now()
+                });
+            }
+        }
+
+        class MockRemoteParticipant {
+            constructor(identity) {
+                this.identity = identity;
+            }
+        }
+
+        // Global state
+        let mockRoom = new MockRoom();
+        let executorHook = null;
+        let sensorHook = null;
+        let vncWebSocket = null;
+        let sensorWebSocket = null;
+
+        // Mock Browser Action Executor Hook
+        class MockBrowserActionExecutor {
+            constructor(room) {
+                this.room = room;
+                this.isVNCConnected = false;
+                this.isExecuting = false;
+                this.lastError = null;
+                this.vncWebSocket = null;
+                
+                // Register RPC handler
+                if (room && room.localParticipant) {
+                    room.localParticipant.registerRpcMethod(
+                        "Browser/ExecuteAction",
+                        this.handleBrowserExecuteAction.bind(this)
+                    );
+                }
+            }
+
+            async handleBrowserExecuteAction(rpcData) {
+                this.log('Received Browser/ExecuteAction RPC call');
+                
+                try {
+                    const payload = JSON.parse(rpcData.payload);
+                    const command = {
+                        tool_name: payload.tool_name || payload.browser_type,
+                        parameters: payload.parameters || payload
+                    };
+                    
+                    this.log(`Executing command: ${command.tool_name}`);
+                    
+                    // Send to VNC if connected
+                    if (this.vncWebSocket && this.vncWebSocket.readyState === WebSocket.OPEN) {
+                        const vncMessage = this.commandToVNCMessage(command);
+                        this.vncWebSocket.send(JSON.stringify(vncMessage));
+                        this.log(`Sent VNC message: ${JSON.stringify(vncMessage)}`);
+                    } else {
+                        throw new Error('VNC not connected');
+                    }
+                    
+                    return JSON.stringify({
+                        success: true,
+                        message: `Browser action ${command.tool_name} executed`,
+                        timestamp: Date.now()
+                    });
+                    
+                } catch (error) {
+                    this.log(`Error: ${error.message}`, 'error');
+                    return JSON.stringify({
+                        success: false,
+                        error: error.message,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+
+            commandToVNCMessage(command) {
+                const actionMap = {
+                    'browser_click': 'click',
+                    'browser_type': 'type',
+                    'browser_navigate': 'navigate',
+                    'browser_scroll': 'scroll',
+                    'browser_hover': 'hover',
+                    'browser_screenshot': 'screenshot',
+                    'browser_get_element': 'get_element'
+                };
+
+                return {
+                    action: actionMap[command.tool_name] || command.tool_name,
+                    selector: command.parameters.selector,
+                    text: command.parameters.text,
+                    url: command.parameters.url,
+                    x: command.parameters.x,
+                    y: command.parameters.y,
+                    timestamp: Date.now()
+                };
+            }
+
+            connectVNC(vncUrl) {
+                try {
+                    this.vncWebSocket = new WebSocket(vncUrl);
+                    
+                    this.vncWebSocket.onopen = () => {
+                        this.isVNCConnected = true;
+                        this.log('VNC WebSocket connected', 'success');
+                        updateExecutorStatus();
+                    };
+                    
+                    this.vncWebSocket.onclose = () => {
+                        this.isVNCConnected = false;
+                        this.log('VNC WebSocket disconnected', 'error');
+                        updateExecutorStatus();
+                    };
+                    
+                    this.vncWebSocket.onerror = (error) => {
+                        this.log(`VNC WebSocket error: ${error}`, 'error');
+                    };
+                    
+                    this.vncWebSocket.onmessage = (event) => {
+                        try {
+                            const response = JSON.parse(event.data);
+                            this.log(`VNC response: ${JSON.stringify(response)}`);
+                        } catch (error) {
+                            this.log(`Failed to parse VNC response: ${error}`, 'error');
+                        }
+                    };
+                    
+                } catch (error) {
+                    this.log(`Failed to connect to VNC: ${error}`, 'error');
+                }
+            }
+
+            disconnectVNC() {
+                if (this.vncWebSocket) {
+                    this.vncWebSocket.close();
+                    this.vncWebSocket = null;
+                }
+                this.isVNCConnected = false;
+                this.log('Disconnected from VNC');
+                updateExecutorStatus();
+            }
+
+            async executeBrowserAction(command) {
+                const vncMessage = this.commandToVNCMessage(command);
+                
+                if (this.vncWebSocket && this.vncWebSocket.readyState === WebSocket.OPEN) {
+                    this.vncWebSocket.send(JSON.stringify(vncMessage));
+                    this.log(`Sent command: ${JSON.stringify(vncMessage)}`);
+                    return { success: true };
+                } else {
+                    throw new Error('VNC not connected');
+                }
+            }
+
+            log(message, type = 'info') {
+                const logElement = document.getElementById('executor-log');
+                const timestamp = new Date().toLocaleTimeString();
+                const className = type === 'error' ? 'color: red' : type === 'success' ? 'color: green' : '';
+                logElement.innerHTML += `<div style="${className}">[${timestamp}] ${message}</div>`;
+                logElement.scrollTop = logElement.scrollHeight;
+            }
+        }
+
+        // Mock Browser Interaction Sensor Hook
+        class MockBrowserInteractionSensor {
+            constructor(room) {
+                this.room = room;
+                this.isListening = false;
+                this.lastInteraction = null;
+                this.interactionCount = 0;
+                this.sensorWebSocket = null;
+                this.events = [];
+            }
+
+            connectToVNCSensor(sensorUrl) {
+                try {
+                    this.sensorWebSocket = new WebSocket(sensorUrl);
+                    
+                    this.sensorWebSocket.onopen = () => {
+                        this.log('Sensor WebSocket connected', 'success');
+                        updateSensorStatus();
+                    };
+                    
+                    this.sensorWebSocket.onclose = () => {
+                        this.log('Sensor WebSocket disconnected', 'error');
+                        updateSensorStatus();
+                    };
+                    
+                    this.sensorWebSocket.onerror = (error) => {
+                        this.log(`Sensor WebSocket error: ${error}`, 'error');
+                    };
+                    
+                    this.sensorWebSocket.onmessage = (event) => {
+                        try {
+                            const sensorEvent = JSON.parse(event.data);
+                            this.handleSensorEvent(sensorEvent);
+                        } catch (error) {
+                            this.log(`Failed to parse sensor event: ${error}`, 'error');
+                        }
+                    };
+                    
+                } catch (error) {
+                    this.log(`Failed to connect to sensor: ${error}`, 'error');
+                }
+            }
+
+            handleSensorEvent(event) {
+                this.lastInteraction = event;
+                this.interactionCount++;
+                this.events.push(event);
+                
+                this.log(`Received ${event.action} event`);
+                
+                if (this.isListening) {
+                    this.reportStudentAction(event);
+                }
+                
+                this.displayEvent(event);
+            }
+
+            async reportStudentAction(event, transcript) {
+                if (!this.room?.localParticipant) {
+                    this.log('No LiveKit room available for RPC call', 'error');
+                    return;
+                }
+                
+                const actionData = {
+                    actionType: 'browser_interaction',
+                    browserEvent: event,
+                    transcript,
+                    timestamp: Date.now()
+                };
+                
+                try {
+                    const participants = Array.from(this.room.remoteParticipants.values());
+                    const agentParticipant = participants.find(p => 
+                        p.identity.toLowerCase().includes('agent') || 
+                        p.identity.toLowerCase().includes('conductor')
+                    );
+                    
+                    if (agentParticipant) {
+                        const response = await this.room.localParticipant.performRpc({
+                            destinationIdentity: agentParticipant.identity,
+                            method: 'student_spoke_or_acted',
+                            payload: JSON.stringify(actionData)
+                        });
+                        
+                        this.log(`RPC response: ${response}`, 'success');
+                    }
+                } catch (error) {
+                    this.log(`Error making RPC call: ${error}`, 'error');
+                }
+            }
+
+            startListening() {
+                this.isListening = true;
+                this.log('Started listening for browser interactions', 'success');
+                updateSensorStatus();
+            }
+
+            stopListening() {
+                this.isListening = false;
+                this.log('Stopped listening for browser interactions');
+                updateSensorStatus();
+            }
+
+            displayEvent(event) {
+                const eventsContainer = document.getElementById('sensor-events');
+                const eventElement = document.createElement('div');
+                eventElement.className = 'event-item';
+                
+                const timestamp = new Date(event.timestamp).toLocaleTimeString();
+                eventElement.innerHTML = `
+                    <div><strong>${event.action.toUpperCase()}</strong></div>
+                    <div class="event-time">${timestamp}</div>
+                    ${event.selector ? `<div>Selector: ${event.selector}</div>` : ''}
+                    ${event.url ? `<div>URL: ${event.url}</div>` : ''}
+                    ${event.element ? `<div>Element: ${event.element.tagName}</div>` : ''}
+                `;
+                
+                eventsContainer.insertBefore(eventElement, eventsContainer.firstChild);
+                
+                // Keep only last 10 events
+                while (eventsContainer.children.length > 10) {
+                    eventsContainer.removeChild(eventsContainer.lastChild);
+                }
+            }
+
+            log(message, type = 'info') {
+                console.log(`[Sensor] ${message}`);
+            }
+        }
+
+        // Initialize hooks
+        executorHook = new MockBrowserActionExecutor(mockRoom);
+        sensorHook = new MockBrowserInteractionSensor(mockRoom);
+
+        // UI Functions
+        function connectExecutor() {
+            const vncUrl = 'ws://localhost:8765';
+            executorHook.connectVNC(vncUrl);
+        }
+
+        function disconnectExecutor() {
+            executorHook.disconnectVNC();
+        }
+
+        function connectSensor() {
+            const sensorUrl = 'ws://localhost:8766';
+            sensorHook.connectToVNCSensor(sensorUrl);
+        }
+
+        function startSensorListening() {
+            sensorHook.startListening();
+        }
+
+        function stopSensorListening() {
+            sensorHook.stopListening();
+        }
+
+        function sendBrowserCommand() {
+            const actionType = document.getElementById('action-type').value;
+            const url = document.getElementById('action-url').value;
+            const selector = document.getElementById('action-selector').value;
+            const text = document.getElementById('action-text').value;
+            
+            const command = {
+                tool_name: actionType,
+                parameters: {
+                    url: url || undefined,
+                    selector: selector || undefined,
+                    text: text || undefined
+                }
+            };
+            
+            executorHook.executeBrowserAction(command)
+                .then(result => {
+                    executorHook.log(`Command result: ${JSON.stringify(result)}`, 'success');
+                })
+                .catch(error => {
+                    executorHook.log(`Command failed: ${error.message}`, 'error');
+                });
+        }
+
+        function simulateRPCCall() {
+            const actionType = document.getElementById('action-type').value;
+            const url = document.getElementById('action-url').value;
+            const selector = document.getElementById('action-selector').value;
+            const text = document.getElementById('action-text').value;
+            
+            const rpcData = {
+                payload: JSON.stringify({
+                    tool_name: actionType,
+                    parameters: {
+                        url: url || undefined,
+                        selector: selector || undefined,
+                        text: text || undefined
+                    }
+                })
+            };
+            
+            executorHook.handleBrowserExecuteAction(rpcData)
+                .then(response => {
+                    executorHook.log(`RPC response: ${response}`, 'success');
+                });
+        }
+
+        function simulateClick() {
+            const event = {
+                action: 'click',
+                selector: '#test-button',
+                element: { tagName: 'BUTTON', id: 'test-button' },
+                coordinates: { x: 100, y: 200 },
+                timestamp: Date.now()
+            };
+            sensorHook.handleSensorEvent(event);
+        }
+
+        function simulateType() {
+            const event = {
+                action: 'type',
+                selector: 'input[name="test"]',
+                element: { tagName: 'INPUT', value: 'test input' },
+                timestamp: Date.now()
+            };
+            sensorHook.handleSensorEvent(event);
+        }
+
+        function simulateHover() {
+            const event = {
+                action: 'hover',
+                selector: '.hover-target',
+                element: { tagName: 'DIV', className: 'hover-target' },
+                coordinates: { x: 150, y: 250 },
+                timestamp: Date.now()
+            };
+            sensorHook.handleSensorEvent(event);
+        }
+
+        function simulateNavigation() {
+            const event = {
+                action: 'navigate',
+                url: 'https://example.com',
+                timestamp: Date.now()
+            };
+            sensorHook.handleSensorEvent(event);
+        }
+
+        function updateExecutorStatus() {
+            const statusElement = document.getElementById('executor-status');
+            if (executorHook.isVNCConnected) {
+                statusElement.textContent = 'Connected to VNC';
+                statusElement.className = 'status success';
+            } else {
+                statusElement.textContent = 'Not connected to VNC';
+                statusElement.className = 'status error';
+            }
+        }
+
+        function updateSensorStatus() {
+            const statusElement = document.getElementById('sensor-status');
+            if (sensorHook.isListening) {
+                statusElement.textContent = 'Listening for events';
+                statusElement.className = 'status success';
+            } else {
+                statusElement.textContent = 'Not listening';
+                statusElement.className = 'status info';
+            }
+        }
+
+        // Initialize UI
+        updateExecutorStatus();
+        updateSensorStatus();
+
+        // Log initial state
+        console.log('Browser Hooks Test initialized');
+        console.log('Mock Room:', mockRoom);
+        console.log('Executor Hook:', executorHook);
+        console.log('Sensor Hook:', sensorHook);
+    </script>
+</body>
+</html>
