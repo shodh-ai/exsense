@@ -35,7 +35,7 @@ export default function RootLayout({
             <div className="w-[12%] aspect-[2/1] rounded-b-full bg-white/[0.01] shadow-[inset_0px_0px_60px_rgba(234,237,251,1)] backdrop-blur-sm" />
           </div>
           <div className="absolute top-0 left-0 h-screen w-screen z-[1] flex flex-col items-center justify-start">
-            <div className="w-[97%] h-[87%] flex items-start justify-start mt-4 rounded-2xl overflow-x-hidden overflow-y-auto">
+            <div className="w-[97%] h-[87%] flex items-start justify-start mt-4 rounded-2xl overflow-x-hidden overflow-y-hidden scrollbar-hide">
               {children}
             </div>
           </div>

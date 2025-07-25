@@ -102,7 +102,7 @@ export default function Login() {
                     <div className="flex w-full gap-3">
                         <button
                             type="button"
-                            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+                            onClick={() => signIn("google", { callbackUrl: "/session" })}
                             className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
                         >
                             <Image
@@ -117,7 +117,7 @@ export default function Login() {
 
                         <button
                             type="button"
-                            onClick={() => signIn("facebook", { callbackUrl: "/dashboard" })}
+                            onClick={() => signIn("facebook", { callbackUrl: "/session" })}
                             className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
                         >
                             <Image

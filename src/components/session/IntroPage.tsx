@@ -109,7 +109,7 @@ export default function IntroPage({ onAnimationComplete }: IntroPageProps) {
             const initialCenterX = window.innerWidth / 2;
             const initialCenterY = window.innerHeight / 2;
             const finalYPosition = finalCenterY - initialCenterY;
-            const finalXPosition = finalCenterX - initialCenterX - 10;
+            const finalXPosition = finalCenterX - initialCenterX ;
             
             gsap.to(sphereContainerRef.current, { 
                 duration: 3.5, 

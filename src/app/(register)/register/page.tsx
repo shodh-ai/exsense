@@ -6,8 +6,8 @@ import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
-// import type { RegisterResponsePayload } from "@/types/register-payload";
-// import type { ErrorPayload } from "@/types/error-payload";
+import type { RegisterResponsePayload } from "@/types/register-payload";
+import type { ErrorPayload } from "@/types/error-payload";
 import Sphere from "@/components/Sphere";
 
 export default function Register() {
@@ -17,38 +17,38 @@ export default function Register() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
-    // const handleSubmit = async (e: FormEvent) => {
-    //     e.preventDefault();
-    //     setLoading(true);
-    //     setError("");
+    const handleSubmit = async (e: FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError("");
 
-    //     try {
-    //         const response = await fetch("/api/auth/register", {
-    //             method: "POST",
-    //             headers: {
-    //                 "Content-Type": "application/json",
-    //             },
-    //             body: JSON.stringify({ email, password }),
-    //         });
+        try {
+            const response = await fetch("/api/auth/register", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email, password }),
+            });
 
-    //         const data = await response.json();
+            const data = await response.json();
 
-    //         if (!response.ok) {
-    //             const errorData = data as ErrorPayload;
-    //             throw new Error(
-    //                 errorData.message || `HTTP error! status: ${response.status}`
-    //             );
-    //         }
+            if (!response.ok) {
+                const errorData = data as ErrorPayload;
+                throw new Error(
+                    errorData.message || `HTTP error! status: ${response.status}`
+                );
+            }
 
-    //         const successData = data as RegisterResponsePayload;
-    //         localStorage.setItem("authToken", successData.data);
-    //         router.push("/confirm-register");
-    //     } catch (err: any) {
-    //         setError(err.message || "An error occurred during registration");
-    //     } finally {
-    //         setLoading(false);
-    //     }
-    // };
+            const successData = data as RegisterResponsePayload;
+            localStorage.setItem("authToken", successData.data);
+            router.push("/confirm-register");
+        } catch (err: any) {
+            setError(err.message || "An error occurred during registration");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <div className="flex min-h-full w-full items-center justify-center bg-transparent p-4">
@@ -59,7 +59,7 @@ export default function Register() {
                 <div className="w-full max-w-md overflow-auto max-h-full flex flex-col items-center">
                     <form
                         className="flex flex-col mt-6 md:mt-8 w-full"
-                    // onSubmit={handleSubmit}
+                    onSubmit={handleSubmit}
                     >
                         <div className="flex flex-col gap-5 w-full pl-2 pr-2">
                             <input
@@ -100,7 +100,7 @@ export default function Register() {
                         <div className="flex w-full gap-3">
                             <button
                                 type="button"
-                                onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+                                onClick={() => signIn("google", { callbackUrl: "/registration-test" })}
                                 className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
                             >
                                 <Image
@@ -115,7 +115,7 @@ export default function Register() {
 
                             <button
                                 type="button"
-                                onClick={() => signIn("facebook", { callbackUrl: "/dashboard" })}
+                                onClick={() => signIn("facebook", { callbackUrl: "/registration-test" })}
                                 className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
                             >
                                 <Image

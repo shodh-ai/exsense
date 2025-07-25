@@ -5,7 +5,6 @@ import Footer from '@/components/Footer';
 import { Room } from 'livekit-client';
 import { RoomContext } from '@livekit/components-react';
 import { RoomAudioRenderer } from '@livekit/components-react';
-import { AgentTestPanel } from '@/components/session/AgentTestPanel';
 import dynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
 import Sphere from '@/components/Sphere';
@@ -109,7 +108,7 @@ export default function Session() {
                     <Footer />
                 </div>
             </div>
-            <AgentTestPanel />
+           
         </RoomContext.Provider>
     )
 }
