@@ -2,52 +2,80 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, FormEvent } from "react";
+import { useSignIn, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import { useState, FormEvent, useEffect } from "react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
-import type { LoginResponsePayload } from "@/types/login-payload";
-import type { ErrorPayload } from "@/types/error-payload";
-import { signIn } from "next-auth/react";
 import Sphere from "@/components/Sphere";
 
 export default function Login() {
+
+// File: exsense/src/app/(login)/login/page.tsx
+
+
     const router = useRouter();
+    const { isSignedIn, user } = useUser();
+    const { signIn, isLoaded } = useSignIn();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
+    // Redirect to session if already signed in
+    useEffect(() => {
+        if (isSignedIn) {
+            router.push("/session");
+        }
+    }, [isSignedIn, router]);
+
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
+        if (!isLoaded) return;
+        
         setLoading(true);
         setError("");
 
         try {
-            const response = await fetch("/api/auth/login", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ email, password }),
+            const result = await signIn.create({
+                identifier: email,
+                password,
             });
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                const errorData = data as ErrorPayload;
-                throw new Error(
-                    errorData.message || `HTTP error! status: ${response.status}`
-                );
+            if (result.status === "complete") {
+                router.push("/session");
+            } else {
+                setError("Login failed. Please check your credentials.");
             }
-
-            const successData = data as LoginResponsePayload;
-            console.log("Login Token:", successData.data);
-            localStorage.setItem("authToken", successData.data);
-            router.push("/dashboard");
         } catch (err: any) {
-            setError(err.message || "An error occurred during login");
+            setError(err.errors?.[0]?.message || "An error occurred during login");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleGoogleSignIn = async () => {
+        if (!isLoaded) return;
+        try {
+            await signIn.authenticateWithRedirect({
+                strategy: "oauth_google",
+                redirectUrl: "/session",
+                redirectUrlComplete: "/session"
+            });
+        } catch (err: any) {
+            setError(err.errors?.[0]?.message || "Google sign-in failed");
+        }
+    };
+
+    const handleFacebookSignIn = async () => {
+        if (!isLoaded) return;
+        try {
+            await signIn.authenticateWithRedirect({
+                strategy: "oauth_facebook",
+                redirectUrl: "/session",
+                redirectUrlComplete: "/session"
+            });
+        } catch (err: any) {
+            setError(err.errors?.[0]?.message || "Facebook sign-in failed");
         }
     };
 
@@ -61,7 +89,7 @@ export default function Login() {
                 {/* Form */}
                 <form
                     className="flex flex-col mt-6 md:mt-8 w-full"
-                onSubmit={handleSubmit}
+                    onSubmit={handleSubmit}
                 >
                     <div className="flex flex-col gap-5 w-full pl-2 pr-2">
                         <input
@@ -83,7 +111,7 @@ export default function Login() {
                         <button
                             type="submit"
                             className="bg-[#566FE9] text-white h-12 rounded-[58px] font-medium hover:bg-[#566FE9]/95 transition disabled:opacity-60 disabled:cursor-not-allowed text-sm"
-                            disabled={loading}
+                            disabled={loading || !isLoaded}
                         >
                             {loading ? "Logging in..." : "Login"}
                         </button>
@@ -98,12 +126,12 @@ export default function Login() {
                 {/* Social Login */}
                 <div className="flex flex-col w-full items-center justify-center gap-3 my-4 md:my-6">
                     <div className="text-sm">Login with</div>
-                    {/* === UPDATED THIS LINE === */}
                     <div className="flex w-full gap-3">
                         <button
                             type="button"
-                            onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
+                            onClick={handleGoogleSignIn}
                             className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
+                            disabled={!isLoaded}
                         >
                             <Image
                                 src="/Google.svg"
@@ -117,8 +145,9 @@ export default function Login() {
 
                         <button
                             type="button"
-                            onClick={() => signIn("facebook", { callbackUrl: "/dashboard" })}
+                            onClick={handleFacebookSignIn}
                             className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
+                            disabled={!isLoaded}
                         >
                             <Image
                                 src="/Meta.svg"

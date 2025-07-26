@@ -5,6 +5,10 @@ import { Room } from 'livekit-client';
 
 // Browser interaction event interface
 export interface BrowserInteractionEvent {
+
+// File: exsense/src/hooks/useBrowserInteractionSensor.ts
+
+
   action: string;
   selector?: string;
   element?: {

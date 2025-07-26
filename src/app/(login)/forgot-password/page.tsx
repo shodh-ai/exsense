@@ -9,6 +9,10 @@ import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
 import Sphere from "@/components/Sphere";
 
 export default function ForgotPassword(): JSX.Element {
+
+// File: exsense/src/app/(login)/forgot-password/page.tsx
+
+
     // Data for the form
     const router = useRouter();
     const [emailOrPhone, setEmailOrPhone] = useState("");

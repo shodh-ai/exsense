@@ -1,4 +1,8 @@
 import React from 'react';
+
+// File: exsense/src/components/session/VideoViewer.tsx
+
+
 interface VideoViewerProps {
   videoSrc?: string;
   className?: string;

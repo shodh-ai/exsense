@@ -1,3 +1,5 @@
+// File: exsense/src/lib/MicEventEmitter.ts
+
 type EventCallback = (stream: MediaStream | null) => void;
 
 class MicEventEmitter {

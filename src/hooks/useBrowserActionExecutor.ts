@@ -5,6 +5,10 @@ import { Room, RoomEvent, LocalParticipant, RpcInvocationData, RpcError } from '
 
 // Browser action command interface
 export interface BrowserActionCommand {
+
+// File: exsense/src/hooks/useBrowserActionExecutor.ts
+
+
   tool_name: string;
   parameters: {
     selector?: string;

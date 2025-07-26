@@ -1,3 +1,4 @@
+// File: exsense/src/lib/store.ts
 // START OF FILE store.ts
 
 import { create } from 'zustand';

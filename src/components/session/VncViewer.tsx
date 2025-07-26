@@ -1,5 +1,9 @@
 "use client";
 import { VncScreen } from 'react-vnc';
+
+// File: exsense/src/components/session/VncViewer.tsx
+
+
 interface VncViewerProps {
   // e.g., "ws://your-server-ip:6901"
   url: string;

@@ -1,3 +1,4 @@
+// File: exsense/src/hooks/useVisualActionExecutor.ts
 // /src/hooks/useVisualActionExecutor.ts
 import { useState, useCallback } from 'react';
 import { exportToCanvas } from '@excalidraw/excalidraw';

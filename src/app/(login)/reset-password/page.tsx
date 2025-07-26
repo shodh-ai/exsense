@@ -8,6 +8,10 @@ import { Input } from "@/components/input";
 import Sphere from "@/components/Sphere";
 
 export default function PasswordReset(): JSX.Element {
+
+// File: exsense/src/app/(login)/reset-password/page.tsx
+
+
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [error, setError] = useState("");

@@ -1,3 +1,5 @@
+// File: exsense/src/lib/MusicEventEmitter.ts
+
 
 import { EventEmitter } from 'events';
 

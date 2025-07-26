@@ -1,6 +1,10 @@
 import Image from "next/image";
 
 export default function ShodhAIHero() {
+
+// File: exsense/src/components/(auth)/ShodhAIHero.tsx
+
+
     return (
         <div className="flex flex-col justify-center items-center gap-2 sm:gap-3">
             <Image

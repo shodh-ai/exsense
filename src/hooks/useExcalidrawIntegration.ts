@@ -2,6 +2,10 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useStudentInteractionSensor } from './useStudentInteractionSensor';
 import { useVisualActionExecutor, ToolCommand } from './useVisualActionExecutor';
 
+// File: exsense/src/hooks/useExcalidrawIntegration.ts
+
+
+
 // Enhanced interfaces for the unified integration
 interface CanvasMode {
   mode: 'ai_controlled' | 'student_controlled' | 'collaborative';

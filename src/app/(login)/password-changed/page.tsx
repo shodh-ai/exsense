@@ -1,3 +1,5 @@
+// File: exsense/src/app/(login)/password-changed/page.tsx
+
 
 "use client";
 

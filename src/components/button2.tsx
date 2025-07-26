@@ -2,6 +2,10 @@
 
 import React, { ButtonHTMLAttributes } from 'react';
 
+// File: exsense/src/components/button2.tsx
+
+
+
 type ButtonVariant = 'primary' | 'secondary' | 'outline';
 type ButtonSize = 'small' | 'medium' | 'large' | 'icon';
 

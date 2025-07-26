@@ -4,6 +4,10 @@ import { useSessionStore } from "@/lib/store";
 import { musicEventEmitter } from "@/lib/MusicEventEmitter";
 
 export const MusicButton = ({ className }: { className?: string }) => {
+
+// File: exsense/src/components/MusicButton.tsx
+
+
     const { isMusicButtonPlaying, setIsMusicButtonPlaying } = useSessionStore();
 
     const handleToggleMusic = () => {

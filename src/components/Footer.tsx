@@ -4,6 +4,10 @@ import { MusicButton } from '@/components/MusicButton';
 
 export default function Footer() {
 
+// File: exsense/src/components/Footer.tsx
+
+
+
     return (
         <footer className="absolute bottom-[15px] w-full h-[60px] flex items-center justify-center p-4 text-xs text-gray-400 ">
             

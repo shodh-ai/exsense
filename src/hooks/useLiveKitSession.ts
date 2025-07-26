@@ -1,9 +1,14 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, DataPacket_Kind, RemoteParticipant, RpcError } from 'livekit-client';
+import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, DataPacket_Kind, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment } from 'livekit-client';
 import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
 import { useSessionStore } from '@/lib/store';
+import { useAuth } from '@clerk/nextjs';
+
+// File: exsense/src/hooks/useLiveKitSession.ts
+
+
 
 // --- RPC UTILITIES ---
 // These helpers are essential for the hook's operation.
@@ -58,6 +63,9 @@ const roomInstance = new Room({
 
 // Main hook
 export function useLiveKitSession(roomName: string, userName: string) {
+  // --- CLERK AUTHENTICATION ---
+  const { getToken, isSignedIn } = useAuth();
+  
   // --- ZUSTAND STORE ACTIONS ---
   // Get all the actions we'll need to update the global UI state
   const {
@@ -74,6 +82,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   
   const agentServiceClientRef = useRef<AgentInteractionClientImpl | null>(null);
+  const microphoneTrackRef = useRef<AudioTrack | null>(null);
 
   // --- TOKEN FETCHING & CONNECTION LOGIC ---
   useEffect(() => {
@@ -98,19 +107,22 @@ export function useLiveKitSession(roomName: string, userName: string) {
         setIsLoading(true);
         setConnectionError(null);
         try {
-            // Fetch token from pronity-backend with authentication
-            const authToken = localStorage.getItem('authToken');
-            console.log('Auth token found:', !!authToken);
-            if (!authToken) {
-                throw new Error('No authentication token found. Please login first.');
+            // Check Clerk authentication
+            if (!isSignedIn) {
+                throw new Error('User not authenticated. Please login first.');
             }
 
-            console.log('Fetching LiveKit token from backend...');
-            const response = await fetch(`http://localhost:8000/api/generate-token`, {
-                method: 'GET',
+            const clerkToken = await getToken();
+            if (!clerkToken) {
+                throw new Error('Failed to get authentication token from Clerk.');
+            }
+
+            console.log('Fetching LiveKit token and room from webrtc-token-service...');
+            const response = await fetch(`http://localhost:3002/api/generate-room`, {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${authToken}`,
+                    'Authorization': `Bearer ${clerkToken}`,
                 },
             });
             
@@ -148,7 +160,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
     connectToRoom();
 
     return () => { mounted = false; };
-  }, [roomName, userName]);
+  }, [roomName, userName, getToken, isSignedIn]);
 
 
   // --- EVENT & RPC HANDLER LOGIC ---
@@ -166,7 +178,8 @@ export function useLiveKitSession(roomName: string, userName: string) {
       } else if (request.actionType === ClientUIActionType.STOP_LISTENING_VISUAL) {
         setIsMicEnabled(false);
       } else if (request.actionType === ClientUIActionType.SET_UI_STATE) {
-        const params = request.setUiStatePayload;
+        // Note: Property name may need adjustment based on actual protobuf definition
+        const params = (request as any).setUiStatePayload || (request as any).payload;
         if (params?.statusText) setAgentStatusText(params.statusText);
         // ... update other Zustand state based on payload
       }
@@ -176,8 +189,28 @@ export function useLiveKitSession(roomName: string, userName: string) {
       return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
     };
 
-    const onConnected = () => {
+    const onConnected = async () => {
         setIsLoading(false);
+        // Enable microphone and publish audio track so agent can hear user
+        try {
+            console.log('[useLiveKitSession] Setting up microphone...');
+            const audioTrack = await createLocalAudioTrack({
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+            });
+            
+            if (roomInstance.localParticipant) {
+                await roomInstance.localParticipant.publishTrack(audioTrack, {
+                    source: Track.Source.Microphone,
+                });
+                microphoneTrackRef.current = audioTrack;
+                console.log('[useLiveKitSession] Microphone enabled and published');
+            }
+        } catch (error) {
+            console.error('[useLiveKitSession] Failed to setup microphone:', error);
+            setConnectionError('Failed to access microphone. Please check permissions.');
+        }
         // We wait for the agent_ready signal before setting isConnected to true
     };
     
@@ -185,18 +218,95 @@ export function useLiveKitSession(roomName: string, userName: string) {
         setIsConnected(false);
         setIsLoading(false);
         agentServiceClientRef.current = null;
+        
+        // Clean up microphone track
+        if (microphoneTrackRef.current) {
+            microphoneTrackRef.current.stop();
+            microphoneTrackRef.current = null;
+        }
     };
 
     // The handler for the agent's "I'm ready" signal
-    const handleDataReceived = (payload: Uint8Array, participant?: RemoteParticipant) => {
+    // Handler for audio tracks (agent voice output)
+    const handleTrackSubscribed = (track: Track, publication: TrackPublication, participant: RemoteParticipant) => {
+        console.log(`[useLiveKitSession] Track subscribed:`, {
+            kind: track.kind,
+            source: publication.source,
+            participant: participant.identity
+        });
+        
+        if (track.kind === Track.Kind.Audio) {
+            console.log(`[useLiveKitSession] Audio track received from agent ${participant.identity}`);
+            const audioTrack = track as AudioTrack;
+            
+            // Attach the audio track to play agent voice
+            const audioElement = audioTrack.attach();
+            audioElement.autoplay = true;
+            audioElement.volume = 1.0;
+            
+            // Add to DOM temporarily to ensure playback
+            document.body.appendChild(audioElement);
+            
+            // Clean up when track ends
+            track.on('ended', () => {
+                if (audioElement.parentNode) {
+                    audioElement.parentNode.removeChild(audioElement);
+                }
+            });
+            
+            setIsAgentSpeaking(true);
+        }
+    };
+    
+    const handleTrackUnsubscribed = (track: Track, publication: TrackPublication, participant: RemoteParticipant) => {
+        console.log(`[useLiveKitSession] Track unsubscribed:`, {
+            kind: track.kind,
+            source: publication.source,
+            participant: participant.identity
+        });
+        
+        if (track.kind === Track.Kind.Audio) {
+            setIsAgentSpeaking(false);
+        }
+    };
+    
+    // Handler for transcription data
+    const handleTranscriptionReceived = (transcriptions: TranscriptionSegment[], participant?: Participant, publication?: TrackPublication) => {
+        console.log(`[useLiveKitSession] Transcription received:`, transcriptions);
+        // Handle transcription data if needed
+    };
+
+    const handleDataReceived = async (payload: Uint8Array, participant?: RemoteParticipant) => {
         if (!participant) return;
         try {
             const data = JSON.parse(new TextDecoder().decode(payload));
             if (data.type === 'agent_ready' && roomInstance.localParticipant) {
                 console.log(`[useLiveKitSession] Agent ready signal received from ${participant.identity}`);
                 const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, participant.identity);
-                agentServiceClientRef.current = new AgentInteractionClientImpl(adapter);
-                setIsConnected(true); // NOW we are fully connected and ready to interact
+                agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
+                
+                // Send confirmation RPC to agent to complete handshake
+                try {
+                    console.log(`[useLiveKitSession] Sending confirmation RPC to agent...`);
+                    const confirmationResponse = await roomInstance.localParticipant.performRpc({
+                        destinationIdentity: participant.identity,
+                        method: 'rox.interaction.AgentInteraction/TestPing',
+                        payload: uint8ArrayToBase64(new TextEncoder().encode(JSON.stringify({
+                            message: 'Frontend connected and ready',
+                            timestamp: Date.now(),
+                            userId: userName,
+                            roomName: roomName
+                        })))
+                    });
+                    
+                    console.log(`[useLiveKitSession] Agent confirmation response:`, confirmationResponse);
+                    setIsConnected(true); // NOW we are fully connected and ready to interact
+                    
+                } catch (rpcError) {
+                    console.error(`[useLiveKitSession] Failed to send confirmation RPC to agent:`, rpcError);
+                    // Still set connected as the agent is ready, even if confirmation failed
+                    setIsConnected(true);
+                }
             }
         } catch (error) {
             console.error("Failed to parse agent data packet:", error);
@@ -206,6 +316,9 @@ export function useLiveKitSession(roomName: string, userName: string) {
     roomInstance.on(RoomEvent.Connected, onConnected);
     roomInstance.on(RoomEvent.Disconnected, onDisconnected);
     roomInstance.on(RoomEvent.DataReceived, handleDataReceived);
+    roomInstance.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+    roomInstance.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+    roomInstance.on(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
 
     if (roomInstance.localParticipant) {
       try {
@@ -223,6 +336,9 @@ export function useLiveKitSession(roomName: string, userName: string) {
       roomInstance.off(RoomEvent.Connected, onConnected);
       roomInstance.off(RoomEvent.Disconnected, onDisconnected);
       roomInstance.off(RoomEvent.DataReceived, handleDataReceived);
+      roomInstance.off(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+      roomInstance.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+      roomInstance.off(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
     };
   }, [setIsMicEnabled, setAgentStatusText]); // Add all Zustand setters as dependencies
 

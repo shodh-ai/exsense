@@ -6,6 +6,10 @@ import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
 import Sphere from "@/components/Sphere";
 
 export default function ConfirmRegister() {
+
+// File: exsense/src/app/(register)/confirm-register/page.tsx
+
+
     const router = useRouter();
 
     useEffect(() => {

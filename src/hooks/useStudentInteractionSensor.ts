@@ -1,4 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+
+// File: exsense/src/hooks/useStudentInteractionSensor.ts
+
+
 interface InteractionEvent {
   id: string;
   type: 'mouse_move' | 'click' | 'key_press' | 'scroll' | 'focus' | 'blur' | 'laser_point' | 'element_select' | 'canvas_draw';

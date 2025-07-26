@@ -2,6 +2,10 @@
 import { useSessionStore } from "@/lib/store";
 
 export const AgentTestPanel = () => {
+
+// File: exsense/src/components/session/AgentTestPanel.tsx
+
+
     // Get all the actions from the Zustand store
     const {
         setIsMicEnabled,

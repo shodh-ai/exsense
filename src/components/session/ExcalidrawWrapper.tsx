@@ -6,6 +6,10 @@ import "@excalidraw/excalidraw/index.css";
 import { useSessionStore } from "@/lib/store";
 import { useExcalidrawIntegration } from "@/hooks/useExcalidrawIntegration";
 
+// File: exsense/src/components/session/ExcalidrawWrapper.tsx
+
+
+
 declare global {
   interface Window {
     __excalidrawDebug?: {

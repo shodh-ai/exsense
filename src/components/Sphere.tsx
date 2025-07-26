@@ -1,4 +1,5 @@
-// src/components/ui/Sphere.tsx
+// File: exsense/src/components/Sphere.tsx
+"use client";
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
