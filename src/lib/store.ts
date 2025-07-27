@@ -4,8 +4,8 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 
-// Use 'any' for the API type to avoid complex type issues for now.
-type ExcalidrawAPIType = any;
+// Use 'unknown' for the API type to avoid complex type issues for now.
+type ExcalidrawAPIType = unknown;
 export type SessionView = 'excalidraw' | 'vnc' | 'video' | 'mic' | 'statusbar' | 'intro';
 
 interface SessionState {

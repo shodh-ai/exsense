@@ -7,42 +7,30 @@ interface InteractionEvent {
   id: string;
   type: 'mouse_move' | 'click' | 'key_press' | 'scroll' | 'focus' | 'blur' | 'laser_point' | 'element_select' | 'canvas_draw';
   timestamp: number;
-  data?: any;
+  data?: unknown;
 }
-interface LaserPointerEvent {
-  x: number;
-  y: number;
-  elementId?: string;
-  elementType?: string;
-  elementData?: any;
-}
-interface CanvasInteraction {
-  type: 'draw' | 'select' | 'move' | 'resize' | 'delete';
-  elementIds: string[];
-  beforeState?: any;
-  afterState?: any;
-}
+// Removed unused interfaces LaserPointerEvent and CanvasInteraction
 interface UseStudentInteractionSensorReturn {
   isActive: boolean;
   interactions: InteractionEvent[];
   isLaserActive: boolean;
   lastPointerPosition: { x: number; y: number } | null;
-  pointedElement: any | null;
+  pointedElement: unknown | null;
   startSensing: () => void;
   stopSensing: () => void;
   clearInteractions: () => void;
   toggleLaserPointer: () => void;
-  setExcalidrawAPI: (api: any) => void;
-  onElementPointed: (element: any, position: { x: number; y: number }) => void;
+  setExcalidrawAPI: (api: unknown) => void;
+  onElementPointed: (element: unknown, position: { x: number; y: number }) => void;
 }
 export function useStudentInteractionSensor(): UseStudentInteractionSensorReturn {
   const [isActive, setIsActive] = useState(false);
   const [interactions, setInteractions] = useState<InteractionEvent[]>([]);
   const [isLaserActive, setIsLaserActive] = useState(false);
   const [lastPointerPosition, setLastPointerPosition] = useState<{ x: number; y: number } | null>(null);
-  const [pointedElement, setPointedElement] = useState<any | null>(null);
-  const [excalidrawAPI, setExcalidrawAPIState] = useState<any | null>(null);
-  const addInteraction = useCallback((type: InteractionEvent['type'], data?: any) => {
+  const [pointedElement, setPointedElement] = useState<unknown | null>(null);
+  const [excalidrawAPI, setExcalidrawAPIState] = useState<unknown | null>(null);
+  const addInteraction = useCallback((type: InteractionEvent['type'], data?: unknown) => {
     const interaction: InteractionEvent = {
       id: `interaction_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       type,
@@ -66,31 +54,31 @@ export function useStudentInteractionSensor(): UseStudentInteractionSensorReturn
       const newState = !prev;
       if (newState && excalidrawAPI) {
         // Activate laser pointer tool in Excalidraw
-        excalidrawAPI.setActiveTool({ type: 'laser' });
+        (excalidrawAPI as any).setActiveTool({ type: 'laser' });
       } else if (excalidrawAPI) {
         // Deactivate laser pointer, return to selection tool
-        excalidrawAPI.setActiveTool({ type: 'selection' });
+        (excalidrawAPI as any).setActiveTool({ type: 'selection' });
       }
       return newState;
     });
   }, [excalidrawAPI]);
-  const setExcalidrawAPI = useCallback((api: any) => {
+  const setExcalidrawAPI = useCallback((api: unknown) => {
     setExcalidrawAPIState(api);
   }, []);
-  const onElementPointed = useCallback((element: any, position: { x: number; y: number }) => {
+  const onElementPointed = useCallback((element: unknown, position: { x: number; y: number }) => {
     setPointedElement(element);
     setLastPointerPosition(position);
     
     addInteraction('laser_point', {
       position,
       element: {
-        id: element?.id,
-        type: element?.type,
-        text: element?.text || element?.rawText,
-        x: element?.x,
-        y: element?.y,
-        width: element?.width,
-        height: element?.height
+        id: (element as any)?.id,
+        type: (element as any)?.type,
+        text: (element as any)?.text || (element as any)?.rawText,
+        x: (element as any)?.x,
+        y: (element as any)?.y,
+        width: (element as any)?.width,
+        height: (element as any)?.height
       }
     });
   }, [addInteraction]);
@@ -99,8 +87,8 @@ export function useStudentInteractionSensor(): UseStudentInteractionSensorReturn
     if (!excalidrawAPI) return null;
     
     try {
-      const elements = excalidrawAPI.getSceneElements();
-      const sceneCoords = excalidrawAPI.getSceneCoordinatesFromPointer({ clientX: x, clientY: y });
+      const elements = (excalidrawAPI as any).getSceneElements();
+      const sceneCoords = (excalidrawAPI as any).getSceneCoordinatesFromPointer({ clientX: x, clientY: y });
       
       // Find element at position using similar logic to Excalidraw's implementation
       const elementAtPosition = elements.find((element: any) => {

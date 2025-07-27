@@ -223,7 +223,7 @@ interface RegistrationFormContentProps {
     handlePlayPause: () => void;
     startSpeechToText: () => void;
     stopSpeechToText: () => void;
-    audioRef: React.RefObject<HTMLAudioElement>;
+    audioRef: React.RefObject<HTMLAudioElement | null>;
 }
 
 const RegistrationFormContent: React.FC<RegistrationFormContentProps> = ({ currentStep, formData, currentInput, isSubmitting, canProceed, isRecording, duration, audioBlob, audioUrl, isPlaying, isListening, setCurrentInput, handleNext, handleKeyPress, startRecording, stopRecording, setAudioBlob, setAudioUrl, handlePlayPause, startSpeechToText, stopSpeechToText, audioRef }) => {
@@ -448,7 +448,7 @@ export const RegistrationForm = () => {
 
     const startSpeechToText = () => {
         if (typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
             const recognition = new SpeechRecognition();
             recognition.continuous = true;
             recognition.interimResults = true;

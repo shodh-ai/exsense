@@ -21,7 +21,7 @@ interface ChatMessage {
 
 interface UseExcalidrawIntegrationReturn {
   // Core state
-  excalidrawAPI: any | null;
+  excalidrawAPI: unknown | null;
   canvasMode: CanvasMode;
   isGenerating: boolean;
   error: string | null;
@@ -34,14 +34,14 @@ interface UseExcalidrawIntegrationReturn {
   // Laser pointer functionality
   isLaserActive: boolean;
   lastPointerPosition: { x: number; y: number } | null;
-  pointedElement: any | null;
+  pointedElement: unknown | null;
   
   // Element highlighting
   highlightedElements: string[];
   
   // Core functions
-  setExcalidrawAPI: (api: any) => void;
-  handlePointerUpdate: (payload: any) => void;
+  setExcalidrawAPI: (api: unknown) => void;
+  handlePointerUpdate: (payload: unknown) => void;
   
   // Chat functions
   sendChatMessage: (message: string, image?: string | null) => Promise<void>;
@@ -59,11 +59,11 @@ interface UseExcalidrawIntegrationReturn {
   // Element manipulation
   highlightElements: (elementIds: string[]) => void;
   removeHighlighting: () => void;
-  getCanvasElements: () => any[];
-  updateElements: (elements: any[]) => void;
+  getCanvasElements: () => unknown[];
+  updateElements: (elements: unknown[]) => void;
   
   // Command execution
-  executeCommand: (command: ToolCommand) => Promise<any>;
+  executeCommand: (command: ToolCommand) => Promise<unknown>;
   
   // Utility functions
   clearCanvas: () => void;
@@ -72,7 +72,7 @@ interface UseExcalidrawIntegrationReturn {
 
 export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
   // Core state
-  const [excalidrawAPI, setExcalidrawAPIState] = useState<any | null>(null);
+  const [excalidrawAPI, setExcalidrawAPIState] = useState<unknown | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
@@ -92,7 +92,7 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
   }, [excalidrawAPI, interactionSensor]);
   
   // Enhanced setExcalidrawAPI that updates both hooks
-  const setExcalidrawAPI = useCallback((api: any) => {
+  const setExcalidrawAPI = useCallback((api: unknown) => {
     if (api && api !== excalidrawAPI) {
       setExcalidrawAPIState(api);
       interactionSensor.setExcalidrawAPI(api);
@@ -100,19 +100,19 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
   }, [excalidrawAPI, interactionSensor]);
   
   // Enhanced pointer update handling with element detection
-  const handlePointerUpdate = useCallback((payload: any) => {
+  const handlePointerUpdate = useCallback((payload: unknown) => {
     if (!excalidrawAPI) return;
     
-    const { pointer, button } = payload;
+    const { pointer, button } = payload as any;
     const { x, y } = pointer;
     
     // Handle laser pointer functionality in both AI and student modes
     if (interactionSensor.isLaserActive && button === 'down') {
       try {
-        const sceneCoords = excalidrawAPI.getSceneCoordinatesFromPointer?.({ clientX: x, clientY: y });
+        const sceneCoords = (excalidrawAPI as any).getSceneCoordinatesFromPointer?.({ clientX: x, clientY: y });
         
         if (sceneCoords) {
-          const elements = excalidrawAPI.getSceneElements() || [];
+          const elements = (excalidrawAPI as any).getSceneElements() || [];
           const elementAtPosition = elements.find((element: any) => {
             if (!element || element.isDeleted) return false;
             
@@ -242,10 +242,10 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
     
     // Set appropriate tool in Excalidraw
     if (newLaserState) {
-      excalidrawAPI.setActiveTool({ type: 'laser' });
+      (excalidrawAPI as any).setActiveTool({ type: 'laser' });
       addMessageToHistory('system', '🎯 Laser pointer activated! Click on elements to ask questions about them.');
     } else {
-      excalidrawAPI.setActiveTool({ type: 'selection' });
+      (excalidrawAPI as any).setActiveTool({ type: 'selection' });
       addMessageToHistory('system', '🎯 Laser pointer deactivated.');
       // Clear any highlighting when deactivating laser
       visualActionExecutor.removeHighlighting();
@@ -280,7 +280,7 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
   // Utility functions
   const clearCanvas = useCallback(() => {
     if (excalidrawAPI) {
-      excalidrawAPI.resetScene();
+      (excalidrawAPI as any).resetScene();
       addMessageToHistory('system', '🗑️ Canvas cleared.');
     }
   }, [excalidrawAPI, addMessageToHistory]);

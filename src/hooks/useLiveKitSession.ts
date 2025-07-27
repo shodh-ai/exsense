@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, DataPacket_Kind, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment } from 'livekit-client';
+import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment } from 'livekit-client';
 import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
 import { useSessionStore } from '@/lib/store';
 import { useAuth } from '@clerk/nextjs';
@@ -69,10 +69,8 @@ export function useLiveKitSession(roomName: string, userName: string) {
   // --- ZUSTAND STORE ACTIONS ---
   // Get all the actions we'll need to update the global UI state
   const {
-    setActiveView,
     setAgentStatusText,
     setIsAgentSpeaking,
-    setIsStudentTurn,
     setIsMicEnabled, // Our new action for mic control
   } = useSessionStore();
 
@@ -150,9 +148,9 @@ export function useLiveKitSession(roomName: string, userName: string) {
             if(mounted) {
                 // Connection success is handled by the event listeners below
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             if (mounted) {
-                setConnectionError(`Failed to connect: ${error.message}`);
+                setConnectionError(`Failed to connect: ${error instanceof Error ? error.message : String(error)}`);
                 setIsLoading(false);
             }
         }
@@ -179,8 +177,10 @@ export function useLiveKitSession(roomName: string, userName: string) {
         setIsMicEnabled(false);
       } else if (request.actionType === ClientUIActionType.SET_UI_STATE) {
         // Note: Property name may need adjustment based on actual protobuf definition
-        const params = (request as any).setUiStatePayload || (request as any).payload;
-        if (params?.statusText) setAgentStatusText(params.statusText);
+        const params = (request as unknown as Record<string, unknown>).setUiStatePayload || (request as unknown as Record<string, unknown>).payload;
+        if (params && typeof params === 'object' && 'statusText' in params) {
+          setAgentStatusText(params.statusText as string);
+        }
         // ... update other Zustand state based on payload
       }
       
@@ -340,7 +340,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
       roomInstance.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
       roomInstance.off(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
     };
-  }, [setIsMicEnabled, setAgentStatusText]); // Add all Zustand setters as dependencies
+  }, [roomName, setIsMicEnabled, setAgentStatusText, setIsAgentSpeaking, userName]); // Add all dependencies
 
 
   // --- API EXPOSED TO THE COMPONENTS ---

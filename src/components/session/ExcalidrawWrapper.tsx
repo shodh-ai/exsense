@@ -19,7 +19,7 @@ declare global {
       removeHighlighting: () => void;
       giveStudentControl: () => void;
       takeAIControl: () => void;
-      getSceneElements: () => any[];
+      getSceneElements: () => unknown[];
     };
   }
 }
@@ -54,22 +54,22 @@ const ExcalidrawWrapper = () => {
       window.__excalidrawDebug = {
         toggleLaserPointer: () => toggleLaserPointer(),
         captureCanvasScreenshot: async () => {
-          const elements = excalidrawAPI.getSceneElements();
+          const elements = (excalidrawAPI as any).getSceneElements();
           console.log('Canvas elements:', elements);
           // Return a promise that resolves with the elements
           return Promise.resolve(JSON.stringify(elements, null, 2));
         },
         highlightElements: (elementIds: string[]) => {
-          excalidrawAPI.updateScene({
-            elements: excalidrawAPI.getSceneElements().map(el => ({
+          (excalidrawAPI as any).updateScene({
+            elements: (excalidrawAPI as any).getSceneElements().map((el: any) => ({
               ...el,
               opacity: elementIds.includes(el.id) ? 0.5 : 1
             }))
           });
         },
         removeHighlighting: () => {
-          excalidrawAPI.updateScene({
-            elements: excalidrawAPI.getSceneElements().map(el => ({
+          (excalidrawAPI as any).updateScene({
+            elements: (excalidrawAPI as any).getSceneElements().map((el: any) => ({
               ...el,
               opacity: 1
             }))
@@ -83,7 +83,7 @@ const ExcalidrawWrapper = () => {
           console.log('AI taking control');
           // Add your AI control logic here
         },
-        getSceneElements: () => excalidrawAPI.getSceneElements()
+        getSceneElements: () => (excalidrawAPI as any).getSceneElements()
       };
       
       console.log('Excalidraw debug functions are now available at window.__excalidrawDebug');
@@ -97,7 +97,7 @@ const ExcalidrawWrapper = () => {
   }, [excalidrawAPI, toggleLaserPointer]);
 
   // Handle Excalidraw API initialization
-  const handleExcalidrawAPI = useCallback((api: any) => {
+  const handleExcalidrawAPI = useCallback((api: unknown) => {
     if (api && api !== excalidrawAPI) {
       setExcalidrawAPI(api);
     }

@@ -3,10 +3,10 @@
 import { useState, useCallback } from 'react';
 import { exportToCanvas } from '@excalidraw/excalidraw';
 // Assuming ExcalidrawAPI is defined elsewhere or using 'any'
-type ExcalidrawAPIRefValue = any;
+type ExcalidrawAPIRefValue = unknown;
 export interface ToolCommand {
   tool_name: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
 }
 interface SkeletonElement {
   type: 'rectangle' | 'ellipse' | 'diamond' | 'text' | 'arrow' | 'line';
@@ -26,7 +26,7 @@ interface CanvasMode {
   message?: string;
 }
 interface UseVisualActionExecutorReturn {
-  executeCommand: (command: ToolCommand) => Promise<any>;
+  executeCommand: (command: ToolCommand) => Promise<unknown>;
   canvasMode: CanvasMode;
   isGenerating: boolean;
   highlightedElements: string[];
@@ -36,8 +36,8 @@ interface UseVisualActionExecutorReturn {
   removeHighlighting: () => void;
   giveStudentControl: (message?: string) => void;
   takeAIControl: (message?: string) => void;
-  getCanvasElements: () => any[];
-  updateElements: (elements: any[]) => void;
+  getCanvasElements: () => unknown[];
+  updateElements: (elements: unknown[]) => void;
 }
 // Helper function to calculate text dimensions
 const calculateTextDimensions = (text: string, fontSize = 16) => {
@@ -65,8 +65,8 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
       return null;
     }
     try {
-      const elements = excalidrawAPI.getSceneElements();
-      const appState = excalidrawAPI.getAppState();
+      const elements = (excalidrawAPI as any).getSceneElements();
+      const appState = (excalidrawAPI as any).getAppState();
       
       const canvas = await exportToCanvas({
         elements,
@@ -75,7 +75,7 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
           exportBackground: true,
           viewBackgroundColor: '#ffffff'
         },
-        files: excalidrawAPI.getFiles(),
+        files: (excalidrawAPI as any).getFiles(),
         getDimensions: () => ({ width: 800, height: 600 })
       });
       
@@ -87,12 +87,12 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
   }, [excalidrawAPI]);
   // Convert skeleton elements to Excalidraw format
   const convertSkeletonToExcalidrawElements = useCallback((skeletonElements: SkeletonElement[]) => {
-    const elements: any[] = [];
-    const elementMap = new Map<string, any>();
+    const elements: unknown[] = [];
+    const elementMap = new Map<string, unknown>();
     // Create elements
     skeletonElements.forEach((skeleton, index) => {
       const id = generateId();
-      let element: any;
+      let element: Record<string, unknown>;
       const baseElement = {
         id,
         x: skeleton.x,
@@ -228,7 +228,7 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
         }
       ];
       const excalidrawElements = convertSkeletonToExcalidrawElements(mockSkeletonElements);
-      excalidrawAPI.updateScene({ elements: excalidrawElements });
+      (excalidrawAPI as any).updateScene({ elements: excalidrawElements });
       
     } catch (error) {
       console.error('Error generating visualization:', error);
@@ -242,7 +242,7 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
     setHighlightedElements(elementIds);
     
     // Update element styles to show highlighting
-    const elements = excalidrawAPI.getSceneElements();
+    const elements = (excalidrawAPI as any).getSceneElements();
     const updatedElements = elements.map((element: any) => {
       if (elementIds.includes(element.id)) {
         return {
@@ -255,12 +255,12 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
       return element;
     });
     
-    excalidrawAPI.updateScene({ elements: updatedElements });
+    (excalidrawAPI as any).updateScene({ elements: updatedElements });
   }, [excalidrawAPI]);
   // Remove highlighting from all elements
   const removeHighlighting = useCallback(() => {
     if (!excalidrawAPI || highlightedElements.length === 0) return;
-    const elements = excalidrawAPI.getSceneElements();
+    const elements = (excalidrawAPI as any).getSceneElements();
     const updatedElements = elements.map((element: any) => {
       if (highlightedElements.includes(element.id)) {
         return {
@@ -273,7 +273,7 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
       return element;
     });
     
-    excalidrawAPI.updateScene({ elements: updatedElements });
+    (excalidrawAPI as any).updateScene({ elements: updatedElements });
     setHighlightedElements([]);
   }, [excalidrawAPI, highlightedElements]);
   // Give control to student
@@ -285,7 +285,7 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
     });
     
     if (excalidrawAPI) {
-      excalidrawAPI.setActiveTool({ type: 'selection' });
+      (excalidrawAPI as any).setActiveTool({ type: 'selection' });
     }
   }, [excalidrawAPI]);
   // Take AI control
@@ -299,15 +299,15 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
   // Get current canvas elements
   const getCanvasElements = useCallback(() => {
     if (!excalidrawAPI) return [];
-    return excalidrawAPI.getSceneElements();
+    return (excalidrawAPI as any).getSceneElements();
   }, [excalidrawAPI]);
   // Update canvas elements
-  const updateElements = useCallback((elements: any[]) => {
+  const updateElements = useCallback((elements: unknown[]) => {
     if (!excalidrawAPI) return;
-    excalidrawAPI.updateScene({ elements });
+    (excalidrawAPI as any).updateScene({ elements });
   }, [excalidrawAPI]);
   // Execute various commands
-  const executeCommand = useCallback(async (command: ToolCommand): Promise<any> => {
+  const executeCommand = useCallback(async (command: ToolCommand): Promise<unknown> => {
     if (!excalidrawAPI) {
       console.warn("Excalidraw API not available, skipping command:", command);
       return null;
@@ -317,15 +317,15 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
     
     switch (command.tool_name) {
       case 'clear_canvas':
-        excalidrawAPI.resetScene();
+        (excalidrawAPI as any).resetScene();
         break;
         
       case 'generate_visualization':
-        await generateVisualization(command.parameters.prompt || '');
+        await generateVisualization((command.parameters.prompt as string) || '');
         break;
         
       case 'highlight_elements':
-        highlightElements(command.parameters.elementIds || []);
+        highlightElements((command.parameters.elementIds as string[]) || []);
         break;
         
       case 'remove_highlighting':
@@ -333,11 +333,11 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
         break;
         
       case 'give_student_control':
-        giveStudentControl(command.parameters.message);
+        giveStudentControl(command.parameters.message as string);
         break;
         
       case 'take_ai_control':
-        takeAIControl(command.parameters.message);
+        takeAIControl(command.parameters.message as string);
         break;
         
       case 'capture_screenshot':
@@ -347,7 +347,7 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
         return getCanvasElements();
         
       case 'update_elements':
-        updateElements(command.parameters.elements || []);
+        updateElements((command.parameters.elements as unknown[]) || []);
         break;
         
       default:
