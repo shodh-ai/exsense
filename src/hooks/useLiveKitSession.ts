@@ -116,7 +116,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
             }
 
             console.log('Fetching LiveKit token and room from webrtc-token-service...');
-            const response = await fetch(`http://localhost:3002/api/generate-room`, {
+                        const response = await fetch(`${process.env.NEXT_PUBLIC_WEBRTC_TOKEN_SERVICE_URL}/api/generate-room`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

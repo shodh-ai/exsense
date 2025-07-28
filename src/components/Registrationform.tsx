@@ -154,8 +154,8 @@ const formSteps = [
 ];
 
 const MAX_RECORDING_TIME = 30;
-const API_ENDPOINT = "http://localhost:8000/user/fill-details";
-const API_ENDPOINT_LANGGRAPH = "http://localhost:8080/user/register";
+const API_ENDPOINT = `${process.env.NEXT_PUBLIC_REGISTRATION_API_URL}/user/fill-details`;
+const API_ENDPOINT_LANGGRAPH = `${process.env.NEXT_PUBLIC_LANGGRAPH_API_URL}/user/register`;
 
 
 // --- RegistrationProgressBar Component ---
