@@ -1,4 +1,4 @@
-// src/components/ui/Sphere.tsx
+"use client";
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
@@ -611,7 +611,9 @@ const Sphere: React.FC = () => {
     }, [currentEmotion, isMusicExplicitlyPaused]); // Add isMusicExplicitlyPaused to the main useEffect dependencies as well
 
     return (
-        <div ref={mountRef} style={{ width: '100vw', height: '100vh', position: 'fixed', top: 0, left: 0, zIndex: -1 }} />
+        <div className="absolute top-0 left-0 w-full h-full -z-10">
+            <div ref={mountRef} className="w-full h-full" />
+        </div>
     );
 };
 
