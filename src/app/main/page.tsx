@@ -1,3 +1,5 @@
+"use client";
+
 import { LinkedinIcon } from "lucide-react";
 import React, { JSX } from "react";
 

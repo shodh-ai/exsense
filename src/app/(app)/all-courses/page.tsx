@@ -1,3 +1,5 @@
+"use client";
+
 // src/pages/CoursesPage.tsx
 import { ChevronDownIcon, SearchIcon, XIcon, Mic, MessageSquare } from "lucide-react";
 import React, { JSX } from "react";
