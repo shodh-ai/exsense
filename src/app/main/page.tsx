@@ -42,9 +42,7 @@ export default function ShodhAiWebsite(): JSX.Element {
               alt="Shodh AI Logo"
               src="/Frame1.svg"
             />
-            {/* START: Modified section for same-dimension buttons */}
             <div className="flex items-center gap-x-2 sm:gap-x-3">
-              {/* Login Button - uses fixed width and text-center for uniform size */}
               <Button
                 className="bg-transparent text-[#000042] rounded-[40px] py-2 sm:py-3 lg:py-5 font-manrope font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px] border-[#000042] border-[1px]"
                 asChild
@@ -62,27 +60,33 @@ export default function ShodhAiWebsite(): JSX.Element {
                 </a>
               </Button>
             </div>
-            {/* END: Modified section */}
           </div>
         </header>
 
         {/* Main content - responsive layout */}
         <section className="relative z-10 flex flex-col lg:flex-row items-center w-full mt-8 sm:mt-12 lg:mt-[105px] px-4 sm:px-8 lg:px-20 gap-8 md:gap-5 lg:gap-x-1">
-          {/* 3D Model - responsive sizing and positioning */}
-          {/* MODIFICATION: Adjusted sizing to better match the smoother text scaling */}
+
+          {/* START: Video Replacement */}
           <div className="order-2 lg:order-1 flex-shrink-0 lg:pl-[8%]">
-            <img
-              className="w-[280px] h-[350px] sm:w-[320px] sm:h-[400px] lg:w-[340px] lg:h-[425px] xl:w-[368px] xl:h-[460px] object-contain"
-              alt="3D Model"
-              src="/heart.svg"
-            />
+            {/* The <img> tag has been replaced with the <video> tag below. */}
+            <video
+              // The same responsive classes from the image are used here.
+              className="w-[350px] h-[690px] sm:w-[400px] sm:h-[500px] lg:w-[425px] lg:h-[530px] xl:w-[460px] xl:h-[575px] object-contain"
+              autoPlay    // Autoplays the video
+              loop        // Loops the video continuously
+              muted       // Mutes the video (required for autoplay in most browsers)
+              playsInline // Ensures video plays inline on mobile, not fullscreen
+            >
+              {/* IMPORTANT: Update the src to your video file's path */}
+              <source src="/animation77.mp4" type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
           </div>
+          {/* END: Video Replacement */}
 
           {/* Main heading - responsive typography */}
-          {/* MODIFICATION: Removed `lg:flex-none` to allow this container to be flexible and shrink/grow as needed. */}
           <div className="order-1 lg:order-2 flex-1 lg:pr-[8%]">
             <h1
-              // MODIFICATION: Smoothed out the font-size transition between md, lg, and xl breakpoints to prevent text from overflowing on screens ~1024px wide.
               className="font-extrabold text-[#000042] text-[32px] sm:text-[48px] md:text-[64px] lg:text-[72px] xl:text-[80px] 2xl:text-[130px] text-center lg:text-right leading-[1.1] sm:leading-[1.05] lg:leading-[0.95] font-['Manrope',Helvetica] max-w-full lg:max-w-[780px]"
             >
               BUILDING FUTURE OF EDUCATION
@@ -93,9 +97,7 @@ export default function ShodhAiWebsite(): JSX.Element {
         {/* Footer - responsive */}
         <footer className="relative z-10 mt-12 sm:mt-16 lg:mt-auto lg:absolute lg:bottom-0 left-0 w-full px-4 sm:px-8 lg:px-20 pb-4 sm:pb-6 lg:pb-8">
           <Separator className="w-full max-w-[1280px] mx-auto mb-4" />
-
           <div className="flex flex-col sm:flex-row items-center justify-between w-full max-w-[1280px] mx-auto gap-4 sm:gap-0">
-            {/* Footer logo */}
             <div className="order-2 sm:order-1">
               <img
                 className="w-[120px] h-[28px] sm:w-[130px] sm:h-[31px] lg:w-[152.4px] lg:h-9"
@@ -103,11 +105,9 @@ export default function ShodhAiWebsite(): JSX.Element {
                 src="/frame2.svg"
               />
             </div>
-
-            {/* Footer links - responsive layout */}
             <div className="order-1 sm:order-2 flex flex-col sm:flex-row items-center gap-2 sm:gap-0">
               {footerLinks.map((link, index) => (
-                <React.Fragment key={index}> {/* Or simply <> */}
+                <React.Fragment key={index}>
                   {index > 0 && (
                     <div className="hidden sm:block w-1.5 h-1.5 bg-[#00004240] rounded-[3px] mx-2" />
                   )}
@@ -123,8 +123,6 @@ export default function ShodhAiWebsite(): JSX.Element {
                 </React.Fragment>
               ))}
             </div>
-
-            {/* Social media icons - now only LinkedIn */}
             <div className="order-3 flex items-center gap-2 sm:gap-2.5">
               {socialMedia.map((social, index) => (
                 <Button
