@@ -9,7 +9,7 @@ import Sphere from "@/components/Sphere";
 
 export default function PasswordReset(): JSX.Element {
 
-// File: exsense/src/app/(login)/reset-password/page.tsx
+    // File: exsense/src/app/(login)/reset-password/page.tsx
 
 
     const [newPassword, setNewPassword] = useState("");

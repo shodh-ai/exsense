@@ -328,7 +328,7 @@ const Sphere: React.FC = () => {
         const newMusicUrl = emotionMusicMap[currentEmotion];
         const FADE_TIME = 1000; // 1 second
         // Changed to use the new BACKGROUND_MUSIC_VOLUME variable
-        const MAX_VOLUME = BACKGROUND_MUSIC_VOLUME; 
+        const MAX_VOLUME = BACKGROUND_MUSIC_VOLUME;
 
         const fadeOutAndSwitch = () => {
             if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
@@ -371,7 +371,7 @@ const Sphere: React.FC = () => {
                 audio.volume = 0;
                 return;
             }
-            
+
             // Only update src if it's different from the current one
             if (audio.src !== newMusicUrl) {
                 audio.src = newMusicUrl;
@@ -608,10 +608,10 @@ const Sphere: React.FC = () => {
     }, [currentEmotion, isMusicExplicitlyPaused]); // Add isMusicExplicitlyPaused to the main useEffect dependencies as well
 
     return (
-        <div className="absolute top-0 left-0 w-full h-full -z-10">
+        <div className="absolute top-0 left-0 w-full h-full z-[10]">
             <div ref={mountRef} className="w-full h-full" />
         </div>
-     );
+    );
 };
 
 export default Sphere;
