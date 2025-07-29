@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { micEventEmitter } from '@/lib/MicEventEmitter';
 import { musicEventEmitter } from '@/lib/MusicEventEmitter';
+import { useSessionStore } from '@/lib/store';
 
 // --- GLSL & SHADERS (Unchanged) ---
 const snoise = `
@@ -131,7 +132,7 @@ const VOLUME_TO_REACH_MAX_SCALE = 15;
 const BREATHING_SMOOTHING_UP = 0.3;
 const BREATHING_SMOOTHING_DOWN = 0.1;
 const MIN_BREATHING_SCALE = 0.95;
-const MAX_BREATHING_SCALE = 0.96;
+const MAX_BREATHING_SCALE = 0.964;
 
 // NEW: Variable for background music volume
 const BACKGROUND_MUSIC_VOLUME = 0.003; // Set to a low value as requested (0.0 - 1.0)
@@ -233,6 +234,7 @@ const emotionMusicMap: Record<Emotion, string | null> = {
 const Sphere: React.FC = () => {
     const mountRef = useRef<HTMLDivElement>(null);
     const [isAudioActive, setIsAudioActive] = useState(false);
+    const { isMusicButtonPlaying, setIsMusicButtonPlaying, isMicEnabled } = useSessionStore();
     const [currentEmotion, setCurrentEmotion] = useState<Emotion>('default');
     // State to control if music is explicitly paused by the button
     const [isMusicExplicitlyPaused, setIsMusicExplicitlyPaused] = useState(false);
@@ -391,8 +393,9 @@ const Sphere: React.FC = () => {
         };
 
         // This determines the music state:
-        // If explicitly paused, stop music. Otherwise, manage based on emotion.
-        if (isMusicExplicitlyPaused) {
+        // If mic is on, or if music is explicitly paused, stop music.
+        // Otherwise, manage based on emotion.
+        if (isMicEnabled || isMusicExplicitlyPaused) {
             if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
             if (audio.src) { // Only if there was an active src
                 audio.pause();
@@ -409,7 +412,7 @@ const Sphere: React.FC = () => {
             // On unmount or dependency change, clear interval but don't force stop/src clear
             // as the explicit pause state might handle it already.
         };
-    }, [currentEmotion, isMusicExplicitlyPaused]); // Add isMusicExplicitlyPaused to dependency array
+    }, [currentEmotion, isMusicExplicitlyPaused, isMicEnabled]); // Add isMusicExplicitlyPaused and isMicEnabled to dependency array
 
 
     // --- Main Three.js setup and animation loop ---
@@ -605,22 +608,10 @@ const Sphere: React.FC = () => {
     }, [currentEmotion, isMusicExplicitlyPaused]); // Add isMusicExplicitlyPaused to the main useEffect dependencies as well
 
     return (
-        <>
-            <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px' }}>
-                <div style={{ background: 'rgba(255, 255, 255, 0.7)', padding: '10px', borderRadius: '8px' }}>
-                    <button onClick={handleSpeak} disabled={isAudioActive} style={{ width: '100%' }}>Simulate AI Speaking</button>
-                </div>
-                <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'flex-end', background: 'rgba(255, 255, 255, 0.7)', padding: '10px', borderRadius: '8px', maxWidth: '300px' }}>
-                    <button onClick={() => setCurrentEmotion('default')}>Default</button>
-                    <button onClick={() => setCurrentEmotion('happy')}>Happy</button>
-                    <button onClick={() => setCurrentEmotion('calm')}>Calm</button>
-                    <button onClick={() => setCurrentEmotion('sad')}>Sad</button>
-                    <button onClick={() => setCurrentEmotion('angry')}>Angry</button>
-                </div>
-            </div>
-            <div ref={mountRef} style={{ width: '100vw', height: '100vh', position: 'fixed', top: 0, left: 0, zIndex: 1000, pointerEvents: 'none' }} />
-        </>
-    );
+        <div className="absolute top-0 left-0 w-full h-full -z-10">
+            <div ref={mountRef} className="w-full h-full" />
+        </div>
+     );
 };
 
 export default Sphere;

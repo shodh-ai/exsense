@@ -20,6 +20,7 @@ export default function Login() {
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [message, setMessage] = useState("");
 
     // Redirect to session if already signed in
     useEffect(() => {
@@ -27,6 +28,15 @@ export default function Login() {
             router.push("/session");
         }
     }, [isSignedIn, router]);
+
+    // Check for messages from registration page
+    useEffect(() => {
+        const loginMessage = sessionStorage.getItem('loginMessage');
+        if (loginMessage) {
+            setMessage(loginMessage);
+            sessionStorage.removeItem('loginMessage'); // Clear the message after displaying
+        }
+    }, []);
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -36,18 +46,54 @@ export default function Login() {
         setError("");
 
         try {
+            console.log('Starting login process...');
+            
+            // Check if user is already signed in
+            if (isSignedIn) {
+                console.log('User already signed in, redirecting to session');
+                router.push("/session");
+                return;
+            }
+            
             const result = await signIn.create({
                 identifier: email,
                 password,
             });
 
+            console.log('Login result:', result.status);
+            console.log('Login object:', result);
+
             if (result.status === "complete") {
-                router.push("/session");
+                console.log('Login complete, forcing auth state refresh...');
+                // Force Clerk to refresh authentication state
+                window.location.href = '/session';
+                return;
+            } else if (result.status === "needs_first_factor") {
+                console.log('Login needs first factor authentication');
+                setError("Please complete the authentication process.");
+            } else if (result.status === "needs_second_factor") {
+                console.log('Login needs second factor authentication');
+                setError("Please complete two-factor authentication.");
             } else {
+                console.log('Login incomplete, status:', result.status);
                 setError("Login failed. Please check your credentials.");
             }
         } catch (err: any) {
-            setError(err.errors?.[0]?.message || "An error occurred during login");
+            console.error('Login error:', err);
+            
+            // Handle specific error cases
+            if (err.message?.includes("You're already signed in")) {
+                console.log('Already signed in error, forcing page refresh to sync state');
+                window.location.href = '/session';
+                return;
+            } else if (err.message?.includes("Invalid authentication credentials")) {
+                setError("Invalid email or password. Please try again.");
+            } else if (err.message?.includes("Too many requests")) {
+                setError("Too many login attempts. Please wait a moment and try again.");
+            } else {
+                const errorMessage = err.errors?.[0]?.message || err.message || "An error occurred during login";
+                setError(errorMessage);
+            }
         } finally {
             setLoading(false);
         }
@@ -115,6 +161,11 @@ export default function Login() {
                         >
                             {loading ? "Logging in..." : "Login"}
                         </button>
+                        {message && (
+                            <div className="text-blue-600 text-sm text-center pt-2 bg-blue-50 p-3 rounded-lg">
+                                {message}
+                            </div>
+                        )}
                         {error && (
                             <div className="text-red-500 text-sm text-center pt-2">
                                 {error}

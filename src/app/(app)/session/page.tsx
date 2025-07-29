@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import Footer from '@/components/Footer';
 import { Room } from 'livekit-client';
 
-import { AgentTestPanel } from '@/components/session/AgentTestPanel';
 import dynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
@@ -88,27 +87,45 @@ export default function Session() {
     const { user, isSignedIn, isLoaded } = useUser();
     const router = useRouter();
     
-    // Redirect to login if not authenticated
+    // Add debugging for authentication state
+    useEffect(() => {
+        console.log('Session page auth state:', { isLoaded, isSignedIn, userId: user?.id });
+    }, [isLoaded, isSignedIn, user?.id]);
+    
+    // Redirect to login if not authenticated (after Clerk has loaded)
     useEffect(() => {
         if (isLoaded && !isSignedIn) {
-            router.push('/login');
+            console.log('User not authenticated, redirecting to login');
+            // Use window.location.href to force a complete page refresh
+            // This helps resolve Clerk authentication state synchronization issues
+            const timeoutId = setTimeout(() => {
+                if (!isSignedIn) {
+                    console.log('Authentication state still not synced, forcing redirect to login');
+                    window.location.href = '/login';
+                }
+            }, 2000); // Increased timeout to 2 seconds for better state settling
+            
+            return () => clearTimeout(timeoutId);
         }
     }, [isLoaded, isSignedIn, router]);
     
-    // Generate unique room and user identifiers using Clerk user data
-    const roomName = `session-${user?.id || Date.now()}`;
-    const userName = user?.emailAddresses[0]?.emailAddress || `student-${Date.now()}`;
+    // Wait for authentication to settle before initializing LiveKit
+    const shouldInitializeLiveKit = isLoaded && isSignedIn && user?.id;
     
-    // Initialize LiveKit session
+    // Generate unique room and user identifiers using Clerk user data
+    const roomName = shouldInitializeLiveKit ? `session-${user.id}` : `session-${Date.now()}`;
+    const userName = shouldInitializeLiveKit ? (user.emailAddresses[0]?.emailAddress || user.username || `user-${user.id}`) : `student-${Date.now()}`;
+    
+    // Initialize LiveKit session only when authenticated
     const {
         room,
         isConnected,
         isLoading,
         connectionError,
         startTask
-    } = useLiveKitSession(roomName, userName);
+    } = useLiveKitSession(shouldInitializeLiveKit ? roomName : '', shouldInitializeLiveKit ? userName : '');
     
-    const vncUrl = `ws://localhost:6901`;
+    const vncUrl = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:6901';
 
     console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 
@@ -138,6 +155,11 @@ export default function Session() {
         return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
     }
     
+    // Show loading while authentication is settling
+    if (!isLoaded) {
+        return <div className="w-full h-full flex items-center justify-center text-white">Loading authentication...</div>;
+    }
+    
     // Show loading while LiveKit is initializing
     if (isLoading) {
         return <div className="w-full h-full flex items-center justify-center text-white">Initializing Session...</div>;
@@ -150,18 +172,34 @@ export default function Session() {
     }
 
     return (
-        <SignedIn>
-
-            <Sphere />
-            <div className='flex flex-col w-full h-full items-center justify-between'>
-                <SessionContent 
-                    activeView={activeView} 
-                    setActiveView={setActiveView} 
-                    componentButtons={componentButtons} 
-                    vncUrl={vncUrl} 
-                />
-            </div>
-            <AgentTestPanel />
-        </SignedIn>
+        <>
+            <SignedIn>
+                <Sphere />
+                <div className='flex flex-col w-full h-full items-center justify-between'>
+                    <SessionContent 
+                        activeView={activeView} 
+                        setActiveView={setActiveView} 
+                        componentButtons={componentButtons} 
+                        vncUrl={vncUrl} 
+                    />
+                </div>
+          
+            </SignedIn>
+            
+            <SignedOut>
+                <div className="w-full h-full flex items-center justify-center text-white">
+                    <div className="text-center">
+                        <h2 className="text-xl mb-4">Authentication Required</h2>
+                        <p className="mb-4">Please sign in to access the session.</p>
+                        <button 
+                            onClick={() => router.push('/login')}
+                            className="bg-[#566FE9] text-white px-6 py-2 rounded-full hover:bg-[#566FE9]/95 transition"
+                        >
+                            Go to Login
+                        </button>
+                    </div>
+                </div>
+            </SignedOut>
+        </>
     )
 }

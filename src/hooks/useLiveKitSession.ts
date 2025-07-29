@@ -116,7 +116,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
             }
 
             console.log('Fetching LiveKit token and room from webrtc-token-service...');
-                        const response = await fetch(`${process.env.NEXT_PUBLIC_WEBRTC_TOKEN_SERVICE_URL}/api/generate-room`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL}/api/generate-room`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -207,9 +207,19 @@ export function useLiveKitSession(roomName: string, userName: string) {
                 microphoneTrackRef.current = audioTrack;
                 console.log('[useLiveKitSession] Microphone enabled and published');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('[useLiveKitSession] Failed to setup microphone:', error);
-            setConnectionError('Failed to access microphone. Please check permissions.');
+            
+            // Provide specific error messages based on the error type
+            if (error.name === 'NotAllowedError' || error.message?.includes('Permission dismissed')) {
+                setConnectionError('Microphone access denied. Please click the microphone icon in your browser\'s address bar and allow microphone permissions, then refresh the page.');
+            } else if (error.name === 'NotFoundError') {
+                setConnectionError('No microphone found. Please connect a microphone and refresh the page.');
+            } else if (error.name === 'NotReadableError') {
+                setConnectionError('Microphone is being used by another application. Please close other apps using the microphone and refresh.');
+            } else {
+                setConnectionError(`Failed to access microphone: ${error.message || 'Unknown error'}. Please check your microphone settings and refresh the page.`);
+            }
         }
         // We wait for the agent_ready signal before setting isConnected to true
     };
