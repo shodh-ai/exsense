@@ -7,6 +7,8 @@ import { Room } from 'livekit-client';
 import dynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
+import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
+import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Sphere from '@/components/Sphere';
@@ -125,7 +127,13 @@ export default function Session() {
         startTask
     } = useLiveKitSession(shouldInitializeLiveKit ? roomName : '', shouldInitializeLiveKit ? userName : '');
     
-    const vncUrl = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:6901';
+    // Initialize browser automation hooks
+    const { connectVNC, disconnectVNC } = useBrowserActionExecutor(room);
+    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room);
+    
+    // Get URLs from environment variables
+    const vncUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:6901';
+    const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
 
     console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 
@@ -149,6 +157,33 @@ export default function Session() {
             activeImagePath: '/video-active.svg'
         },
     ];
+
+    // Effect to manage WebSocket connections for browser automation
+    useEffect(() => {
+        // Only connect when the LiveKit session is fully established
+        if (isConnected && sessionBubbleUrl) {
+            console.log("LiveKit connected, now connecting to session-bubble services...");
+            
+            // Connect to the command WebSocket (vnc_listener.py)
+            // Use the Nginx reverse proxy URL
+            const vncListenerUrl = `${sessionBubbleUrl}/vnc-listener/`;
+            connectVNC(vncListenerUrl);
+
+            // Connect to the event WebSocket (playwright_sensor.py)
+            // Use the Nginx reverse proxy URL
+            const sensorUrl = `${sessionBubbleUrl}/playwright-sensor/`;
+            connectToVNCSensor(sensorUrl);
+        }
+
+        // Return a cleanup function to disconnect when the component unmounts
+        return () => {
+            if (isConnected) {
+                console.log("Session component unmounting, disconnecting from session-bubble.");
+                disconnectVNC();
+                disconnectFromVNCSensor();
+            }
+        };
+    }, [isConnected, sessionBubbleUrl, connectVNC, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
 
     // Show loading while Clerk is initializing
     if (!isLoaded) {
