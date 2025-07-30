@@ -133,13 +133,10 @@ const BREATHING_SMOOTHING_UP = 0.3;
 const BREATHING_SMOOTHING_DOWN = 0.1;
 const MIN_BREATHING_SCALE = 0.95;
 const MAX_BREATHING_SCALE = 0.964;
+const BACKGROUND_MUSIC_VOLUME = 0.003;
 
-// NEW: Variable for background music volume
-const BACKGROUND_MUSIC_VOLUME = 0.003; // Set to a low value as requested (0.0 - 1.0)
-
-// --- EMOTION DEFINITIONS ---
+// --- EMOTION DEFINITIONS (Unchanged) ---
 type Emotion = 'default' | 'happy' | 'sad' | 'angry' | 'calm';
-
 type EmotionProfile = {
     coreColorTop: THREE.Color;
     coreColorBottom: THREE.Color;
@@ -152,94 +149,22 @@ type EmotionProfile = {
     breathingSpeed: number;
     breathingMagnitude: number;
 };
+const getDefaultEmotion = (): EmotionProfile => ({ coreColorTop: new THREE.Color('#ff8c66'), coreColorBottom: new THREE.Color('#7ab8f5'), coreColorAccent: new THREE.Color('#ff8cae'), shellFrequency: 2.5, shellAmplitude: 0.3, shellRimColor: new THREE.Color('#566FE9'), shellRimPower: 2.5, rotationSpeed: 0.5, breathingSpeed: 1.0, breathingMagnitude: 0.02, });
+const getHappyEmotion = (): EmotionProfile => ({ coreColorTop: new THREE.Color('#FFD700'), coreColorBottom: new THREE.Color('#87CEEB'), coreColorAccent: new THREE.Color('#FFB6C1'), shellFrequency: 4.0, shellAmplitude: 0.35, shellRimColor: new THREE.Color('#FFFFFF'), shellRimPower: 2.0, rotationSpeed: 2.0, breathingSpeed: 2.5, breathingMagnitude: 0.035, });
+const getSadEmotion = (): EmotionProfile => ({ coreColorTop: new THREE.Color('#465069'), coreColorBottom: new THREE.Color('#708090'), coreColorAccent: new THREE.Color('#414852'), shellFrequency: 1.0, shellAmplitude: 0.05, shellRimColor: new THREE.Color('#333344'), shellRimPower: 4.0, rotationSpeed: 0.1, breathingSpeed: 0.2, breathingMagnitude: 0.015, });
+const getAngryEmotion = (): EmotionProfile => ({ coreColorTop: new THREE.Color('#B22222'), coreColorBottom: new THREE.Color('#8B0000'), coreColorAccent: new THREE.Color('#FF4500'), shellFrequency: 8.0, shellAmplitude: 0.4, shellRimColor: new THREE.Color('#FF6347'), shellRimPower: 5.0, rotationSpeed: 4.0, breathingSpeed: 0.5, breathingMagnitude: 0.05, });
+const getCalmEmotion = (): EmotionProfile => ({ coreColorTop: new THREE.Color('#98FB98'), coreColorBottom: new THREE.Color('#ADD8E6'), coreColorAccent: new THREE.Color('#F5F5DC'), shellFrequency: 1.5, shellAmplitude: 0.1, shellRimColor: new THREE.Color('#B0C4DE'), shellRimPower: 1.5, rotationSpeed: 0.2, breathingSpeed: 0.3, breathingMagnitude: 0.008, });
+const emotionProfileMap: Record<Emotion, EmotionProfile> = { default: getDefaultEmotion(), happy: getHappyEmotion(), sad: getSadEmotion(), angry: getAngryEmotion(), calm: getCalmEmotion(), };
+const emotionMusicMap: Record<Emotion, string | null> = { default: null, happy: 'https://www.bensound.com/bensound-music/bensound-happyrock.mp3', sad: 'https://www.bensound.com/bensound-music/bensound-slowmotion.mp3', angry: 'https://www.bensound.com/bensound-music/bensound-actionable.mp3', calm: 'https://www.bensound.com/bensound-music/bensound-sunny.mp3', };
 
-const getDefaultEmotion = (): EmotionProfile => ({
-    coreColorTop: new THREE.Color('#ff8c66'),
-    coreColorBottom: new THREE.Color('#7ab8f5'),
-    coreColorAccent: new THREE.Color('#ff8cae'),
-    shellFrequency: 2.5,
-    shellAmplitude: 0.3,
-    shellRimColor: new THREE.Color('#566FE9'),
-    shellRimPower: 2.5,
-    rotationSpeed: 0.5,
-    breathingSpeed: 1.0,
-    breathingMagnitude: 0.02,
-});
-const getHappyEmotion = (): EmotionProfile => ({
-    coreColorTop: new THREE.Color('#FFD700'),
-    coreColorBottom: new THREE.Color('#87CEEB'),
-    coreColorAccent: new THREE.Color('#FFB6C1'),
-    shellFrequency: 4.0,
-    shellAmplitude: 0.35,
-    shellRimColor: new THREE.Color('#FFFFFF'),
-    shellRimPower: 2.0,
-    rotationSpeed: 2.0,
-    breathingSpeed: 2.5,
-    breathingMagnitude: 0.035,
-});
-const getSadEmotion = (): EmotionProfile => ({
-    coreColorTop: new THREE.Color('#465069'),
-    coreColorBottom: new THREE.Color('#708090'),
-    coreColorAccent: new THREE.Color('#414852'),
-    shellFrequency: 1.0,
-    shellAmplitude: 0.05,
-    shellRimColor: new THREE.Color('#333344'),
-    shellRimPower: 4.0,
-    rotationSpeed: 0.1,
-    breathingSpeed: 0.2,
-    breathingMagnitude: 0.015,
-});
-const getAngryEmotion = (): EmotionProfile => ({
-    coreColorTop: new THREE.Color('#B22222'),
-    coreColorBottom: new THREE.Color('#8B0000'),
-    coreColorAccent: new THREE.Color('#FF4500'),
-    shellFrequency: 8.0,
-    shellAmplitude: 0.4,
-    shellRimColor: new THREE.Color('#FF6347'),
-    shellRimPower: 5.0,
-    rotationSpeed: 4.0,
-    breathingSpeed: 0.5,
-    breathingMagnitude: 0.05,
-});
-const getCalmEmotion = (): EmotionProfile => ({
-    coreColorTop: new THREE.Color('#98FB98'),
-    coreColorBottom: new THREE.Color('#ADD8E6'),
-    coreColorAccent: new THREE.Color('#F5F5DC'),
-    shellFrequency: 1.5,
-    shellAmplitude: 0.1,
-    shellRimColor: new THREE.Color('#B0C4DE'),
-    shellRimPower: 1.5,
-    rotationSpeed: 0.2,
-    breathingSpeed: 0.3,
-    breathingMagnitude: 0.008,
-});
 
-const emotionProfileMap: Record<Emotion, EmotionProfile> = {
-    default: getDefaultEmotion(),
-    happy: getHappyEmotion(),
-    sad: getSadEmotion(),
-    angry: getAngryEmotion(),
-    calm: getCalmEmotion(),
-};
-
-// --- EMOTION MUSIC DEFINITIONS ---
-const emotionMusicMap: Record<Emotion, string | null> = {
-    default: null, // No music for default state
-    happy: 'https://www.bensound.com/bensound-music/bensound-happyrock.mp3',
-    sad: 'https://www.bensound.com/bensound-music/bensound-slowmotion.mp3',
-    angry: 'https://www.bensound.com/bensound-music/bensound-actionable.mp3',
-    calm: 'https://www.bensound.com/bensound-music/bensound-sunny.mp3',
-};
-
+// --- COMPONENT (Unchanged logic, only JSX is modified) ---
 const Sphere: React.FC = () => {
     const mountRef = useRef<HTMLDivElement>(null);
     const [isAudioActive, setIsAudioActive] = useState(false);
     const { isMusicButtonPlaying, setIsMusicButtonPlaying, isMicEnabled } = useSessionStore();
     const [currentEmotion, setCurrentEmotion] = useState<Emotion>('default');
-    // State to control if music is explicitly paused by the button
     const [isMusicExplicitlyPaused, setIsMusicExplicitlyPaused] = useState(false);
-
-    // Refs for audio playback and state
     const isAudioActiveRef = useRef(isAudioActive);
     useEffect(() => { isAudioActiveRef.current = isAudioActive; }, [isAudioActive]);
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -249,13 +174,8 @@ const Sphere: React.FC = () => {
     const audioEleRef = useRef<HTMLAudioElement | null>(null);
     const baseScaleRef = useRef(1);
     const currentScaleRef = useRef(1);
-
-    // --- Refs for background music ---
     const musicAudioRef = useRef<HTMLAudioElement | null>(null);
     const fadeIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-
-    // --- Audio initialization and handling (Unchanged) ---
     const initializeAudio = useCallback(() => {
         if (!audioContextRef.current) {
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -300,52 +220,37 @@ const Sphere: React.FC = () => {
         micEventEmitter.subscribe(handleStartListen);
         return () => { micEventEmitter.unsubscribe(handleStartListen); };
     }, [handleStartListen]);
-
-
-    // Effect to handle music play/pause commands from the footer button
     useEffect(() => {
         const handleTogglePlayback = () => {
             setIsMusicExplicitlyPaused(prev => !prev);
         };
-
         musicEventEmitter.subscribe(handleTogglePlayback);
-
         return () => {
             musicEventEmitter.unsubscribe(handleTogglePlayback);
         };
-    }, []); // Empty dependency array means this effect runs once on mount/unmount
-
-
-    // --- Effect for handling background music changes ---
+    }, []);
     useEffect(() => {
         if (!musicAudioRef.current) {
             musicAudioRef.current = new Audio();
             musicAudioRef.current.loop = true;
             musicAudioRef.current.volume = 0;
         }
-
         const audio = musicAudioRef.current;
         const newMusicUrl = emotionMusicMap[currentEmotion];
-        const FADE_TIME = 1000; // 1 second
-        // Changed to use the new BACKGROUND_MUSIC_VOLUME variable
+        const FADE_TIME = 1000;
         const MAX_VOLUME = BACKGROUND_MUSIC_VOLUME;
-
         const fadeOutAndSwitch = () => {
             if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-
-            // If explicitly paused by the button, just ensure it's stopped and exit.
             if (isMusicExplicitlyPaused) {
                 audio.pause();
                 audio.volume = 0;
-                audio.src = ''; // Clear source to prevent accidental restart
+                audio.src = '';
                 return;
             }
-
-            if (audio.paused || audio.volume === 0) { // If already paused/silent, proceed to fade in
+            if (audio.paused || audio.volume === 0) {
                 fadeIn();
                 return;
             }
-
             const fadeOutStep = audio.volume / (FADE_TIME / 50);
             fadeIntervalRef.current = setInterval(() => {
                 const newVolume = audio.volume - fadeOutStep;
@@ -360,25 +265,18 @@ const Sphere: React.FC = () => {
                 }
             }, 50);
         };
-
         const fadeIn = () => {
             if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-
-            // If no music URL for this emotion, or explicitly paused, stop and exit.
             if (!newMusicUrl || isMusicExplicitlyPaused) {
                 audio.src = '';
                 audio.pause();
                 audio.volume = 0;
                 return;
             }
-
-            // Only update src if it's different from the current one
             if (audio.src !== newMusicUrl) {
                 audio.src = newMusicUrl;
             }
-
             audio.play().catch(e => console.error("BG Music play failed. User may need to interact with the page first.", e));
-
             const fadeInStep = MAX_VOLUME / (FADE_TIME / 50);
             fadeIntervalRef.current = setInterval(() => {
                 const newVolume = audio.volume + fadeInStep;
@@ -391,84 +289,51 @@ const Sphere: React.FC = () => {
                 }
             }, 50);
         };
-
-        // This determines the music state:
-        // If mic is on, or if music is explicitly paused, stop music.
-        // Otherwise, manage based on emotion.
         if (isMicEnabled || isMusicExplicitlyPaused) {
             if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-            if (audio.src) { // Only if there was an active src
+            if (audio.src) {
                 audio.pause();
                 audio.volume = 0;
-                audio.src = ''; // Clear source to prevent accidental restart
+                audio.src = '';
             }
         } else {
-            // If not explicitly paused, then emotion dictates playback
             fadeOutAndSwitch();
         }
-
         return () => {
             if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
-            // On unmount or dependency change, clear interval but don't force stop/src clear
-            // as the explicit pause state might handle it already.
         };
-    }, [currentEmotion, isMusicExplicitlyPaused, isMicEnabled]); // Add isMusicExplicitlyPaused and isMicEnabled to dependency array
-
-
-    // --- Main Three.js setup and animation loop ---
+    }, [currentEmotion, isMusicExplicitlyPaused, isMicEnabled]);
     useEffect(() => {
         const currentMount = mountRef.current;
         if (!currentMount) return;
-
         let animationFrameId: number;
         const scene = new THREE.Scene();
         scene.background = null;
         const camera = new THREE.PerspectiveCamera(50, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
         camera.position.set(0, 0, 5);
-
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         currentMount.appendChild(renderer.domElement);
-
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
         scene.add(ambientLight);
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
         directionalLight.position.set(5, 5, 5);
         scene.add(directionalLight);
-
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true; controls.dampingFactor = 0.05; controls.enablePan = false; controls.enableZoom = false; controls.autoRotate = true;
-
         const blobGroup = new THREE.Group();
         scene.add(blobGroup);
-
         const coreGeometry = new THREE.SphereGeometry(1.3, 128, 128);
-        const coreMaterial = new THREE.ShaderMaterial({
-            vertexShader: coreVertexShader, fragmentShader: coreFragmentShader,
-            uniforms: { u_top_color: { value: new THREE.Color() }, u_bottom_color: { value: new THREE.Color() }, u_pink_color: { value: new THREE.Color() }, u_patch1_percentage: { value: 0.6 }, u_patch2_percentage: { value: 0.6 }, u_patch3_percentage: { value: 0.6 }, u_glow_power: { value: 0.7 } },
-            transparent: true, blending: THREE.NormalBlending,
-        });
+        const coreMaterial = new THREE.ShaderMaterial({ vertexShader: coreVertexShader, fragmentShader: coreFragmentShader, uniforms: { u_top_color: { value: new THREE.Color() }, u_bottom_color: { value: new THREE.Color() }, u_pink_color: { value: new THREE.Color() }, u_patch1_percentage: { value: 0.6 }, u_patch2_percentage: { value: 0.6 }, u_patch3_percentage: { value: 0.6 }, u_glow_power: { value: 0.7 } }, transparent: true, blending: THREE.NormalBlending, });
         const core = new THREE.Mesh(coreGeometry, coreMaterial);
         blobGroup.add(core);
-
         const renderTargetForShell = new THREE.WebGLRenderTarget(currentMount.clientWidth, currentMount.clientHeight);
         const shellGeometry = new THREE.SphereGeometry(2.2, 128, 128);
-
-        const shellMaterial = new THREE.ShaderMaterial({
-            vertexShader: shellVertexShader, fragmentShader: shellFragmentShader,
-            uniforms: {
-                u_time: { value: 0 }, u_frequency: { value: 0 }, u_amplitude: { value: 0 },
-                u_tide_direction: { value: new THREE.Vector3(1, 0, 0) }, u_scene_texture: { value: renderTargetForShell.texture },
-                u_refraction_strength: { value: 0.1 }, u_shell_opacity: { value: 0.2 }, u_rim_power: { value: 0 },
-                u_rim_color: { value: new THREE.Color() }, u_shininess: { value: 60.0 }, u_light_direction: { value: directionalLight.position },
-            },
-            transparent: true,
-        });
+        const shellMaterial = new THREE.ShaderMaterial({ vertexShader: shellVertexShader, fragmentShader: shellFragmentShader, uniforms: { u_time: { value: 0 }, u_frequency: { value: 0 }, u_amplitude: { value: 0 }, u_tide_direction: { value: new THREE.Vector3(1, 0, 0) }, u_scene_texture: { value: renderTargetForShell.texture }, u_refraction_strength: { value: 0.1 }, u_shell_opacity: { value: 0.2 }, u_rim_power: { value: 0 }, u_rim_color: { value: new THREE.Color() }, u_shininess: { value: 60.0 }, u_light_direction: { value: directionalLight.position }, }, transparent: true, });
         const shell = new THREE.Mesh(shellGeometry, shellMaterial);
         blobGroup.add(shell);
-
         const setBlobSizeAndPosition = () => {
             if (!currentMount) return;
             const canvasHeight = currentMount.clientHeight;
@@ -477,41 +342,26 @@ const Sphere: React.FC = () => {
             const visibleHeightAtDistance = 2 * Math.tan(vFov / 2) * distance;
             const requiredWorldHeight = visibleHeightAtDistance * BLOB_SIZE_PERCENTAGE;
             const unscaledBlobDiameter = shellGeometry.parameters.radius * 2;
-
             const newScale = requiredWorldHeight / unscaledBlobDiameter;
             baseScaleRef.current = newScale;
             if (currentScaleRef.current === 1) { currentScaleRef.current = newScale; blobGroup.scale.set(newScale, newScale, newScale); }
-
             const scaledIdleRadius = (shellGeometry.parameters.radius + shellMaterial.uniforms.u_amplitude.value) * newScale;
             const bottomPaddingInWorldUnits = (BLOB_BOTTOM_PADDING_PIXELS / canvasHeight) * visibleHeightAtDistance;
-
-            // --- THIS IS THE CHANGE ---
-            const horizontalShift = 0.4; // A positive value shifts it right.
+            const horizontalShift = 0.4;
             blobGroup.position.x = horizontalShift;
             blobGroup.position.y = -visibleHeightAtDistance / 2 + scaledIdleRadius + bottomPaddingInWorldUnits;
-            controls.target.set(horizontalShift, 0, 0); // Also update the camera target
-            // -------------------------
+            controls.target.set(horizontalShift, 0, 0);
         };
-
         setBlobSizeAndPosition();
         const refractionTextureBackground = new THREE.Color('#e0e5f0');
         const clock = new THREE.Clock();
-
         const initialProfile = emotionProfileMap[currentEmotion];
-        const activeProfile = {
-            ...initialProfile,
-            coreColorTop: initialProfile.coreColorTop.clone(),
-            coreColorBottom: initialProfile.coreColorBottom.clone(),
-            coreColorAccent: initialProfile.coreColorAccent.clone(),
-            shellRimColor: initialProfile.shellRimColor.clone(),
-        };
-
+        const activeProfile = { ...initialProfile, coreColorTop: initialProfile.coreColorTop.clone(), coreColorBottom: initialProfile.coreColorBottom.clone(), coreColorAccent: initialProfile.coreColorAccent.clone(), shellRimColor: initialProfile.shellRimColor.clone(), };
         const animate = () => {
             animationFrameId = requestAnimationFrame(animate);
             const elapsedTime = clock.getElapsedTime();
             const targetProfile = emotionProfileMap[currentEmotion];
             const lerpFactor = 0.05;
-
             activeProfile.rotationSpeed = THREE.MathUtils.lerp(activeProfile.rotationSpeed, targetProfile.rotationSpeed, lerpFactor);
             activeProfile.breathingSpeed = THREE.MathUtils.lerp(activeProfile.breathingSpeed, targetProfile.breathingSpeed, lerpFactor);
             activeProfile.breathingMagnitude = THREE.MathUtils.lerp(activeProfile.breathingMagnitude, targetProfile.breathingMagnitude, lerpFactor);
@@ -522,7 +372,6 @@ const Sphere: React.FC = () => {
             activeProfile.coreColorBottom.lerp(targetProfile.coreColorBottom, lerpFactor);
             activeProfile.coreColorAccent.lerp(targetProfile.coreColorAccent, lerpFactor);
             activeProfile.shellRimColor.lerp(targetProfile.shellRimColor, lerpFactor);
-
             controls.autoRotateSpeed = activeProfile.rotationSpeed;
             shellMaterial.uniforms.u_frequency.value = activeProfile.shellFrequency;
             shellMaterial.uniforms.u_amplitude.value = activeProfile.shellAmplitude;
@@ -531,10 +380,8 @@ const Sphere: React.FC = () => {
             coreMaterial.uniforms.u_top_color.value.copy(activeProfile.coreColorTop);
             coreMaterial.uniforms.u_bottom_color.value.copy(activeProfile.coreColorBottom);
             coreMaterial.uniforms.u_pink_color.value.copy(activeProfile.coreColorAccent);
-
             shellMaterial.uniforms.u_tide_direction.value.set(Math.cos(elapsedTime * 0.8), Math.sin(elapsedTime * 0.5), Math.sin(elapsedTime * 0.8)).normalize();
             shellMaterial.uniforms.u_time.value = elapsedTime * 0.3;
-
             let targetScale: number;
             if (isAudioActiveRef.current && analyserRef.current && dataArrayRef.current) {
                 analyserRef.current.getByteFrequencyData(dataArrayRef.current);
@@ -547,24 +394,19 @@ const Sphere: React.FC = () => {
                 const idleBreath = Math.sin(elapsedTime * activeProfile.breathingSpeed) * activeProfile.breathingMagnitude;
                 targetScale = baseScaleRef.current * (1.0 + idleBreath);
             }
-
             const smoothingFactor = targetScale > currentScaleRef.current ? BREATHING_SMOOTHING_UP : BREATHING_SMOOTHING_DOWN;
             currentScaleRef.current = THREE.MathUtils.lerp(currentScaleRef.current, targetScale, smoothingFactor);
             blobGroup.scale.set(currentScaleRef.current, currentScaleRef.current, currentScaleRef.current);
-
             shell.visible = false; core.visible = true;
             scene.background = refractionTextureBackground;
             renderer.setRenderTarget(renderTargetForShell);
             renderer.render(scene, camera);
-
             renderer.setRenderTarget(null); scene.background = null;
             shell.visible = true;
             renderer.render(scene, camera);
             controls.update();
         };
-
         animate();
-
         const handleResize = () => {
             if (currentMount) {
                 const width = currentMount.clientWidth; const height = currentMount.clientHeight;
@@ -574,7 +416,6 @@ const Sphere: React.FC = () => {
             }
         };
         window.addEventListener('resize', handleResize);
-
         return () => {
             window.removeEventListener('resize', handleResize);
             cancelAnimationFrame(animationFrameId);
@@ -605,10 +446,12 @@ const Sphere: React.FC = () => {
                 currentMount.removeChild(renderer.domElement);
             }
         };
-    }, [currentEmotion, isMusicExplicitlyPaused]); // Add isMusicExplicitlyPaused to the main useEffect dependencies as well
+    }, [currentEmotion, isMusicExplicitlyPaused]);
 
     return (
-        <div className="absolute top-0 left-0 w-full h-full -z-[1]">
+        // --- THIS IS THE ONLY LINE THAT CHANGED ---
+        // We set z-10 to bring it to the front and pointer-events-none to make it "click-through"
+        <div className="absolute top-0 left-0 w-full h-full z-10 pointer-events-none">
             <div ref={mountRef} className="w-full h-full" />
         </div>
     );
