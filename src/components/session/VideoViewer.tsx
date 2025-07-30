@@ -19,12 +19,12 @@ export default function VideoViewer({ videoSrc, className }: VideoViewerProps) {
     }}>
       <div style={{
         position: 'absolute',
-        top: '50%',
+        top: '45%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: '1080px',
-        height: '620px',
-        borderRadius: '50px',
+        width: '100%',
+        height: '80%',
+        borderRadius: '10px',
         overflow: 'hidden',
         zIndex: 1
       }}>
@@ -39,7 +39,7 @@ export default function VideoViewer({ videoSrc, className }: VideoViewerProps) {
             left: 0, 
             height: '100%', 
             width: '100%',
-            borderRadius: '50%'
+            borderRadius: '10px'
           }}
           allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen;"
         />

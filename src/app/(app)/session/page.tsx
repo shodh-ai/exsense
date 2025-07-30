@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import Footer from '@/components/Footer';
+import Footer from '@/components/Footer'; // Import the Footer component
 import { Room } from 'livekit-client';
 
 import dynamic from 'next/dynamic';
@@ -40,8 +40,6 @@ interface SessionContentProps {
     vncUrl: string;
 }
 
-// ------------------- MODIFIED COMPONENT START -------------------
-
 function SessionContent({ activeView, setActiveView, componentButtons, vncUrl }: SessionContentProps) {
     return (
         // Added `relative` to this container to act as a positioning context for the absolute navbar
@@ -75,14 +73,14 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl }:
             </div>
 
             {/* The main content area now takes up the full height, as the navbar floats above it */}
-            <div className="flex-grow relative w-full h-[90%] border-2 border-red-500">
-                <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-[90%] justify-center items-center border-2 border-green-500 `}>
+            <div className="flex-grow relative w-full h-[90%] ">
+                <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-[90%]  overflow-hidden mt-12`}>
                     <ExcalidrawWrapper />
                 </div>
-                <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
+                <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-[76%] mt-17`}>
                     <VncViewer url={vncUrl} />
                 </div>
-                <div className={`${activeView === 'video' ? 'block' : 'hidden'} w-full h-full`}>
+                <div className={`${activeView === 'video' ? 'block' : 'hidden'} w-full h-[90%] mt-12`}>
                     <VideoViewer />
                 </div>
             </div>
@@ -90,8 +88,6 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl }:
         </div>
     );
 }
-
-// ------------------- MODIFIED COMPONENT END -------------------
 
 export default function Session() {
     const { activeView, setActiveView } = useSessionStore();
@@ -195,8 +191,9 @@ export default function Session() {
                         componentButtons={componentButtons} 
                         vncUrl={vncUrl} 
                     />
+                    {/* Call Footer here */}
+                    <Footer /> 
                 </div>
-          
             </SignedIn>
             
             <SignedOut>
@@ -213,6 +210,7 @@ export default function Session() {
                     </div>
                 </div>
             </SignedOut>
+            
         </>
     )
 }
