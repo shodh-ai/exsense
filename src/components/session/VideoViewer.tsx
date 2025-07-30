@@ -24,7 +24,7 @@ export default function VideoViewer({ videoSrc, className }: VideoViewerProps) {
         transform: 'translate(-50%, -50%)',
         width: '1080px',
         height: '620px',
-        borderRadius: '50%',
+        borderRadius: '50px',
         overflow: 'hidden',
         zIndex: 1
       }}>

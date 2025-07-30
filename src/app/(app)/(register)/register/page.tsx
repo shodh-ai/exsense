@@ -7,10 +7,18 @@ import { useRouter } from "next/navigation";
 import { useState, FormEvent, useEffect } from "react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
 import Sphere from "@/components/Sphere";
+import { Plus_Jakarta_Sans } from "next/font/google";
+
+// Initialize the font
+const jakarta = Plus_Jakarta_Sans({
+    subsets: ["latin"],
+    weight: ["200", "300", "400", "500", "600", "700", "800"],
+});
+
 
 export default function Register() {
     const router = useRouter();
-    const { isSignedIn, user } = useUser();
+    const { isSignedIn } = useUser();
     const { signUp, isLoaded } = useSignUp();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -20,6 +28,7 @@ export default function Register() {
     const [verificationStep, setVerificationStep] = useState(false);
     const [verificationCode, setVerificationCode] = useState("");
     const [resendingCode, setResendingCode] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     // Redirect to session if already signed in
     useEffect(() => {
@@ -31,13 +40,8 @@ export default function Register() {
     // Check if there's an existing sign-up in progress
     useEffect(() => {
         if (isLoaded && signUp && signUp.status) {
-            console.log('Existing sign-up status:', signUp.status);
-            console.log('Existing sign-up object:', signUp);
-            
-            // If there's an incomplete sign-up that needs verification
             if (signUp.status === 'missing_requirements' && 
                 signUp.unverifiedFields?.includes('email_address')) {
-                console.log('Found incomplete sign-up, showing verification step');
                 setEmail(signUp.emailAddress || '');
                 setUsername(signUp.username || '');
                 setVerificationStep(true);
@@ -53,11 +57,7 @@ export default function Register() {
         setError("");
 
         try {
-            console.log('Starting registration process...');
-            
-            // Check if user is already signed in
             if (isSignedIn) {
-                console.log('User already signed in, redirecting to session');
                 router.push("/session");
                 return;
             }
@@ -67,38 +67,25 @@ export default function Register() {
                 password,
                 username,
             });
-
-            console.log('Registration result:', result.status);
-            console.log('Registration object:', result);
             
-            // Check if registration requires additional steps
             if (result.status === "missing_requirements") {
-                console.log('Missing requirements:', result.missingFields);
-                console.log('Unverified fields:', result.unverifiedFields);
-                
-                // If email verification is required, proceed with verification
                 if (result.unverifiedFields?.includes('email_address')) {
                     await result.prepareEmailAddressVerification({ strategy: "email_code" });
-                    console.log('Verification email sent');
                     setVerificationStep(true);
                 } else {
                     setError('Registration incomplete. Please check all required fields.');
                 }
             } else if (result.status === "complete") {
-                console.log('Registration completed successfully, redirecting to session');
-                // Registration is complete, redirect to session
-                router.push("/session");
+                console.log('Registration completed successfully, redirecting to confirmation page');
+                // --- CHANGE 1: Redirect to confirmation page ---
+                router.push("/confirm-register"); 
             } else {
-                // Send verification email for other statuses
                 try {
                     await result.prepareEmailAddressVerification({ strategy: "email_code" });
-                    console.log('Verification email sent');
                     setVerificationStep(true);
                 } catch (verificationError: any) {
-                    console.error('Verification preparation error:', verificationError);
-                    // If verification fails, but registration is complete, redirect to session
                     if (verificationError.message?.includes('No sign up attempt was found')) {
-                        console.log('Registration already complete, redirecting to session');
+                        // This case might mean the user is already created and signed in during the flow
                         router.push("/session");
                     } else {
                         setError('Failed to send verification email. Please try again.');
@@ -106,19 +93,13 @@ export default function Register() {
                 }
             }
         } catch (err: any) {
-            console.error('Registration error:', err);
-            
-            // Handle specific error cases
             if (err.message?.includes("You're already signed in")) {
-                console.log('User already signed in, redirecting to session');
                 router.push("/session");
                 return;
             } else if (err.message?.includes("already exists") || 
                        err.message?.includes("already taken") ||
                        err.errors?.[0]?.message?.includes("already exists") ||
                        err.errors?.[0]?.message?.includes("already taken")) {
-                console.log('User already exists, redirecting to login');
-                // Store message for login page to display
                 sessionStorage.setItem('loginMessage', 'Account already exists. Please sign in instead.');
                 router.push("/login");
                 return;
@@ -139,35 +120,24 @@ export default function Register() {
         setError("");
 
         try {
-            console.log('Starting verification process...');
             const result = await signUp.attemptEmailAddressVerification({
                 code: verificationCode,
             });
-
-            console.log('Verification result:', result.status);
-            console.log('Verification object:', result);
             
             if (result.status === "complete") {
-                console.log('Verification complete, redirecting to session');
-                router.push("/session");
-            } else if (result.status === "missing_requirements") {
-                console.log('Verification missing requirements:', result.missingFields);
-                console.log('Unverified fields:', result.unverifiedFields);
-                setError("Additional verification steps required. Please check your email.");
+                console.log('Verification complete, redirecting to confirmation page');
+                // --- CHANGE 2: Redirect to confirmation page after verification ---
+                router.push("/confirm-register");
             } else {
-                console.log('Verification incomplete, status:', result.status);
                 setError("Verification incomplete. Please try again.");
             }
         } catch (err: any) {
-            console.error('Verification error:', err);
-            
-            // Handle specific error cases
             if (err.message?.includes('already been verified')) {
-                console.log('Verification already completed, redirecting to session');
-                router.push("/session");
+                console.log('Verification already completed, redirecting to confirmation page');
+                // Optional: You can also redirect here for consistency
+                router.push("/confirm-register");
                 return;
             }
-            
             const errorMessage = err.errors?.[0]?.message || err.message || "Verification failed";
             setError(errorMessage);
         } finally {
@@ -177,16 +147,11 @@ export default function Register() {
 
     const handleResendCode = async () => {
         if (!isLoaded || !signUp) return;
-        
         setResendingCode(true);
         setError("");
-
         try {
-            console.log('Resending verification code...');
             await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
-            console.log('Verification code resent successfully');
         } catch (err: any) {
-            console.error('Resend error:', err);
             const errorMessage = err.errors?.[0]?.message || err.message || "Failed to resend code";
             setError(errorMessage);
         } finally {
@@ -200,7 +165,8 @@ export default function Register() {
             await signUp.authenticateWithRedirect({
                 strategy: "oauth_google",
                 redirectUrl: "/session",
-                redirectUrlComplete: "/session"
+                // --- CHANGE 3: Update final redirect for OAuth ---
+                redirectUrlComplete: "/confirm-register" 
             });
         } catch (err: any) {
             setError(err.errors?.[0]?.message || "Google sign-up failed");
@@ -213,7 +179,8 @@ export default function Register() {
             await signUp.authenticateWithRedirect({
                 strategy: "oauth_facebook",
                 redirectUrl: "/session",
-                redirectUrlComplete: "/session"
+                // --- CHANGE 4: Update final redirect for OAuth ---
+                redirectUrlComplete: "/confirm-register"
             });
         } catch (err: any) {
             setError(err.errors?.[0]?.message || "Facebook sign-up failed");
@@ -221,7 +188,7 @@ export default function Register() {
     };
 
     return (
-        <div className="flex min-h-full w-full items-center justify-center bg-transparent p-4">
+        <div className={`${jakarta.className} flex min-h-full w-full items-center justify-center bg-transparent p-4`}>
             <Sphere />
             <div className="w-full h-full overflow-hidden flex items-center justify-center flex-col p-4 sm:p-6 lg:p-8">
                 <ShodhAIHero />
@@ -229,7 +196,6 @@ export default function Register() {
                 <div className="w-full max-w-md overflow-auto max-h-full flex flex-col items-center">
                     {!verificationStep ? (
                         <>
-                            {/* Registration Form */}
                             <form
                                 className="flex flex-col mt-6 md:mt-8 w-full"
                                 onSubmit={handleSubmit}
@@ -238,7 +204,7 @@ export default function Register() {
                                     <input
                                         type="text"
                                         placeholder="username"
-                                        className="h-[48px] border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder-[color:#717171] text-sm"
+                                        className="h-[48px] border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm"
                                         value={username}
                                         onChange={(e) => setUsername(e.target.value)}
                                         required
@@ -246,24 +212,31 @@ export default function Register() {
                                     <input
                                         type="email"
                                         placeholder="email"
-                                        className="h-[48px] border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder-[color:#717171] text-sm"
+                                        className="h-[48px] border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         required
                                     />
-                                    <input
-                                        type="password"
-                                        placeholder="password"
-                                        className="h-[48px] border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder-[color:#717171] text-sm"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        required
-                                    />
-                                    {/* Clerk CAPTCHA element - required for bot protection */}
-                                    <div id="clerk-captcha"></div>
+                                    <div className="relative w-full">
+                                        <input
+                                            type={showPassword ? "text" : "password"}
+                                            placeholder="password"
+                                            className="w-full h-[48px] border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 pr-16 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
+                                            required
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            className="absolute inset-y-0 right-0 flex items-center pr-4 text-sm font-semibold text-[#566FE9] leading-normal"
+                                        >
+                                            {showPassword ? "Hide" : "Show"}
+                                        </button>
+                                    </div>
                                     <button
                                         type="submit"
-                                        className="bg-[#566FE9] text-white h-12 rounded-[58px] font-[14px] hover:bg-[#566FE9]/95 transition disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+                                        className="bg-[#566FE9] text-white h-12 rounded-[58px] hover:bg-[#566FE9]/95 transition disabled:opacity-60 disabled:cursor-not-allowed text-sm font-semibold"
                                         disabled={loading || !isLoaded}
                                     >
                                         {loading ? "Registering..." : "Sign Up"}
@@ -275,10 +248,10 @@ export default function Register() {
                                     )}
                                 </div>
                             </form>
-
-                            {/* Social Sign-Up */}
+                            
                             <div className="flex flex-col w-full items-center justify-center gap-3 my-4 md:my-6">
-                                <div className="text-sm">Sign up with</div>
+                            <hr className="w-full border-[#566FE9]/30" />
+                                <div className="text-sm font-semibold">Sign up with</div>
                                 <div className="flex w-full gap-3">
                                     <button
                                         type="button"
@@ -286,14 +259,8 @@ export default function Register() {
                                         className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
                                         disabled={!isLoaded}
                                     >
-                                        <Image
-                                            src="/Google.svg"
-                                            alt="Google"
-                                            height={20}
-                                            width={20}
-                                            className="h-5 w-5"
-                                        />
-                                        Google
+                                        <Image src="/Google.svg" alt="Google" height={20} width={20} className="h-5 w-5" />
+                                        <span className="font-semibold">Google</span>
                                     </button>
 
                                     <button
@@ -302,24 +269,16 @@ export default function Register() {
                                         className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors"
                                         disabled={!isLoaded}
                                     >
-                                        <Image
-                                            src="/Meta.svg"
-                                            alt="Meta"
-                                            height={20}
-                                            width={20}
-                                            className="h-5 w-5"
-                                        />
-                                        Meta
+                                        <Image src="/Meta.svg" alt="Meta" height={20} width={20} className="h-5 w-5" />
+                                        <span className="font-semibold">Meta</span>
                                     </button>
                                 </div>
                             </div>
 
-                            <hr className="w-full border-[#566FE9]/30" />
-
                             <div className="w-full text-center flex flex-col gap-4 mt-4 md:mt-6">
-                                <Link href="/login" className="text-sm text-black hover:underline">
+                                <Link href="/login" className="text-sm text-black hover:underline font-medium">
                                     Already have an account?{" "}
-                                    <span className="text-[#566FE9] font-medium">Login</span>
+                                    <span className="text-[#566FE9]">Login</span>
                                 </Link>
                             </div>
                         </>
@@ -339,14 +298,14 @@ export default function Register() {
                                 <input
                                     type="text"
                                     placeholder="Enter verification code"
-                                    className="h-[48px] border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder-[color:#717171] text-sm text-center"
+                                    className="h-[48px] border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm text-center"
                                     value={verificationCode}
                                     onChange={(e) => setVerificationCode(e.target.value)}
                                     required
                                 />
                                 <button
                                     type="submit"
-                                    className="bg-[#566FE9] text-white h-12 rounded-[58px] font-[14px] hover:bg-[#566FE9]/95 transition disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+                                    className="bg-[#566FE9] text-white h-12 rounded-[58px] hover:bg-[#566FE9]/95 transition disabled:opacity-60 disabled:cursor-not-allowed text-sm"
                                     disabled={loading || !isLoaded}
                                 >
                                     {loading ? "Verifying..." : "Verify Email"}

@@ -6,7 +6,7 @@ import {
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/accordian";
+} from "@/components/accordion";
 import { Avatar, AvatarImage } from "@/components/avatar";
 import { Badge } from "@/components/badge";
 import { Button } from "@/components/button";
@@ -124,28 +124,10 @@ const faqs: FaqItem[] = [
 ];
 
 // --- SUB-COMPONENTS ---
-
-const CourseDetailsPage = () => {
-  return (
-    <div className="flex flex-col min-h-screen bg-white text-gray-900 font-sans">
-      <Sphere />
-      <CourseHeader />
-      <CourseBanner />
-      <CourseIntroduction tags={courseTags} />
-      <CourseDetailsSection details={courseDetails} />
-      <WhatYouWillLearnSection skills={skills} outcomes={learningOutcomes} />
-      <CourseMapSection />
-      <TeacherProfileSection />
-      <ReviewsSection reviews={reviews} />
-      <FaqSection faqs={faqs} />
-      <Footer />
-    </div>
-  );
-};
-
 const CourseHeader = () => (
   <div className="flex justify-between items-center mb-8">
-    <h2 className="font-semibold text-base text-black">
+    {/* Updated styles for the h2 element as per your request */}
+    <h2 className="font-semibold text-base leading-6 text-black">
       Our Interactive Courses
     </h2>
     <Button variant="ghost" size="icon" className="h-6 w-6 p-0">
@@ -447,31 +429,33 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
 // --- MAIN PAGE COMPONENT ---
 export default function MyCoursesPage(): JSX.Element {
   return (
-    <div className="w-full h-full flex flex-col">
-      <main className="flex-grow overflow-y-auto font-['Plus_Jakarta_Sans'] ">
-        <div className="max-w-[1440px] mx-auto px-6 py-12 z-[-1]">
-          <CourseHeader />
-          <CourseBanner />
-          <Sphere />
+    <>
+      <Sphere />
+      <div className="w-full h-full flex flex-col font-sans text-gray-900">
+        <main className="flex-grow overflow-y-auto">
+          <div className="max-w-[1440px] mx-auto px-6 py-12 z-[-1]">
+            <CourseHeader />
+            <CourseBanner />
 
-          {/* Central Content Container */}
-          <div className="flex flex-col w-full max-w-[750px] mx-auto gap-[60px]">
-            <CourseIntroduction tags={courseTags} />
-            <CourseDetailsSection details={courseDetails} />
-            <WhatYouWillLearnSection
-              skills={skills}
-              outcomes={learningOutcomes}
-            />
-            <CourseMapSection />
-            <TeacherProfileSection />
-            <ReviewsSection reviews={reviews} />
-            <FaqSection faqs={faqs} />
+            {/* Central Content Container */}
+            <div className="flex flex-col w-full max-w-[750px] mx-auto gap-[60px]">
+              <CourseIntroduction tags={courseTags} />
+              <CourseDetailsSection details={courseDetails} />
+              <WhatYouWillLearnSection
+                skills={skills}
+                outcomes={learningOutcomes}
+              />
+              <CourseMapSection />
+              <TeacherProfileSection />
+              <ReviewsSection reviews={reviews} />
+              <FaqSection faqs={faqs} />
+            </div>
           </div>
+        </main>
+        <div className="w-full h-[60px] flex-shrink-0 mr-10 ">
+          <Footer />
         </div>
-      </main>
-      <div className="w-full h-[60px] flex-shrink-0 mr-10 ">
-        <Footer />
       </div>
-    </div>
+    </>
   );
 }

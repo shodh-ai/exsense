@@ -7,20 +7,24 @@ import { useRouter } from "next/navigation";
 import { useState, FormEvent, useEffect } from "react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
 import Sphere from "@/components/Sphere";
+import { Plus_Jakarta_Sans } from "next/font/google";
+
+// Initialize the font
+const jakarta = Plus_Jakarta_Sans({
+    subsets: ["latin"],
+    weight: ["200", "300", "400", "500", "600", "700", "800"],
+});
 
 export default function Login() {
-
-// File: exsense/src/app/(login)/login/page.tsx
-
-
     const router = useRouter();
-    const { isSignedIn, user } = useUser();
+    const { isSignedIn } = useUser();
     const { signIn, isLoaded } = useSignIn();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [message, setMessage] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
 
     // Redirect to session if already signed in
     useEffect(() => {
@@ -34,7 +38,7 @@ export default function Login() {
         const loginMessage = sessionStorage.getItem('loginMessage');
         if (loginMessage) {
             setMessage(loginMessage);
-            sessionStorage.removeItem('loginMessage'); // Clear the message after displaying
+            sessionStorage.removeItem('loginMessage');
         }
     }, []);
 
@@ -46,11 +50,7 @@ export default function Login() {
         setError("");
 
         try {
-            console.log('Starting login process...');
-            
-            // Check if user is already signed in
             if (isSignedIn) {
-                console.log('User already signed in, redirecting to session');
                 router.push("/session");
                 return;
             }
@@ -60,30 +60,14 @@ export default function Login() {
                 password,
             });
 
-            console.log('Login result:', result.status);
-            console.log('Login object:', result);
-
             if (result.status === "complete") {
-                console.log('Login complete, forcing auth state refresh...');
-                // Force Clerk to refresh authentication state
                 window.location.href = '/session';
                 return;
-            } else if (result.status === "needs_first_factor") {
-                console.log('Login needs first factor authentication');
-                setError("Please complete the authentication process.");
-            } else if (result.status === "needs_second_factor") {
-                console.log('Login needs second factor authentication');
-                setError("Please complete two-factor authentication.");
             } else {
-                console.log('Login incomplete, status:', result.status);
                 setError("Login failed. Please check your credentials.");
             }
         } catch (err: any) {
-            console.error('Login error:', err);
-            
-            // Handle specific error cases
-            if (err.message?.includes("You're already signed in")) {
-                console.log('Already signed in error, forcing page refresh to sync state');
+             if (err.message?.includes("You're already signed in")) {
                 window.location.href = '/session';
                 return;
             } else if (err.message?.includes("Invalid authentication credentials")) {
@@ -126,13 +110,11 @@ export default function Login() {
     };
 
     return (
-        <div className="w-full h-full overflow-hidden flex items-center justify-center flex-col p-4 sm:p-6 lg:p-8">
+        <div className={`${jakarta.className} w-full h-full overflow-hidden flex items-center justify-center flex-col p-4 sm:p-6 lg:p-8`}>
             <Sphere />
             <ShodhAIHero />
 
-            {/* Scrollable inner content, just in case small screens */}
             <div className="w-full max-w-md overflow-auto max-h-full flex flex-col items-center">
-                {/* Form */}
                 <form
                     className="flex flex-col mt-6 md:mt-8 w-full"
                     onSubmit={handleSubmit}
@@ -141,22 +123,35 @@ export default function Login() {
                         <input
                             type="email"
                             placeholder="email"
-                            className="h-12 border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder-[color:#717171] text-sm"
+                            className="h-12 border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
                         />
-                        <input
-                            type="password"
-                            placeholder="password"
-                            className="h-12 border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                        />
+                        
+                        {/* --- MODIFIED PASSWORD INPUT WITH TEXT TOGGLE --- */}
+                        <div className="relative w-full">
+                             <input
+                                type={showPassword ? "text" : "password"}
+                                placeholder="password"
+                                className="w-full h-12 border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 pr-16 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                            />
+                            <button
+                                type="button" // Prevents form submission
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute inset-y-0 right-0 flex items-center pr-4 text-sm font-semibold text-[#566FE9] leading-normal"
+                            >
+                                {showPassword ? "Hide" : "Show"}
+                            </button>
+                        </div>
+                        {/* --- END OF MODIFICATION --- */}
+
                         <button
                             type="submit"
-                            className="bg-[#566FE9] text-white h-12 rounded-[58px] font-medium hover:bg-[#566FE9]/95 transition disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+                            className="bg-[#566FE9] text-white h-12 rounded-[58px] font-semibold hover:bg-[#566FE9]/95 transition disabled:opacity-60 disabled:cursor-not-allowed text-sm"
                             disabled={loading || !isLoaded}
                         >
                             {loading ? "Logging in..." : "Login"}
@@ -174,9 +169,9 @@ export default function Login() {
                     </div>
                 </form>
 
-                {/* Social Login */}
                 <div className="flex flex-col w-full items-center justify-center gap-3 my-4 md:my-6">
-                    <div className="text-sm">Login with</div>
+                    <hr className="w-full border-[#566FE9]/30" />
+                    <div className="text-sm font-semibold">Login with</div>
                     <div className="flex w-full gap-3">
                         <button
                             type="button"
@@ -191,7 +186,7 @@ export default function Login() {
                                 width={20}
                                 className="h-5 w-5"
                             />
-                            Google
+                            <span className="font-semibold">Google</span>
                         </button>
 
                         <button
@@ -207,27 +202,24 @@ export default function Login() {
                                 width={20}
                                 className="h-5 w-5"
                             />
-                            Meta
+                            <span className="font-semibold">Meta</span>
                         </button>
                     </div>
                 </div>
 
-                <hr className="w-full border-[#566FE9]/30" />
-
-                {/* Footer Links */}
                 <div className="w-full text-center flex flex-col gap-8 mt-4 md:mt-6">
                     <Link
                         href="/forgotpassword"
-                        className="text-sm text-black hover:underline"
+                        className="text-sm text-black hover:underline font-medium"
                     >
                         Forgot Password?
                     </Link>
                     <Link
                         href="/register"
-                        className="text-sm text-black hover:underline"
+                        className="text-sm text-black hover:underline font-medium"
                     >
                         Don't have an account?{" "}
-                        <span className="text-[#566FE9] font-medium">Register</span>
+                        <span className="text-[#566FE9]">Register</span>
                     </Link>
                 </div>
             </div>

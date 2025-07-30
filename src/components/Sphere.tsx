@@ -608,7 +608,7 @@ const Sphere: React.FC = () => {
     }, [currentEmotion, isMusicExplicitlyPaused]); // Add isMusicExplicitlyPaused to the main useEffect dependencies as well
 
     return (
-        <div className="absolute top-0 left-0 w-full h-full z-[10]">
+        <div className="absolute top-0 left-0 w-full h-full -z-[1]">
             <div ref={mountRef} className="w-full h-full" />
         </div>
     );
