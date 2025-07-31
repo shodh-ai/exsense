@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/card";
 import { Separator } from "@/components/separator";
 import Sphere from "@/components/Sphere";
 import Footer from "@/components/Footer";
+import CourseMap from "@/components/CourseMap"; // Import the new CourseMap component
 
 // --- TYPE DEFINITIONS ---
 type CourseDetail = {
@@ -72,7 +73,7 @@ const reviews: Review[] = [
     time: "3 months ago",
     comment:
       "This course truly transformed my understanding of machine learning. The AI explanations were not only clear but also engaging, making complex concepts like propagation easy to grasp. I found myself excited to learn more with each lesson!",
-  },    
+  },
   {
     name: "Sarah Johnson",
     avatar: "/learner2.svg",
@@ -123,25 +124,7 @@ const faqs: FaqItem[] = [
   },
 ];
 
-// --- SUB-COMPONENTS ---
-
-const CourseDetailsPage = () => {
-  return (
-    <div className="flex flex-col min-h-screen bg-white text-gray-900 font-sans">
-      <Sphere />
-      <CourseHeader />
-      <CourseBanner />
-      <CourseIntroduction tags={courseTags} />
-      <CourseDetailsSection details={courseDetails} />
-      <WhatYouWillLearnSection skills={skills} outcomes={learningOutcomes} />
-      <CourseMapSection />
-      <TeacherProfileSection />
-      <ReviewsSection reviews={reviews} />
-      <FaqSection faqs={faqs} />
-      <Footer />
-    </div>
-  );
-};
+// --- SUB-COMPONENTS (remaining in this file) ---
 
 const CourseHeader = () => (
   <div className="flex justify-between items-center mb-8">
@@ -265,74 +248,6 @@ const WhatYouWillLearnSection = ({
   </section>
 );
 
-const CourseMapSection = () => (
-  <section className="flex flex-col gap-6">
-    <h2 className="text-xl font-semibold text-black">Course Map</h2>
-    <Card className="w-full max-w-3xl min-h-[200px] bg-transparent rounded-xl shadow-md p-6">
-      <CardContent className="p-6  bg-transparent">
-        <div className="relative w-[700px] h-[95px]">
-          <div className="flex w-[137px] h-[27px] items-center justify-center gap-[6.48px] px-[12.96px] py-[6.48px] absolute top-0 left-0 bg-[#7085ec] rounded-[25.93px]">
-            <div className="text-[9.1px] leading-[13.6px] font-semibold text-white">
-              English Learning Sessions
-            </div>
-          </div>
-          <img
-            className="absolute w-[104px] h-px top-[13px] left-[137px]"
-            alt="Line"
-            src="/line-463.svg"
-          />
-          <div className="w-[93px] top-0 left-[241px] bg-[#7085ec] flex h-[27px] items-center justify-center gap-[6.48px] px-[12.96px] py-[6.48px] absolute rounded-[25.93px]">
-            <div className="text-[9.1px] leading-[13.6px] font-semibold text-white">
-              Beginner stage
-            </div>
-          </div>
-          <div className="absolute w-[178px] h-[27px] top-0 left-[334px]">
-            <img
-              className="absolute w-[91px] h-px top-[13px] left-0"
-              alt="Line"
-              src="/line-464.svg"
-            />
-            <div className="w-[100px] top-0 left-[78px] bg-[#7085ec] flex h-[27px] items-center justify-center gap-[6.48px] px-[12.96px] py-[6.48px] absolute rounded-[25.93px]">
-              <div className="text-[9.1px] leading-[13.6px] font-semibold text-white">
-                Grammar Boost 1
-              </div>
-            </div>
-          </div>
-          <img
-            className="absolute w-px h-[42px] top-[27px] left-[461px]"
-            alt="Line"
-            src="/line-465.svg"
-          />
-          <div className="w-[116px] top-[69px] left-[404px] bg-[#d5dcfb] flex h-[27px] items-center justify-center gap-[6.48px] px-[12.96px] py-[6.48px] absolute rounded-[25.93px]">
-            <div className="text-[9.1px] leading-[13.6px] font-semibold text-white">
-              Essay Writing Level 3
-            </div>
-          </div>
-          <img
-            className="absolute w-16 h-px top-[82px] left-[520px]"
-            alt="Line"
-            src="/line-466.svg"
-          />
-          <div className="w-[117px] top-[69px] left-[583px] bg-[#d5dcfb] flex h-[27px] items-center justify-center gap-[6.48px] px-[12.96px] py-[6.48px] absolute rounded-[25.93px]">
-            <div className="text-[9.1px] leading-[13.6px] font-semibold text-white">
-              Reading Sharpness 5
-            </div>
-          </div>
-        </div>
-      </CardContent>
-      <div className="inline-flex items-center justify-center p-2 absolute bottom-4 right-4 bg-[#566fe9] rounded-lg">
-        <div className="relative w-4 h-4">
-          <img
-            className="absolute w-[11px] h-[11px] top-0.5 left-0.5"
-            alt="Expand"
-            src="/vector-14.svg"
-          />
-        </div>
-      </div>
-    </Card>
-  </section>
-);
-
 const TeacherProfileSection = () => (
   <section className="flex flex-col gap-6">
     <h2 className="text-xl font-semibold text-black">Meet your teacher</h2>
@@ -448,27 +363,28 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
 export default function MyCoursesPage(): JSX.Element {
   return (
     <div className="w-full h-full flex flex-col">
-    <main className="flex-grow overflow-y-auto font-['Plus_Jakarta_Sans'] ">
-      <div className="max-w-[1440px] mx-auto px-6 py-12 z-[-1]">
-        <CourseHeader />
-        <CourseBanner />
-        <Sphere />
+      <main className="flex-grow overflow-y-auto font-['Plus_Jakarta_Sans'] ">
+        <div className="max-w-[1440px] mx-auto px-6 py-12 z-[-1]">
+          {/* Sphere is declared twice in the original, keeping it as is */}
+          <Sphere />
+          <CourseHeader />
+          <CourseBanner />
 
-        {/* Central Content Container */}
-        <div className="flex flex-col w-full max-w-[750px] mx-auto gap-[60px]">
-          <CourseIntroduction tags={courseTags} />
-          <CourseDetailsSection details={courseDetails} />
-          <WhatYouWillLearnSection
-            skills={skills}
-            outcomes={learningOutcomes}
-          />
-          <CourseMapSection />
-          <TeacherProfileSection />
-          <ReviewsSection reviews={reviews} />
-          <FaqSection faqs={faqs} />
+          {/* Central Content Container */}
+          <div className="flex flex-col w-full max-w-[750px] mx-auto gap-[60px]">
+            <CourseIntroduction tags={courseTags} />
+            <CourseDetailsSection details={courseDetails} />
+            <WhatYouWillLearnSection
+              skills={skills}
+              outcomes={learningOutcomes}
+            />
+            <CourseMap /> {/* <--- Now using the imported CourseMap component */}
+            <TeacherProfileSection />
+            <ReviewsSection reviews={reviews} />
+            <FaqSection faqs={faqs} />
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
       <div className="w-full h-[60px] flex-shrink-0 mr-10 ">
         <Footer />
       </div>
