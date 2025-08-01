@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { JSX } from "react";
 import { Badge } from "@/components/badge";
 import { Button } from "@/components/button";
 import { Card, CardContent } from "@/components/card";
