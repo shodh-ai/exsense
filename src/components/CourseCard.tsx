@@ -1,174 +1,101 @@
-// src/components/CourseCard.tsx
+"use client";
 
 import React, { JSX } from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/button";
+import { Card, CardContent } from "@/components/card";
 
-import { Star } from "lucide-react";
-
-
-
-
-// Define a type for course data
-
-export type Course = {
-
-  id: number;
-
+// 1. DEFINE THE SHAPE OF THE COURSE DATA
+// This interface defines the "contract" for the data this component expects to receive.
+export interface Course {
+  id: number | string; // Use string if your database uses UUIDs
   title: string;
-
   instructor: string;
-
   description: string;
-
   rating: string;
-
   reviews: string;
-
   level: string;
-
   duration: string;
-
   image: string;
-
-};
-
-
-
-
-// Accessible star rating component styled to match the image
-
-const Rating = ({ rating, reviews }: { rating: number; reviews:string }) => {
-
-  const fullStars = Math.floor(rating);
-
-  const halfStar = rating % 1 >= 0.5; // Render a half-filled star for .5 and above
-
-  const emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
-
-
-
-
-  return (
-
-    <div className="flex items-center gap-1.5"  aria-label={`Rating: ${rating} out of 5 stars`}>
-
-      <div className="font-semibold text-[#566fe9] text-base">{rating.toFixed(1)}</div>
-
-      <div className="flex items-center">
-
-        {[...Array(fullStars)].map((_, i) => (
-
-          <Star key={`full-${i}`} className="w-4 h-4 text-[#566fe9] fill-current" />
-
-        ))}
-
-        {/* Using a star with a mask for a true half-star is complex, a filled star is a close approximation as in image */}
-
-        {halfStar && <Star key="half" className="w-4 h-4 text-[#566fe9] fill-current" />} 
-
-        {[...Array(emptyStars)].map((_, i) => (
-
-          <Star key={`empty-${i}`} className="w-4 h-4 text-gray-300" />
-
-        ))}
-
-      </div>
-
-      <div className="text-sm text-gray-500">({reviews} reviews)</div>
-
-    </div>
-
-  );
-
-};
-
-
-
-
-interface CourseCardProps {
-
-  course: Course;
-
-  isActive?: boolean; // To show the blue bar, like in the first card of the image
-
 }
 
+// 2. DEFINE THE COMPONENT'S PROPS
+// We pass the course object, an `isActive` flag for styling, and the new interactive props.
+interface CourseCardProps {
+  course: Course;
+  isActive: boolean;
+  isEnrolled: boolean; // NEW: Determines the button's state
+  onEnroll: (courseId: number | string) => void; // NEW: The function to call when the button is clicked
+}
 
-
-
-const CourseCard = ({ course, isActive = false }: CourseCardProps): JSX.Element => {
-
+const CourseCard = ({ course, isActive, isEnrolled, onEnroll }: CourseCardProps): JSX.Element => {
   return (
+    // The main card container. It uses `cn` to conditionally apply a blue border if it's "active".
+    <Card
+      className={cn(
+        "flex w-full flex-col gap-4 overflow-hidden rounded-2xl border bg-white p-4 shadow-sm transition-all duration-300 sm:flex-row",
+        isActive && "border-blue-500 ring-2 ring-blue-200/50" // Highlight style for active card
+      )}
+    >
+      {/* Course Image */}
+      <img
+        className="h-32 w-full rounded-lg object-cover sm:h-full sm:w-32"
+        alt={`Cover image for ${course.title}`}
+        src={course.image}
+      />
 
-    // Use `group` for hover effects
-
-    <div className="group relative h-full w-full overflow-hidden min-h-48 rounded-xl bg-white border border-gray-200/80 transition-all duration-300 hover:border-blue-300 hover:shadow-md hover:shadow-blue-100">
-
-      {/* Blue indicator bar - visible if active or on hover */}
-
-      <div className={`absolute left-0 top-0 h-full w-1.5 bg-[#ffffff] transition-transform duration-300 ease-out ${isActive ? 'scale-y-100' : 'scale-y-0 group-hover:scale-y-100'}`}></div>
-
-
-
-
-      <div className="flex flex-col md:flex-row items-center gap-5 p-4 h-full">
-
-        <img
-
-          className="w-full h-48 md:w-[200px] md:h-[150px] object-cover rounded-lg flex-shrink-0"
-
-          alt={course.title}
-
-          src={course.image}
-
-        />
-
-        <div className="flex flex-col items-start gap-2.5 w-full">
-
-          <div className="flex flex-col items-start self-stretch">
-
-            <h3 className="font-semibold text-gray-900 text-lg">
-
+      {/* Course Content */}
+      <CardContent className="flex flex-1 flex-col p-0">
+        <div className="flex flex-1 flex-col gap-2">
+          {/* Title and Instructor */}
+          <div className="flex flex-col">
+            <h3 className="font-semibold text-lg leading-tight text-black">
               {course.title}
-
             </h3>
-
-            <p className="text-sm text-gray-500">
-
-              {course.instructor}
-
-            </p>
-
+            <p className="text-sm text-gray-500">by {course.instructor}</p>
           </div>
 
-          <p className="text-sm text-gray-600 leading-relaxed">
-
+          {/* Description */}
+          <p className="text-sm text-gray-700 line-clamp-2">
             {course.description}
-
           </p>
-
-          <div className="flex flex-col items-start gap-2 mt-2 w-full">
-
-            <Rating rating={parseFloat(course.rating)} reviews={course.reviews} />
-
-            <p className="text-sm text-gray-500">
-
-              {course.level} · {course.duration}
-
-            </p>
-
-          </div>
-
         </div>
 
-      </div>
+        {/* Course Details and Enroll Button */}
+        <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between">
+          {/* Details like rating, level, duration */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-600">
+            <div className="flex items-center gap-1">
+              <img src="/star.svg" alt="Rating" className="h-4 w-4" />
+              <span>{course.rating} ({course.reviews} reviews)</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <img src="/difficulty.svg" alt="Level" className="h-4 w-4" />
+              <span>{course.level}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <img src="/duration.svg" alt="Duration" className="h-4 w-4" />
+              <span>{course.duration}</span>
+            </div>
+          </div>
 
-    </div>
-
+          {/* 3. THE INTERACTIVE ENROLLMENT BUTTON */}
+          <Button
+            onClick={() => onEnroll(course.id)}
+            disabled={isEnrolled}
+            className={cn(
+              "h-9 rounded-full px-6 text-sm font-semibold",
+              isEnrolled
+                ? "cursor-not-allowed bg-gray-300 text-gray-500" // Style for when already enrolled
+                : "bg-[#566fe9] text-white hover:bg-[#4a5fcf]" // Style for when available
+            )}
+          >
+            {isEnrolled ? "Enrolled" : "Enroll Now"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
-
 };
-
-
-
 
 export default CourseCard;
