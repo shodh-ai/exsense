@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VNC Connection Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        #status p {
+            margin: 5px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .instructions {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>VNC Connection Test</h1>
+    
+    <div class="instructions">
+        <strong>Instructions:</strong>
+        <ol>
+            <li>Make sure the VNC listener is running on port 8765</li>
+            <li>Open browser console (F12) to see detailed logs</li>
+            <li>Click "Connect to VNC" to establish WebSocket connection</li>
+            <li>Click "Send Navigate Command" to test browser navigation</li>
+            <li>Check both the status area below and the browser console</li>
+        </ol>
+    </div>
+    
+    <button id="connect-btn">Connect to VNC</button>
+    <button id="navigate-btn">Send Navigate Command</button>
+    <button id="disconnect-btn">Disconnect from VNC</button>
+    
+    <div id="status">
+        <p><strong>Status Log:</strong></p>
+    </div>
+
+    <script src="vnc_test.js"></script>
+</body>
+</html>

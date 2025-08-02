@@ -63,7 +63,7 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl }:
                     ))}
                 </div>
             </div>
-
+            
             <div className="flex-grow relative w-full h-full">
                 <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
                     <ExcalidrawWrapper />
@@ -127,13 +127,13 @@ export default function Session() {
         startTask
     } = useLiveKitSession(shouldInitializeLiveKit ? roomName : '', shouldInitializeLiveKit ? userName : '');
     
-    // Initialize browser automation hooks
-    const { connectVNC, disconnectVNC } = useBrowserActionExecutor(room);
-    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room);
-    
     // Get URLs from environment variables
     const vncUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:6901';
     const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
+
+    // Initialize browser automation hooks
+    const { disconnectVNC } = useBrowserActionExecutor(room, sessionBubbleUrl);
+    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room);
 
     console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 
@@ -164,15 +164,9 @@ export default function Session() {
         if (isConnected && sessionBubbleUrl) {
             console.log("LiveKit connected, now connecting to session-bubble services...");
             
-            // Connect to the command WebSocket (vnc_listener.py)
-            // Use the Nginx reverse proxy URL
-            const vncListenerUrl = `${sessionBubbleUrl}/vnc-listener/`;
-            connectVNC(vncListenerUrl);
-
-            // Connect to the event WebSocket (playwright_sensor.py)
-            // Use the Nginx reverse proxy URL
-            const sensorUrl = `${sessionBubbleUrl}/playwright-sensor/`;
-            connectToVNCSensor(sensorUrl);
+            // The VNC connection is now managed by the useBrowserActionExecutor hook
+            // We still need to manage the sensor connection here
+            connectToVNCSensor(sessionBubbleUrl);
         }
 
         // Return a cleanup function to disconnect when the component unmounts
@@ -183,7 +177,7 @@ export default function Session() {
                 disconnectFromVNCSensor();
             }
         };
-    }, [isConnected, sessionBubbleUrl, connectVNC, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
+    }, [isConnected, sessionBubbleUrl, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
 
     // Show loading while Clerk is initializing
     if (!isLoaded) {

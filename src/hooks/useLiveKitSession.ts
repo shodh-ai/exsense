@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment } from 'livekit-client';
 import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
-import { useSessionStore } from '@/lib/store';
+import { useSessionStore, SessionView } from '@/lib/store';
 import { useAuth } from '@clerk/nextjs';
+import { useBrowserActionExecutor } from './useBrowserActionExecutor';
 
 // File: exsense/src/hooks/useLiveKitSession.ts
 
@@ -65,10 +66,15 @@ const roomInstance = new Room({
 export function useLiveKitSession(roomName: string, userName: string) {
   // --- CLERK AUTHENTICATION ---
   const { getToken, isSignedIn } = useAuth();
+  // VNC WebSocket URL for browser automation
+  const vncUrl = process.env.NEXT_PUBLIC_VNC_URL || 'ws://localhost:8765';
+  const { executeBrowserAction, disconnectVNC } = useBrowserActionExecutor(roomInstance, vncUrl);
   
   // --- ZUSTAND STORE ACTIONS ---
   // Get all the actions we'll need to update the global UI state
   const {
+    activeView,
+    setActiveView,
     setAgentStatusText,
     setIsAgentSpeaking,
     setIsMicEnabled, // Our new action for mic control
@@ -171,17 +177,112 @@ export function useLiveKitSession(roomName: string, userName: string) {
       console.log(`[B2F RPC] Received action: ${ClientUIActionType[request.actionType]}`);
       
       // --- THE BRIDGE FROM RPC TO ZUSTAND ---
-      if (request.actionType === ClientUIActionType.START_LISTENING_VISUAL) {
+      if (request.actionType === ClientUIActionType.BROWSER_NAVIGATE) {
+        const url = request.parameters?.url;
+        if (url) {
+          executeBrowserAction({
+            tool_name: 'browser_navigate',
+            parameters: { url },
+          });
+        }
+      } else if (request.actionType === ClientUIActionType.START_LISTENING_VISUAL) {
         setIsMicEnabled(true);
       } else if (request.actionType === ClientUIActionType.STOP_LISTENING_VISUAL) {
         setIsMicEnabled(false);
+      } else if (request.actionType === ClientUIActionType.JUPYTER_CLICK_PYODIDE) {
+        console.log('[JUPYTER_CLICK_PYODIDE] Received jupyter_click_pyodide action');
+        executeBrowserAction({
+          tool_name: 'jupyter_click_pyodide',
+          parameters: {}
+        });
+      } else if (request.actionType === ClientUIActionType.JUPYTER_TYPE_IN_CELL) {
+        console.log('[JUPYTER_TYPE_IN_CELL] Received jupyter_type_in_cell action');
+        const params = request.parameters || {};
+        executeBrowserAction({
+          tool_name: 'jupyter_type_in_cell',
+          parameters: {
+            cell_index: params.cell_index || 0,
+            code: params.code || ''
+          }
+        });
+      } else if (request.actionType === ClientUIActionType.JUPYTER_RUN_CELL) {
+        console.log('[JUPYTER_RUN_CELL] Received jupyter_run_cell action');
+        const params = request.parameters || {};
+        executeBrowserAction({
+          tool_name: 'jupyter_run_cell',
+          parameters: {
+            cell_index: params.cell_index || 0
+          }
+        });
+      } else if (request.actionType === ClientUIActionType.JUPYTER_CREATE_NEW_CELL) {
+        console.log('[JUPYTER_CREATE_NEW_CELL] Received jupyter_create_new_cell action');
+        executeBrowserAction({
+          tool_name: 'jupyter_create_new_cell',
+          parameters: {}
+        });
       } else if (request.actionType === ClientUIActionType.SET_UI_STATE) {
+        console.log('[SET_UI_STATE] ===== RECEIVED SET_UI_STATE ACTION =====');
+        console.log('[SET_UI_STATE] Full request object:', request);
+        console.log('[SET_UI_STATE] Current activeView:', activeView);
+        
         // Note: Property name may need adjustment based on actual protobuf definition
-        const params = (request as unknown as Record<string, unknown>).setUiStatePayload || (request as unknown as Record<string, unknown>).payload;
-        if (params && typeof params === 'object' && 'statusText' in params) {
-          setAgentStatusText(params.statusText as string);
+        const params = (request as unknown as Record<string, unknown>).parameters;
+        console.log('[SET_UI_STATE] Extracted params:', params);
+        
+        if (params && typeof params === 'object') {
+          // Handle status text update
+          if ('statusText' in params || 'status_text' in params) {
+            const statusText = ((params as any).statusText || (params as any).status_text) as string;
+            console.log('[SET_UI_STATE] Setting status text:', statusText);
+            setAgentStatusText(statusText);
+          }
+          
+          // Handle view switching
+          if ('view' in params) {
+            const viewParam = (params as any).view as string;
+            console.log('[SET_UI_STATE] View parameter received:', viewParam);
+            
+            if (viewParam) {
+              let targetView: SessionView;
+              
+              switch (viewParam) {
+                case 'vnc_browser':
+                case 'vnc':
+                  targetView = 'vnc';
+                  console.log('[SET_UI_STATE] Mapped to vnc view');
+                  break;
+                case 'excalidraw':
+                case 'drawing':
+                  targetView = 'excalidraw';
+                  console.log('[SET_UI_STATE] Mapped to excalidraw view');
+                  break;
+                case 'video':
+                  targetView = 'video';
+                  console.log('[SET_UI_STATE] Mapped to video view');
+                  break;
+                case 'intro':
+                  targetView = 'intro';
+                  console.log('[SET_UI_STATE] Mapped to intro view');
+                  break;
+                default:
+                  console.warn(`[SET_UI_STATE] Unknown view parameter: ${viewParam}`);
+                  console.log('[SET_UI_STATE] Available view options: vnc_browser, vnc, excalidraw, drawing, video, intro');
+                  return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ requestId: rpcData.requestId, success: false })).finish());
+              }
+              
+              console.log(`[SET_UI_STATE] Switching view from ${activeView} to ${targetView}`);
+              setActiveView(targetView);
+              console.log('[SET_UI_STATE] setActiveView called successfully');
+            } else {
+              console.log('[SET_UI_STATE] View parameter is empty or null');
+            }
+          } else {
+            console.log('[SET_UI_STATE] No view parameter found in params');
+          }
+        } else {
+          console.log('[SET_UI_STATE] No parameters found in request');
         }
-        // ... update other Zustand state based on payload
+        console.log('[SET_UI_STATE] ===== END SET_UI_STATE PROCESSING =====');
       }
       
       // We still need to return an acknowledgment
@@ -228,6 +329,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
         setIsConnected(false);
         setIsLoading(false);
         agentServiceClientRef.current = null;
+        disconnectVNC();
         
         // Clean up microphone track
         if (microphoneTrackRef.current) {
