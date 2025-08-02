@@ -202,11 +202,11 @@ const CourseDetailsSection = ({ details }: { details: CourseDetail[] }) => (
   <section className="flex flex-col gap-7">
     <div className="flex flex-col gap-6">
       <h2 className="text-xl font-semibold text-black">Course details</h2>
-      <div className="flex flex-col gap-6 md:flex-row md:flex-wrap md:gap-x-12 md:gap-y-8">
+      <div className="flex flex-col gap-6 md:grid md:grid-cols-3 md:gap-x-12 md:gap-y-8">
         {details.map((detail) => (
           <div
             key={detail.label}
-            className="flex items-center gap-3 md:w-[210px]"
+            className="flex items-center gap-3"
           >
             <div className="p-3 bg-[#566fe91a] rounded-xl">
               <div className="w-7 h-7 relative">
@@ -243,11 +243,11 @@ const WhatYouWillLearnSection = ({
   <section className="flex flex-col gap-6">
     <h2 className="text-xl font-semibold text-black">What you'll learn</h2>
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap">
         {skills.map((skill) => (
           <Badge
             key={skill}
-            className="flex h-10 items-center rounded-full bg-[#eef2ff] px-5 text-sm font-medium text-[#566fe9]"
+            className="flex h-10 w-64 items-center justify-center rounded-full bg-[#eef2ff] px-5 text-sm font-medium text-[#566fe9] sm:w-auto sm:justify-start"
           >
             {skill}
           </Badge>

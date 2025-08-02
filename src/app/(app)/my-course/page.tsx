@@ -142,9 +142,9 @@ export default function CoursesPage(): JSX.Element {
           </div>
         </main>
 
-        <div>
-          <Footer />
-        </div>
+       <div className="fixed bottom-0 left-0 right-0">
+        <Footer />
+      </div>
       </div>
     </>
   );
