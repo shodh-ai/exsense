@@ -25,6 +25,10 @@ export default function Login() {
     const [error, setError] = useState("");
     const [message, setMessage] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+    // State to manage the active toggle: 'learner' or 'expert'
+    const [activeUserType, setActiveUserType] = useState<"learner" | "expert">(
+        "learner"
+    ); // Default to 'learner'
 
     // Redirect to session if already signed in
     useEffect(() => {
@@ -114,7 +118,62 @@ export default function Login() {
             <Sphere />
             <ShodhAIHero />
 
+            {/* Main content wrapper, now containing the toggle group */}
             <div className="w-full max-w-md overflow-auto max-h-full flex flex-col items-center">
+                {/* --- START OF INLINE TOGGLE GROUP --- */}
+                <div className="flex flex-col items-center gap-2 relative self-stretch w-full mt-6">
+                    <div // This div acts as the ToggleGroup container
+                        className="flex items-center p-1 relative self-stretch w-full bg-[#566fe91a] rounded-[100px]"
+                    >
+                        {/* Learner Toggle Button */}
+                        <button
+                            type="button" // Important: ensures it doesn't submit a form
+                            onClick={() => setActiveUserType("learner")}
+                            className={`
+                                flex h-10 items-center justify-center gap-2 px-10 py-3 relative flex-1 grow rounded-[40px] overflow-hidden
+                                ${activeUserType === "learner" ? "bg-[#566fe9]" : "bg-transparent"}
+                            `}
+                        >
+                            <img
+                                className="relative w-5 h-5 mt-[-2.00px] mb-[-2.00px]"
+                                alt="Frame"
+                                // Dynamically set the image source based on activeUserType
+                                src={activeUserType === "learner" ? "/learneractive.svg" : "/learner.svg"}
+                            />
+                            <span className={`
+                                relative w-fit mt-[-3.50px] mb-[-1.50px] [font-family:'Plus_Jakarta_Sans',Helvetica] font-semibold text-sm tracking-[0] leading-[21px] whitespace-nowrap
+                                ${activeUserType === "learner" ? "text-white" : "text-[#566fe9cc]"} {/* MOVED TEXT COLOR HERE */}
+                            `}>
+                                Learner
+                            </span>
+                        </button>
+
+                        {/* Expert Toggle Button */}
+                        <button
+                            type="button" // Important: ensures it doesn't submit a form
+                            onClick={() => setActiveUserType("expert")}
+                            className={`
+                                flex h-10 items-center justify-center gap-2 px-10 py-3 relative flex-1 grow rounded-[40px] overflow-hidden
+                                ${activeUserType === "expert" ? "bg-[#566fe9]" : "bg-transparent"}
+                            `}
+                        >
+                            <img
+                                className="relative w-5 h-5 mt-[-2.00px] mb-[-2.00px]"
+                                alt="Frame"
+                                // Dynamically set the image source based on activeUserType
+                                src={activeUserType === "expert" ? "/expertactive.svg" : "/expert.svg"}
+                            />
+                            <span className={`
+                                relative w-fit mt-[-3.50px] mb-[-1.50px] [font-family:'Plus_Jakarta_Sans',Helvetica] font-semibold text-sm tracking-[0] leading-[21px] whitespace-nowrap
+                                ${activeUserType === "expert" ? "text-white" : "text-[#566fe9cc]"} {/* MOVED TEXT COLOR HERE */}
+                            `}>
+                                Expert
+                            </span>
+                        </button>
+                    </div>
+                </div>
+                {/* --- END OF INLINE TOGGLE GROUP --- */}
+
                 <form
                     className="flex flex-col mt-6 md:mt-8 w-full"
                     onSubmit={handleSubmit}
