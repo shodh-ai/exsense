@@ -7,6 +7,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { micEventEmitter } from '@/lib/MicEventEmitter';
 import { musicEventEmitter } from '@/lib/MusicEventEmitter';
 import { useSessionStore } from '@/lib/store';
+import Footer from '@/components/Footer';
 
 // --- GLSL & SHADERS (Unchanged) ---
 const snoise = `
@@ -124,8 +125,8 @@ const shellFragmentShader = `
 `;
 
 // --- CONSTANTS (Unchanged) ---
-const BLOB_SIZE_PERCENTAGE = 0.17;
-const BLOB_BOTTOM_PADDING_PIXELS = 40;
+const BLOB_SIZE_PERCENTAGE = 0.5;
+const BLOB_BOTTOM_PADDING_PIXELS = 40; // This constant is now unused for vertical centering, but kept as per instructions.
 const FFT_SIZE = 32;
 const AUDIO_ANALYSIS_BINS = 5;
 const VOLUME_TO_REACH_MAX_SCALE = 15;
@@ -158,7 +159,7 @@ const emotionProfileMap: Record<Emotion, EmotionProfile> = { default: getDefault
 const emotionMusicMap: Record<Emotion, string | null> = { default: null, happy: 'https://www.bensound.com/bensound-music/bensound-happyrock.mp3', sad: 'https://www.bensound.com/bensound-music/bensound-slowmotion.mp3', angry: 'https://www.bensound.com/bensound-music/bensound-actionable.mp3', calm: 'https://www.bensound.com/bensound-music/bensound-sunny.mp3', };
 
 
-// --- COMPONENT (Unchanged logic, only JSX is modified) ---
+// --- COMPONENT ---
 const Sphere: React.FC = () => {
     const mountRef = useRef<HTMLDivElement>(null);
     const [isAudioActive, setIsAudioActive] = useState(false);
@@ -334,6 +335,7 @@ const Sphere: React.FC = () => {
         const shellMaterial = new THREE.ShaderMaterial({ vertexShader: shellVertexShader, fragmentShader: shellFragmentShader, uniforms: { u_time: { value: 0 }, u_frequency: { value: 0 }, u_amplitude: { value: 0 }, u_tide_direction: { value: new THREE.Vector3(1, 0, 0) }, u_scene_texture: { value: renderTargetForShell.texture }, u_refraction_strength: { value: 0.1 }, u_shell_opacity: { value: 0.2 }, u_rim_power: { value: 0 }, u_rim_color: { value: new THREE.Color() }, u_shininess: { value: 60.0 }, u_light_direction: { value: directionalLight.position }, }, transparent: true, });
         const shell = new THREE.Mesh(shellGeometry, shellMaterial);
         blobGroup.add(shell);
+
         const setBlobSizeAndPosition = () => {
             if (!currentMount) return;
             const canvasHeight = currentMount.clientHeight;
@@ -345,13 +347,16 @@ const Sphere: React.FC = () => {
             const newScale = requiredWorldHeight / unscaledBlobDiameter;
             baseScaleRef.current = newScale;
             if (currentScaleRef.current === 1) { currentScaleRef.current = newScale; blobGroup.scale.set(newScale, newScale, newScale); }
-            const scaledIdleRadius = (shellGeometry.parameters.radius + shellMaterial.uniforms.u_amplitude.value) * newScale;
-            const bottomPaddingInWorldUnits = (BLOB_BOTTOM_PADDING_PIXELS / canvasHeight) * visibleHeightAtDistance;
-            const horizontalShift = 0.4;
-            blobGroup.position.x = horizontalShift;
-            blobGroup.position.y = -visibleHeightAtDistance / 2 + scaledIdleRadius + bottomPaddingInWorldUnits;
-            controls.target.set(horizontalShift, 0, 0);
+            
+            // --- MODIFIED LINES START ---
+            // Place the blob group at the center of the scene
+            blobGroup.position.x = 0;
+            blobGroup.position.y = 0;
+            // Make OrbitControls target the center of the sphere
+            controls.target.set(0, 0, 0);
+            // --- MODIFIED LINES END ---
         };
+        
         setBlobSizeAndPosition();
         const refractionTextureBackground = new THREE.Color('#e0e5f0');
         const clock = new THREE.Clock();
@@ -449,10 +454,10 @@ const Sphere: React.FC = () => {
     }, [currentEmotion, isMusicExplicitlyPaused]);
 
     return (
-        // --- THIS IS THE ONLY LINE THAT CHANGED ---
         // We set z-10 to bring it to the front and pointer-events-none to make it "click-through"
-        <div className="absolute top-0 left-0 w-full h-full z-10 pointer-events-none">
+        <div className="absolute top-0 left-0 w-full h-full ">
             <div ref={mountRef} className="w-full h-full" />
+            <Footer />
         </div>
     );
 };

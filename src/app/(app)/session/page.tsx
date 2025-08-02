@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import Footer from '@/components/Footer';
+import Footer from '@/components/Footer'; // Import the Footer component
 import { Room } from 'livekit-client';
 
 import dynamic from 'next/dynamic';
@@ -44,9 +44,19 @@ interface SessionContentProps {
 
 function SessionContent({ activeView, setActiveView, componentButtons, vncUrl }: SessionContentProps) {
     return (
-        <div className='w-full h-full flex flex-col items-center justify-between'>
-            <div className="w-full flex justify-center pt-[20px]">
-                <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center">
+        // Added `relative` to this container to act as a positioning context for the absolute navbar
+        <div className='w-full h-full flex flex-col items-center justify-between relative'>
+            
+            {/* Hoverable Navigation Bar Container */}
+            {/* This container is the invisible "hot zone" at the top of the screen */}
+            {/* It uses `group` to control the visibility of the child navigation bar on hover */}
+            <div className="group absolute top-0 left-0 right-0 z-50 flex justify-center pt-4 pb-4">
+                {/* The actual navigation bar */}
+                {/* It's hidden by default (`-translate-y-full opacity-0`) */}
+                {/* On hover of the parent `group`, it becomes visible (`group-hover:translate-y-0 group-hover:opacity-100`) */}
+                <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center backdrop-blur-sm shadow-lg
+                                transform -translate-y-full opacity-0 group-hover:translate-y-0 group-hover:opacity-100 
+                                transition-all duration-300 ease-in-out">
                     {componentButtons.map(({ key, label, inactiveImagePath, activeImagePath }) => (
                         <button
                             key={key}
@@ -64,20 +74,25 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl }:
                 </div>
             </div>
 
+            
             <div className="flex-grow relative w-full h-full">
                 <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
+
+
+            {/* The main content area now takes up the full height, as the navbar floats above it */}
+            <div className="flex-grow relative w-full h-[90%] ">
+                <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-[90%]  overflow-hidden mt-12`}>
+
                     <ExcalidrawWrapper />
                 </div>
-                <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
+                <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-[76%] mt-17`}>
                     <VncViewer url={vncUrl} />
                 </div>
-                <div className={`${activeView === 'video' ? 'block' : 'hidden'} w-full h-full`}>
+                <div className={`${activeView === 'video' ? 'block' : 'hidden'} w-full h-[90%] mt-12`}>
                     <VideoViewer />
                 </div>
             </div>
-            <div className="w-full h-[60px] flex-shrink-0">
-                <Footer />
-            </div>
+            
         </div>
     );
 }
@@ -127,13 +142,13 @@ export default function Session() {
         startTask
     } = useLiveKitSession(shouldInitializeLiveKit ? roomName : '', shouldInitializeLiveKit ? userName : '');
     
-    // Initialize browser automation hooks
-    const { connectVNC, disconnectVNC } = useBrowserActionExecutor(room);
-    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room);
-    
     // Get URLs from environment variables
     const vncUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:6901';
     const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
+
+    // Initialize browser automation hooks
+    const { disconnectVNC } = useBrowserActionExecutor(room, sessionBubbleUrl);
+    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room);
 
     console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 
@@ -164,15 +179,9 @@ export default function Session() {
         if (isConnected && sessionBubbleUrl) {
             console.log("LiveKit connected, now connecting to session-bubble services...");
             
-            // Connect to the command WebSocket (vnc_listener.py)
-            // Use the Nginx reverse proxy URL
-            const vncListenerUrl = `${sessionBubbleUrl}/vnc-listener/`;
-            connectVNC(vncListenerUrl);
-
-            // Connect to the event WebSocket (playwright_sensor.py)
-            // Use the Nginx reverse proxy URL
-            const sensorUrl = `${sessionBubbleUrl}/playwright-sensor/`;
-            connectToVNCSensor(sensorUrl);
+            // The VNC connection is now managed by the useBrowserActionExecutor hook
+            // We still need to manage the sensor connection here
+            connectToVNCSensor(sessionBubbleUrl);
         }
 
         // Return a cleanup function to disconnect when the component unmounts
@@ -183,7 +192,7 @@ export default function Session() {
                 disconnectFromVNCSensor();
             }
         };
-    }, [isConnected, sessionBubbleUrl, connectVNC, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
+    }, [isConnected, sessionBubbleUrl, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
 
     // Show loading while Clerk is initializing
     if (!isLoaded) {
@@ -217,8 +226,9 @@ export default function Session() {
                         componentButtons={componentButtons} 
                         vncUrl={vncUrl} 
                     />
+                    {/* Call Footer here */}
+                    <Footer /> 
                 </div>
-          
             </SignedIn>
             
             <SignedOut>
@@ -235,6 +245,7 @@ export default function Session() {
                     </div>
                 </div>
             </SignedOut>
+            
         </>
     )
 }

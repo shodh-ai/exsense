@@ -1,14 +1,10 @@
 "use client";
 
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useRef } from "react"; // Import useRef
 import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { useSessionStore } from "@/lib/store";
 import { useExcalidrawIntegration } from "@/hooks/useExcalidrawIntegration";
-
-// File: exsense/src/components/session/ExcalidrawWrapper.tsx
-
-
 
 declare global {
   interface Window {
@@ -19,7 +15,7 @@ declare global {
       removeHighlighting: () => void;
       giveStudentControl: () => void;
       takeAIControl: () => void;
-      getSceneElements: () => unknown[];
+      getSceneElements: () => any[];
     };
   }
 }
@@ -41,6 +37,9 @@ const ExcalidrawWrapper = () => {
     takeAIControl
   } = useExcalidrawIntegration();
 
+  // Ref to prevent infinite loops when resetting scroll position
+  const isRestoringPosition = useRef(false);
+
   // Sync with session store
   useEffect(() => {
     if (excalidrawAPI && excalidrawAPI !== excalidrawAPIFromStore) {
@@ -54,22 +53,22 @@ const ExcalidrawWrapper = () => {
       window.__excalidrawDebug = {
         toggleLaserPointer: () => toggleLaserPointer(),
         captureCanvasScreenshot: async () => {
-          const elements = (excalidrawAPI as any).getSceneElements();
+          const elements = excalidrawAPI.getSceneElements();
           console.log('Canvas elements:', elements);
           // Return a promise that resolves with the elements
           return Promise.resolve(JSON.stringify(elements, null, 2));
         },
         highlightElements: (elementIds: string[]) => {
-          (excalidrawAPI as any).updateScene({
-            elements: (excalidrawAPI as any).getSceneElements().map((el: any) => ({
+          excalidrawAPI.updateScene({
+            elements: excalidrawAPI.getSceneElements().map(el => ({
               ...el,
               opacity: elementIds.includes(el.id) ? 0.5 : 1
             }))
           });
         },
         removeHighlighting: () => {
-          (excalidrawAPI as any).updateScene({
-            elements: (excalidrawAPI as any).getSceneElements().map((el: any) => ({
+          excalidrawAPI.updateScene({
+            elements: excalidrawAPI.getSceneElements().map(el => ({
               ...el,
               opacity: 1
             }))
@@ -83,7 +82,7 @@ const ExcalidrawWrapper = () => {
           console.log('AI taking control');
           // Add your AI control logic here
         },
-        getSceneElements: () => (excalidrawAPI as any).getSceneElements()
+        getSceneElements: () => excalidrawAPI.getSceneElements()
       };
       
       console.log('Excalidraw debug functions are now available at window.__excalidrawDebug');
@@ -97,23 +96,59 @@ const ExcalidrawWrapper = () => {
   }, [excalidrawAPI, toggleLaserPointer]);
 
   // Handle Excalidraw API initialization
-  const handleExcalidrawAPI = useCallback((api: unknown) => {
+  const handleExcalidrawAPI = useCallback((api: any) => {
     if (api && api !== excalidrawAPI) {
       setExcalidrawAPI(api);
     }
   }, [excalidrawAPI, setExcalidrawAPI]);
+  
+  // This function will be called whenever the canvas changes.
+  // We use it to detect and prevent scrolling.
+  const handleCanvasChange = useCallback((elements: any, appState: any) => {
+    if (isRestoringPosition.current) {
+      return;
+    }
+
+    if (excalidrawAPI && (appState.scrollX !== 0 || appState.scrollY !== 0)) {
+      isRestoringPosition.current = true;
+      excalidrawAPI.updateScene({
+        elements,
+        appState: {
+          ...appState,
+          scrollX: 0,
+          scrollY: 0,
+        },
+      });
+      // Use setTimeout to reset the flag after the update has processed
+      setTimeout(() => {
+        isRestoringPosition.current = false;
+      }, 0);
+    }
+  }, [excalidrawAPI]);
+
 
   return (
     <div style={{ height: '100vh', width: '100%', zIndex: 10, backgroundColor: 'transparent' }}>
       <Excalidraw
         excalidrawAPI={handleExcalidrawAPI}
         onPointerUpdate={handlePointerUpdate}
+        onChange={handleCanvasChange} // Add the change handler to prevent scrolling
+        renderTopRightUI={() => null} // This will remove the "Library" button
+        UIOptions={{
+          // This hides the hand tool from the toolbar
+          tools: {
+            hand: false,
+          },
+        }}
         viewModeEnabled={false}
         zenModeEnabled={false}
         gridModeEnabled={false}
         initialData={{
           appState: {
-            viewBackgroundColor: 'transparent'
+            viewBackgroundColor: 'transparent',
+            // Set initial scroll position to 0,0
+            scrollX: 0,
+            scrollY: 0,
           }
         }}
       />

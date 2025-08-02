@@ -134,7 +134,16 @@ export const useBrowserInteractionSensor = (room: Room | null): UseBrowserIntera
       };
       
       ws.onerror = (error) => {
-        console.error('[BrowserInteractionSensor] VNC sensor WebSocket error:', error);
+        const errorMessage = error instanceof Error ? error.message : 
+          error && typeof error === 'object' ? JSON.stringify(error) : 
+          'Unknown WebSocket error';
+        const wsTarget = error?.target as WebSocket;
+        console.error('[BrowserInteractionSensor] VNC sensor WebSocket error:', {
+          type: error?.type || 'unknown',
+          message: errorMessage,
+          target: wsTarget?.url || 'ws://localhost:8766',
+          readyState: wsTarget?.readyState
+        });
       };
       
       ws.onmessage = (event) => {

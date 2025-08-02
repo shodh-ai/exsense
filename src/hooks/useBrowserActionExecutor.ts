@@ -33,6 +33,8 @@ interface VNCMessage {
   key?: string;
   waitTime?: number;
   timestamp: number;
+  tool_name?: string;
+  parameters?: any;
 }
 
 // Hook return interface
@@ -41,7 +43,6 @@ interface UseBrowserActionExecutorReturn {
   isExecuting: boolean;
   lastError: string | null;
   executeBrowserAction: (command: BrowserActionCommand) => Promise<any>;
-  connectVNC: (vncUrl: string) => void;
   disconnectVNC: () => void;
   sendVNCMessage: (message: VNCMessage) => void;
 }
@@ -61,10 +62,14 @@ const commandToVNCMessage = (command: BrowserActionCommand): VNCMessage => {
     'browser_wait': 'wait',
     'browser_screenshot': 'screenshot',
     'browser_get_element': 'get_element',
-    'browser_execute_script': 'execute_script'
+    'browser_execute_script': 'execute_script',
+    'jupyter_click_pyodide': 'jupyter_click_pyodide',
+    'jupyter_type_in_cell': 'execute_jupyter_command',
+    'jupyter_run_cell': 'execute_jupyter_command',
+    'jupyter_create_new_cell': 'execute_jupyter_command'
   };
 
-  return {
+  const vncMessage: VNCMessage = {
     action: actionMap[tool_name] || tool_name,
     selector: parameters.selector,
     text: parameters.text,
@@ -75,9 +80,23 @@ const commandToVNCMessage = (command: BrowserActionCommand): VNCMessage => {
     waitTime: parameters.waitTime,
     timestamp: Date.now()
   };
+
+  // For Jupyter commands, include all parameters
+  if (tool_name.startsWith('jupyter_') && tool_name !== 'jupyter_click_pyodide') {
+    vncMessage.tool_name = tool_name;
+    vncMessage.parameters = parameters;
+  }
+
+  console.log(`[BrowserActionExecutor] Converting command to VNC message:`, {
+    original_tool_name: tool_name,
+    original_parameters: parameters,
+    vnc_message: vncMessage
+  });
+
+  return vncMessage;
 };
 
-export const useBrowserActionExecutor = (room: Room | null): UseBrowserActionExecutorReturn => {
+export const useBrowserActionExecutor = (room: Room | null, vncUrl?: string): UseBrowserActionExecutorReturn => {
   const [isVNCConnected, setIsVNCConnected] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -85,10 +104,23 @@ export const useBrowserActionExecutor = (room: Room | null): UseBrowserActionExe
   // VNC WebSocket connection reference
   const vncWebSocketRef = useRef<WebSocket | null>(null);
   const vncDataChannelRef = useRef<RTCDataChannel | null>(null);
+  const messageQueueRef = useRef<VNCMessage[]>([]);
+  
+  // Send message over VNC connection
+  const sendVNCMessage = useCallback((message: VNCMessage) => {
+    if (vncWebSocketRef.current && vncWebSocketRef.current.readyState === WebSocket.OPEN) {
+      vncWebSocketRef.current.send(JSON.stringify(message));
+      console.log('[BrowserActionExecutor] Sent VNC WebSocket message:', message);
+    } else {
+      console.warn('[BrowserActionExecutor] VNC connection not open, queueing message');
+      messageQueueRef.current.push(message);
+    }
+  }, []);
   
   // RPC handler for Browser/ExecuteAction calls from LiveKit Conductor
   const handleBrowserExecuteAction = useCallback(async (rpcData: RpcInvocationData): Promise<string> => {
-    console.log('[BrowserActionExecutor] Received Browser/ExecuteAction RPC call');
+    console.log('[BrowserActionExecutor] 🎯 Received Browser/ExecuteAction RPC call');
+    console.log('[BrowserActionExecutor] 📦 Raw RPC data:', rpcData);
     
     try {
       setIsExecuting(true);
@@ -101,25 +133,21 @@ export const useBrowserActionExecutor = (room: Room | null): UseBrowserActionExe
         parameters: payload.parameters || payload
       };
       
-      console.log('[BrowserActionExecutor] Executing command:', command);
+      console.log('[BrowserActionExecutor] 🔧 Parsed command:', command);
+      console.log('[BrowserActionExecutor] 🔗 VNC connection status:', isVNCConnected);
       
       // Convert command to VNC message format
       const vncMessage = commandToVNCMessage(command);
       
-      // Send message over VNC data channel
-      if (vncDataChannelRef.current && vncDataChannelRef.current.readyState === 'open') {
-        vncDataChannelRef.current.send(JSON.stringify(vncMessage));
-        console.log('[BrowserActionExecutor] Sent VNC message:', vncMessage);
-        
-        // Return success response
-        return JSON.stringify({
-          success: true,
-          message: `Browser action ${command.tool_name} executed`,
-          timestamp: Date.now()
-        });
-      } else {
-        throw new Error('VNC data channel not connected');
-      }
+      // Send message using the queue-aware sender
+      sendVNCMessage(vncMessage);
+      
+      // Return success response immediately, as the message is now queued
+      return JSON.stringify({
+        success: true,
+        message: `Browser action ${command.tool_name} queued for execution`,
+        timestamp: Date.now()
+      });
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -134,7 +162,7 @@ export const useBrowserActionExecutor = (room: Room | null): UseBrowserActionExe
     } finally {
       setIsExecuting(false);
     }
-  }, []);
+  }, [sendVNCMessage]);
   
   // Register RPC handler when room is available
   useEffect(() => {
@@ -160,72 +188,61 @@ export const useBrowserActionExecutor = (room: Room | null): UseBrowserActionExe
     };
   }, [room, handleBrowserExecuteAction]);
   
-  // Connect to VNC data channel
-  const connectVNC = useCallback((vncUrl: string) => {
-    try {
-      console.log('[BrowserActionExecutor] Connecting to VNC:', vncUrl);
+  // Effect to automatically connect and disconnect VNC
+  useEffect(() => {
+    if (!vncUrl) return;
+
+    console.log('[BrowserActionExecutor] Attempting to connect to VNC:', vncUrl);
+    const ws = new WebSocket(vncUrl);
+
+    ws.onopen = () => {
+      console.log('[BrowserActionExecutor] VNC WebSocket connected');
+      setIsVNCConnected(true);
+      setLastError(null);
       
-      // Create WebSocket connection to VNC proxy/bridge
-      const ws = new WebSocket(vncUrl);
-      
-      ws.onopen = () => {
-        console.log('[BrowserActionExecutor] VNC WebSocket connected');
-        setIsVNCConnected(true);
-        setLastError(null);
-      };
-      
-      ws.onclose = () => {
-        console.log('[BrowserActionExecutor] VNC WebSocket disconnected');
-        setIsVNCConnected(false);
-      };
-      
-      ws.onerror = (error) => {
-        console.error('[BrowserActionExecutor] VNC WebSocket error:', error);
-        setLastError('VNC connection error');
-        setIsVNCConnected(false);
-      };
-      
-      ws.onmessage = (event) => {
-        try {
-          const response = JSON.parse(event.data);
-          console.log('[BrowserActionExecutor] VNC response:', response);
-        } catch (error) {
-          console.error('[BrowserActionExecutor] Failed to parse VNC response:', error);
-        }
-      };
-      
-      vncWebSocketRef.current = ws;
-      
-      // For WebRTC data channel approach (alternative)
-      // This would be used if VNC supports WebRTC data channels
-      /*
-      const pc = new RTCPeerConnection();
-      const dataChannel = pc.createDataChannel('vnc-commands', {
-        ordered: true
+      // Flush the message queue
+      messageQueueRef.current.forEach(message => {
+        ws.send(JSON.stringify(message));
+        console.log('[BrowserActionExecutor] Sent queued VNC message:', message);
       });
-      
-      dataChannel.onopen = () => {
-        console.log('[BrowserActionExecutor] VNC data channel opened');
-        setIsVNCConnected(true);
-        vncDataChannelRef.current = dataChannel;
-      };
-      
-      dataChannel.onclose = () => {
-        console.log('[BrowserActionExecutor] VNC data channel closed');
-        setIsVNCConnected(false);
-      };
-      
-      dataChannel.onerror = (error) => {
-        console.error('[BrowserActionExecutor] VNC data channel error:', error);
-        setLastError('VNC data channel error');
-      };
-      */
-      
-    } catch (error) {
-      console.error('[BrowserActionExecutor] Failed to connect to VNC:', error);
-      setLastError('Failed to connect to VNC');
-    }
-  }, []);
+      messageQueueRef.current = [];
+    };
+
+    ws.onclose = () => {
+      console.log('[BrowserActionExecutor] VNC WebSocket disconnected');
+      setIsVNCConnected(false);
+    };
+
+    ws.onerror = (error) => {
+      const errorMessage = error instanceof Error ? error.message : 
+        error && typeof error === 'object' ? JSON.stringify(error) : 
+        'Unknown WebSocket error';
+      const wsTarget = error?.target as WebSocket;
+      console.error('[BrowserActionExecutor] VNC WebSocket error:', {
+        type: error?.type || 'unknown',
+        message: errorMessage,
+        target: wsTarget?.url || vncUrl,
+        readyState: wsTarget?.readyState
+      });
+      setLastError(`VNC connection error: ${errorMessage}`);
+      setIsVNCConnected(false);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const response = JSON.parse(event.data);
+        console.log('[BrowserActionExecutor] VNC response:', response);
+      } catch (error) {
+        console.error('[BrowserActionExecutor] Failed to parse VNC response:', error);
+      }
+    };
+
+    vncWebSocketRef.current = ws;
+
+    return () => {
+      ws.close();
+    };
+  }, [vncUrl]);
   
   // Disconnect from VNC
   const disconnectVNC = useCallback(() => {
@@ -243,19 +260,6 @@ export const useBrowserActionExecutor = (room: Room | null): UseBrowserActionExe
     console.log('[BrowserActionExecutor] Disconnected from VNC');
   }, []);
   
-  // Send message over VNC connection
-  const sendVNCMessage = useCallback((message: VNCMessage) => {
-    if (vncWebSocketRef.current && vncWebSocketRef.current.readyState === WebSocket.OPEN) {
-      vncWebSocketRef.current.send(JSON.stringify(message));
-      console.log('[BrowserActionExecutor] Sent VNC WebSocket message:', message);
-    } else if (vncDataChannelRef.current && vncDataChannelRef.current.readyState === 'open') {
-      vncDataChannelRef.current.send(JSON.stringify(message));
-      console.log('[BrowserActionExecutor] Sent VNC data channel message:', message);
-    } else {
-      console.warn('[BrowserActionExecutor] No VNC connection available to send message');
-      setLastError('No VNC connection available');
-    }
-  }, []);
   
   // Execute browser action directly (for manual testing)
   const executeBrowserAction = useCallback(async (command: BrowserActionCommand): Promise<any> => {
@@ -285,7 +289,6 @@ export const useBrowserActionExecutor = (room: Room | null): UseBrowserActionExe
     isExecuting,
     lastError,
     executeBrowserAction,
-    connectVNC,
     disconnectVNC,
     sendVNCMessage
   };
