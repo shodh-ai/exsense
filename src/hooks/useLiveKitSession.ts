@@ -283,6 +283,48 @@ export function useLiveKitSession(roomName: string, userName: string) {
           console.log('[SET_UI_STATE] No parameters found in request');
         }
         console.log('[SET_UI_STATE] ===== END SET_UI_STATE PROCESSING =====');
+      } else if ((request.actionType as number) === 64) { // EXCALIDRAW_CLEAR_CANVAS
+        console.log('[B2F RPC] Handling EXCALIDRAW_CLEAR_CANVAS');
+        // Clear canvas via debug functions if available
+        if (typeof window !== 'undefined' && window.__excalidrawDebug) {
+          try {
+            window.__excalidrawDebug.clearCanvas();
+            console.log('[B2F RPC] ✅ Canvas cleared successfully');
+          } catch (error) {
+            console.error('[B2F RPC] ❌ Failed to clear canvas:', error);
+          }
+        } else {
+          console.warn('[B2F RPC] ⚠️ Excalidraw debug functions not available for canvas clear');
+        }
+      } else if ((request.actionType as number) === 49) { // GENERATE_VISUALIZATION
+        console.log('[B2F RPC] Handling GENERATE_VISUALIZATION');
+        try {
+          // Extract elements from request parameters
+          const elements = request.parameters?.elements ? JSON.parse(request.parameters.elements) : null;
+          
+          if (elements && Array.isArray(elements)) {
+            console.log(`[B2F RPC] Parsed ${elements.length} elements from RPC`);
+            
+            // Use store-based approach (from memory fix)
+            const { setVisualizationData } = useSessionStore.getState();
+            if (setVisualizationData) {
+              console.log('[B2F RPC] Setting visualization data in store...');
+              setVisualizationData(elements);
+            } else {
+              console.warn('[B2F RPC] Store setVisualizationData not available, using direct method');
+              // Fallback to direct rendering
+              if (typeof window !== 'undefined' && window.__excalidrawDebug) {
+                const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(elements);
+                window.__excalidrawDebug.setElements(excalidrawElements);
+                console.log('[B2F RPC] ✅ Direct visualization rendering completed');
+              }
+            }
+          } else {
+            console.error('[B2F RPC] ❌ No valid elements found in GENERATE_VISUALIZATION request');
+          }
+        } catch (error) {
+          console.error('[B2F RPC] ❌ Error handling GENERATE_VISUALIZATION:', error);
+        }
       }
       
       // We still need to return an acknowledgment

@@ -14,6 +14,7 @@ interface SessionState {
     isMicEnabled: boolean;
     isMusicButtonPlaying: boolean;
     isMicActivatingPending: boolean;
+    visualizationData: any[] | null; // <-- NEW: For store-based visualization communication
 
     // --- Actions ---
     setActiveView: (view: SessionView) => void;
@@ -25,6 +26,7 @@ interface SessionState {
     setIsMicEnabled: (isEnabled: boolean) => void;
     setIsMusicButtonPlaying: (isPlaying: boolean) => void;
     setIsMicActivatingPending: (isPending: boolean) => void;
+    setVisualizationData: (data: any[] | null) => void; // <-- NEW: Set visualization data for canvas rendering
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -40,6 +42,7 @@ export const useSessionStore = create<SessionState>()(
             isMicEnabled: false,
             isMusicButtonPlaying: false,
             isMicActivatingPending: false,
+            visualizationData: null, // <-- No visualization data initially
 
             // --- Actions Implementation ---
             setActiveView: (view) => set({ activeView: view }),
@@ -51,6 +54,7 @@ export const useSessionStore = create<SessionState>()(
             setIsMicEnabled: (isEnabled) => set({ isMicEnabled: isEnabled }),
             setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
             setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }),
+            setVisualizationData: (data) => set({ visualizationData: data }), // <-- NEW ACTION IMPLEMENTATION
         }),
         { name: "SessionUIStore" }
     )

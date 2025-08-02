@@ -1,10 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useStudentInteractionSensor } from './useStudentInteractionSensor';
 import { useVisualActionExecutor, ToolCommand } from './useVisualActionExecutor';
-
-// File: exsense/src/hooks/useExcalidrawIntegration.ts
-
-
+import { useSessionStore } from '@/lib/store';
 
 // Enhanced interfaces for the unified integration
 interface CanvasMode {
@@ -21,10 +18,12 @@ interface ChatMessage {
 
 interface UseExcalidrawIntegrationReturn {
   // Core state
-  excalidrawAPI: unknown | null;
+  excalidrawAPI: any | null;
   canvasMode: CanvasMode;
   isGenerating: boolean;
   error: string | null;
+  elements: any[];
+  appState: any;
   
   // Chat functionality
   conversationHistory: ChatMessage[];
@@ -34,14 +33,15 @@ interface UseExcalidrawIntegrationReturn {
   // Laser pointer functionality
   isLaserActive: boolean;
   lastPointerPosition: { x: number; y: number } | null;
-  pointedElement: unknown | null;
+  pointedElement: any | null;
   
   // Element highlighting
   highlightedElements: string[];
   
   // Core functions
-  setExcalidrawAPI: (api: unknown) => void;
-  handlePointerUpdate: (payload: unknown) => void;
+  setExcalidrawAPI: (api: any) => void;
+  handlePointerUpdate: (payload: any) => void;
+  handleChangeWithControl: (elements: any[], appState: any) => void;
   
   // Chat functions
   sendChatMessage: (message: string, image?: string | null) => Promise<void>;
@@ -51,6 +51,7 @@ interface UseExcalidrawIntegrationReturn {
   toggleLaserPointer: () => void;
   giveStudentControl: (message?: string) => void;
   takeAIControl: (message?: string) => void;
+  handleCanvasModeChange: (newMode: string, message?: string | null, allowManualAfter?: boolean) => void;
   
   // AI visualization functions
   generateVisualization: (prompt: string) => Promise<void>;
@@ -59,237 +60,414 @@ interface UseExcalidrawIntegrationReturn {
   // Element manipulation
   highlightElements: (elementIds: string[]) => void;
   removeHighlighting: () => void;
-  getCanvasElements: () => unknown[];
-  updateElements: (elements: unknown[]) => void;
+  getCanvasElements: () => any[];
+  updateElements: (elements: any[]) => void;
   
   // Command execution
-  executeCommand: (command: ToolCommand) => Promise<unknown>;
+  executeCommand: (command: ToolCommand) => Promise<any>;
   
   // Utility functions
   clearCanvas: () => void;
   dismissError: () => void;
+  exportAsImage: () => Promise<void>;
 }
 
 export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
   // Core state
-  const [excalidrawAPI, setExcalidrawAPIState] = useState<unknown | null>(null);
+  const [excalidrawAPI, setExcalidrawAPIState] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
-  const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
+  const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([{
+    type: 'system',
+    content: "Hello! I'm your AI tutor. I have control of the canvas and will create visualizations for you. Click the 📍 Laser Pointer button to activate it, then click on any element to ask questions about it! I'll give you drawing control when it's time for you to practice.",
+    timestamp: Date.now()
+  }]);
+  const [elements, setElements] = useState<any[]>([]);
+  const [appState, setAppState] = useState<any>({});
   
-  // Timeout refs for highlighting
+  // CRITICAL FIX: Use refs to prevent infinite loops
   const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isUpdatingRef = useRef(false);
+  const preventLoopRef = useRef(false);
+  const lastElementsRef = useRef<any[]>([]);
+  const lastAppStateRef = useRef<any>({});
   
   // Initialize the component hooks
   const interactionSensor = useStudentInteractionSensor();
   const visualActionExecutor = useVisualActionExecutor(excalidrawAPI);
   
-  // Set the Excalidraw API for both hooks when it changes
+  // API configuration
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001';
+
+  // CRITICAL FIX: Memoize the setExcalidrawAPI to prevent recreation
+  const setExcalidrawAPI = useCallback((api: any) => {
+    if (api && api !== excalidrawAPI) {
+      console.log('Setting new Excalidraw API');
+      setExcalidrawAPIState(api);
+    }
+  }, [excalidrawAPI]);
+
+  // CRITICAL FIX: Set APIs only when they actually change
   useEffect(() => {
-    if (excalidrawAPI) {
+    if (excalidrawAPI && interactionSensor.setExcalidrawAPI) {
+      console.log('Updating interaction sensor with API');
       interactionSensor.setExcalidrawAPI(excalidrawAPI);
     }
-  }, [excalidrawAPI, interactionSensor]);
-  
-  // Enhanced setExcalidrawAPI that updates both hooks
-  const setExcalidrawAPI = useCallback((api: unknown) => {
-    if (api && api !== excalidrawAPI) {
-      setExcalidrawAPIState(api);
-      interactionSensor.setExcalidrawAPI(api);
+  }, [excalidrawAPI]); // Remove interactionSensor from dependencies to prevent loops
+
+  // CRITICAL FIX: Completely rewrite onChange to prevent loops
+  const handleChangeWithControl = useCallback((newElements: any[], newAppState: any) => {
+    // CRITICAL: Prevent recursive calls during updates
+    if (isUpdatingRef.current || preventLoopRef.current) {
+      return;
     }
-  }, [excalidrawAPI, interactionSensor]);
-  
-  // Enhanced pointer update handling with element detection
-  const handlePointerUpdate = useCallback((payload: unknown) => {
-    if (!excalidrawAPI) return;
+
+    // CRITICAL: Deep comparison to prevent unnecessary updates
+    const elementsChanged = JSON.stringify(newElements) !== JSON.stringify(lastElementsRef.current);
+    const appStateChanged = JSON.stringify(newAppState) !== JSON.stringify(lastAppStateRef.current);
+
+    if (!elementsChanged && !appStateChanged) {
+      return;
+    }
+
+    // Update refs immediately
+    lastElementsRef.current = newElements;
+    lastAppStateRef.current = newAppState;
+
+    // Update state
+    setElements(newElements);
+    setAppState(newAppState);
+
+    // CRITICAL: Use a flag to prevent immediate re-entry
+    preventLoopRef.current = true;
     
-    const { pointer, button } = payload as any;
-    const { x, y } = pointer;
+    // Clear the flag after React has processed the update
+    setTimeout(() => {
+      preventLoopRef.current = false;
+    }, 0);
+
+    // Only handle tool enforcement for specific scenarios
+    const isAIMode = visualActionExecutor.canvasMode.mode === 'ai_controlled';
+    const currentTool = newAppState.activeTool?.type;
     
-    // Handle laser pointer functionality in both AI and student modes
-    if (interactionSensor.isLaserActive && button === 'down') {
-      try {
-        const sceneCoords = (excalidrawAPI as any).getSceneCoordinatesFromPointer?.({ clientX: x, clientY: y });
-        
-        if (sceneCoords) {
-          const elements = (excalidrawAPI as any).getSceneElements() || [];
-          const elementAtPosition = elements.find((element: any) => {
-            if (!element || element.isDeleted) return false;
+    if (isAIMode && excalidrawAPI) {
+      // Only enforce tools if there's an actual problem
+      const shouldHaveLaser = interactionSensor.isLaserActive;
+      const hasCorrectTool = shouldHaveLaser ? currentTool === 'laser' : (currentTool === 'selection' || currentTool === 'hand');
+      
+      if (!hasCorrectTool && !isUpdatingRef.current) {
+        // Use a longer timeout to prevent rapid tool switching
+        setTimeout(() => {
+          if (excalidrawAPI && !isUpdatingRef.current && visualActionExecutor.canvasMode.mode === 'ai_controlled') {
+            isUpdatingRef.current = true;
+            const targetTool = interactionSensor.isLaserActive ? 'laser' : 'selection';
+            console.log(`Correcting tool to: ${targetTool}`);
+            excalidrawAPI.setActiveTool({ type: targetTool });
             
-            const { x: elX, y: elY, width, height, type } = element;
-            
-            switch (type) {
-              case 'ellipse': {
-                const centerX = elX + width / 2;
-                const centerY = elY + height / 2;
-                const a = width / 2;
-                const b = height / 2;
-                const dx = (sceneCoords.x - centerX) / a;
-                const dy = (sceneCoords.y - centerY) / b;
-                return (dx * dx + dy * dy) <= 1;
-              }
-              case 'diamond': {
-                const diamondCenterX = elX + width / 2;
-                const diamondCenterY = elY + height / 2;
-                const rotatedX = Math.abs(sceneCoords.x - diamondCenterX) / (width / 2);
-                const rotatedY = Math.abs(sceneCoords.y - diamondCenterY) / (height / 2);
-                return (rotatedX + rotatedY) <= 1;
-              }
-              case 'text': {
-                const padding = 5;
-                return sceneCoords.x >= elX - padding && 
-                       sceneCoords.x <= elX + width + padding && 
-                       sceneCoords.y >= elY - padding && 
-                       sceneCoords.y <= elY + height + padding;
-              }
-              default: {
-                // Rectangle, arrow, line, etc.
-                return sceneCoords.x >= elX && 
-                       sceneCoords.x <= elX + width && 
-                       sceneCoords.y >= elY && 
-                       sceneCoords.y <= elY + height;
-              }
-            }
-          });
-          
-          if (elementAtPosition) {
-            // Temporarily highlight the pointed element
-            visualActionExecutor.highlightElements([elementAtPosition.id]);
-            
-            // Clear previous timeout
-            if (highlightTimeoutRef.current) {
-              clearTimeout(highlightTimeoutRef.current);
-            }
-            
-            // Auto-remove highlighting after 3 seconds
-            highlightTimeoutRef.current = setTimeout(() => {
-              visualActionExecutor.removeHighlighting();
-            }, 3000);
-            
-            // Notify interaction sensor
-            interactionSensor.onElementPointed(elementAtPosition, sceneCoords);
-            
-            // Add contextual message about the pointed element
-            const elementInfo = `Element pointed: ${elementAtPosition.type}${elementAtPosition.text ? ` ("${elementAtPosition.text}")` : ''} at position (${Math.round(elementAtPosition.x)}, ${Math.round(elementAtPosition.y)})`;
-            addMessageToHistory('system', `🎯 ${elementInfo}`);
+            setTimeout(() => {
+              isUpdatingRef.current = false;
+            }, 200);
           }
-        }
-      } catch (error) {
-        console.warn('Error handling pointer update:', error);
+        }, 300);
       }
     }
-  }, [excalidrawAPI, interactionSensor, visualActionExecutor]);
-  
-  // Enhanced chat message handling
+  }, []); // CRITICAL: Empty dependency array to prevent recreation
+
+  // CRITICAL FIX: Simplify pointer update handling
+  const handlePointerUpdate = useCallback((payload: any) => {
+    if (!excalidrawAPI || isUpdatingRef.current) return;
+    
+    const { pointer, button } = payload;
+    const { x, y } = pointer;
+    
+    // Only handle laser pointer clicks
+    if (interactionSensor.isLaserActive && button === 'down') {
+      const sceneCoords = { x, y };
+      
+      const elementAtPosition = elements.find(element => {
+        if (!element || element.isDeleted) return false;
+        
+        const { x: elX, y: elY, width, height, type } = element;
+        
+        // Simple hit detection
+        switch (type) {
+          case 'ellipse': {
+            const centerX = elX + width / 2;
+            const centerY = elY + height / 2;
+            const a = width / 2;
+            const b = height / 2;
+            const dx = (sceneCoords.x - centerX) / a;
+            const dy = (sceneCoords.y - centerY) / b;
+            return (dx * dx + dy * dy) <= 1;
+          }
+          
+          case 'text': {
+            const padding = 5;
+            return sceneCoords.x >= elX - padding && 
+                   sceneCoords.x <= elX + width + padding && 
+                   sceneCoords.y >= elY - padding && 
+                   sceneCoords.y <= elY + height + padding;
+          }
+          
+          default:
+            return sceneCoords.x >= elX && 
+                   sceneCoords.x <= elX + width && 
+                   sceneCoords.y >= elY && 
+                   sceneCoords.y <= elY + height;
+        }
+      });
+      
+      if (elementAtPosition) {
+        // Highlight temporarily
+        visualActionExecutor.highlightElements([elementAtPosition.id]);
+        
+        if (highlightTimeoutRef.current) {
+          clearTimeout(highlightTimeoutRef.current);
+        }
+        
+        highlightTimeoutRef.current = setTimeout(() => {
+          visualActionExecutor.removeHighlighting();
+        }, 3000);
+        
+        // Notify sensor
+        interactionSensor.onElementPointed(elementAtPosition, sceneCoords);
+        
+        // Add message
+        const elementInfo = `Element pointed: ${elementAtPosition.type}${elementAtPosition.text ? ` ("${elementAtPosition.text}")` : ''}`;
+        addMessageToHistory('system', `🎯 ${elementInfo}`);
+      }
+    }
+  }, [excalidrawAPI, elements, interactionSensor, visualActionExecutor]);
+
+  // CRITICAL FIX: Memoize addMessageToHistory
   const addMessageToHistory = useCallback((type: ChatMessage['type'], content: string) => {
     const message: ChatMessage = { type, content, timestamp: Date.now() };
     setConversationHistory(prev => [...prev, message]);
   }, []);
-  
-  // Enhanced chat message sending with screenshot capability
-  const sendChatMessage = useCallback(async (message: string, image: string | null = null) => {
-    if (!message.trim()) return;
+
+  // CRITICAL FIX: Simplify mode change handling
+  const handleCanvasModeChange = useCallback((newMode: string, message: string | null = null, allowManualAfter: boolean = false) => {
+    if (isUpdatingRef.current) return;
     
+    visualActionExecutor.executeCommand({
+      tool_name: newMode === 'student_controlled' ? 'give_student_control' : 'take_ai_control',
+      parameters: { message }
+    });
+    
+    if (message) {
+      addMessageToHistory('system', message);
+    }
+  }, [visualActionExecutor, addMessageToHistory]);
+
+  // CRITICAL FIX: Simplify chat message sending
+  const sendChatMessage = useCallback(async (message: string, image: string | null = null) => {
+    if (!message.trim() || isUpdatingRef.current) return;
+
+    const userMessage = message.trim();
+    if (!image) {
+      addMessageToHistory('user', userMessage);
+      setChatInput("");
+    }
+    
+    visualActionExecutor.setIsGenerating(true);
+    setError(null);
+
+    // Build context without causing re-renders
+    const context = {
+      conversationHistory: conversationHistory.slice(-10),
+      currentCanvas: { elements, elementCount: elements.length },
+      pointerData: interactionSensor.lastPointerPosition && interactionSensor.pointedElement ? {
+        position: interactionSensor.lastPointerPosition,
+        element: {
+          id: interactionSensor.pointedElement.id,
+          type: interactionSensor.pointedElement.type,
+          x: interactionSensor.pointedElement.x,
+          y: interactionSensor.pointedElement.y,
+          width: interactionSensor.pointedElement.width,
+          height: interactionSensor.pointedElement.height,
+          text: interactionSensor.pointedElement.text || null
+        },
+        isPointing: true
+      } : null,
+      userMessage,
+      canvasImage: image,
+      canvasMode: visualActionExecutor.canvasMode.mode
+    };
+
     try {
-      // Add user message to history
-      addMessageToHistory('user', message);
-      
-      // Set generating state
-      visualActionExecutor.executeCommand({ tool_name: 'set_generating', parameters: { generating: true } });
-      
-      // Prepare request data
-      const requestData: any = {
-        message,
-        conversation_history: conversationHistory,
-        canvas_elements: visualActionExecutor.getCanvasElements(),
-        canvas_mode: visualActionExecutor.canvasMode,
-        pointed_element: interactionSensor.pointedElement,
-        last_interactions: interactionSensor.interactions.slice(-10) // Last 10 interactions
-      };
-      
-      // Include screenshot if provided or if AI needs to analyze canvas
-      if (image || message.toLowerCase().includes('see') || message.toLowerCase().includes('look') || message.toLowerCase().includes('check')) {
-        const screenshot = image || await visualActionExecutor.captureCanvasScreenshot();
+      const response = await fetch(`${API_BASE_URL}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(context)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('AI Response received:', data);
+
+      if (data.action === 'request_screenshot') {
+        addMessageToHistory('assistant', data.message || "I'm taking a screenshot now.");
+        const screenshot = await visualActionExecutor.captureCanvasScreenshot();
         if (screenshot) {
-          requestData.canvas_screenshot = screenshot;
+          return sendChatMessage(userMessage, screenshot);
+        } else {
+          addMessageToHistory('system', 'Sorry, I could not capture the canvas image.');
+          visualActionExecutor.setIsGenerating(false);
+          return;
         }
       }
       
-      // TODO: Replace with actual API call to your backend
-      // For now, simulate AI response
-      setTimeout(() => {
-        const aiResponse = `I understand you want: "${message}". I can see the current canvas state and will help you accordingly.`;
-        addMessageToHistory('assistant', aiResponse);
-        visualActionExecutor.executeCommand({ tool_name: 'set_generating', parameters: { generating: false } });
-      }, 1000);
+      addMessageToHistory('assistant', data.message);
       
+      // Handle different actions
+      if (data.action === 'change_canvas_mode') {
+        const { mode, reason } = data;
+        if (mode === 'student_controlled') {
+          handleCanvasModeChange('student_controlled', reason || '🎨 You now have control of the canvas!');
+        } else if (mode === 'ai_controlled') {
+          handleCanvasModeChange('ai_controlled', reason || '🤖 AI has taken control of the canvas.');
+        }
+      } else if (data.action === 'modify_elements' && data.modifications && excalidrawAPI) {
+        await visualActionExecutor.handleElementModifications(data.modifications);
+      } else if (data.action === 'highlight_elements' && data.highlightedElements && excalidrawAPI) {
+        await visualActionExecutor.handleElementHighlighting(data.highlightedElements);
+      } else if ((data.action === 'update_canvas' || data.updateCanvas) && data.elements && Array.isArray(data.elements)) {
+        console.log('Processing canvas update');
+        
+        try {
+          const excalidrawElements = visualActionExecutor.convertSkeletonToExcalidrawElements(data.elements);
+          
+          if (excalidrawAPI && excalidrawElements.length > 0) {
+            isUpdatingRef.current = true;
+            
+            setTimeout(() => {
+              if (!isUpdatingRef.current) return; // Safety check
+              
+              excalidrawAPI.updateScene({
+                elements: excalidrawElements,
+                appState: { 
+                  ...appState,
+                  viewBackgroundColor: "#ffffff",
+                  selectedElementIds: {},
+                  editingElement: null,
+                  editingGroupId: null,
+                  viewModeEnabled: visualActionExecutor.canvasMode.mode === 'ai_controlled' && !interactionSensor.isLaserActive
+                }
+              });
+              
+              setTimeout(() => {
+                if (excalidrawElements.length > 0 && excalidrawAPI.scrollToContent) {
+                  excalidrawAPI.scrollToContent(excalidrawElements, { 
+                    fitToContent: true, 
+                    animate: true 
+                  });
+                }
+                
+                setTimeout(() => {
+                  isUpdatingRef.current = false;
+                }, 100);
+              }, 500);
+            }, 100);
+          }
+        } catch (conversionError) {
+          console.error('Error converting elements:', conversionError);
+          setError('Failed to convert AI response to diagram elements');
+        }
+      }
+
     } catch (error) {
       console.error('Error sending chat message:', error);
-      setError('Failed to send message. Please try again.');
-      addMessageToHistory('system', 'Error: Failed to send message. Please try again.');
-      visualActionExecutor.executeCommand({ tool_name: 'set_generating', parameters: { generating: false } });
+      setError((error as Error).message || 'Failed to send message');
+      addMessageToHistory('system', `Error: ${(error as Error).message || 'Failed to send message'}`);
     }
-  }, [conversationHistory, visualActionExecutor, interactionSensor, addMessageToHistory]);
-  
-  // Enhanced laser pointer toggle with proper tool switching
+
+    visualActionExecutor.setIsGenerating(false);
+  }, [conversationHistory, elements, appState, visualActionExecutor, interactionSensor, addMessageToHistory, API_BASE_URL, excalidrawAPI, handleCanvasModeChange]);
+
+  // CRITICAL FIX: Simplify laser pointer toggle
   const toggleLaserPointer = useCallback(() => {
-    if (!excalidrawAPI) return;
+    if (!excalidrawAPI || isUpdatingRef.current) return;
     
-    const newLaserState = !interactionSensor.isLaserActive;
-    
-    // Toggle the interaction sensor laser state
+    const wasActive = interactionSensor.isLaserActive;
     interactionSensor.toggleLaserPointer();
     
-    // Set appropriate tool in Excalidraw
-    if (newLaserState) {
-      (excalidrawAPI as any).setActiveTool({ type: 'laser' });
-      addMessageToHistory('system', '🎯 Laser pointer activated! Click on elements to ask questions about them.');
-    } else {
-      (excalidrawAPI as any).setActiveTool({ type: 'selection' });
-      addMessageToHistory('system', '🎯 Laser pointer deactivated.');
-      // Clear any highlighting when deactivating laser
-      visualActionExecutor.removeHighlighting();
-    }
-  }, [excalidrawAPI, interactionSensor, visualActionExecutor, addMessageToHistory]);
-  
-  // Enhanced canvas control functions
+    // Set tool after state change
+    setTimeout(() => {
+      if (excalidrawAPI && !isUpdatingRef.current) {
+        const toolType = wasActive ? 'selection' : 'laser';
+        excalidrawAPI.setActiveTool({ type: toolType });
+        
+        const message = wasActive 
+          ? '📍 Laser pointer deactivated.' 
+          : '📍 Laser pointer activated! Click on elements to ask questions.';
+        addMessageToHistory('system', message);
+      }
+    }, 100);
+  }, [excalidrawAPI, interactionSensor, addMessageToHistory]);
+
+  // Simplified control functions
   const giveStudentControl = useCallback((message?: string) => {
-    visualActionExecutor.giveStudentControl(message);
-    const controlMessage = message || 'You now have control of the canvas! Feel free to draw and modify elements.';
-    addMessageToHistory('system', `🎨 ${controlMessage}`);
-  }, [visualActionExecutor, addMessageToHistory]);
-  
+    handleCanvasModeChange('student_controlled', message);
+  }, [handleCanvasModeChange]);
+
   const takeAIControl = useCallback((message?: string) => {
-    visualActionExecutor.takeAIControl(message);
-    const controlMessage = message || 'AI has taken control of the canvas for demonstration.';
-    addMessageToHistory('system', `🤖 ${controlMessage}`);
-  }, [visualActionExecutor, addMessageToHistory]);
-  
-  // Enhanced visualization generation
+    handleCanvasModeChange('ai_controlled', message);
+  }, [handleCanvasModeChange]);
+
   const generateVisualization = useCallback(async (prompt: string) => {
     try {
       await visualActionExecutor.generateVisualization(prompt);
       addMessageToHistory('system', `🎨 Generated visualization: "${prompt}"`);
     } catch (error) {
       console.error('Error generating visualization:', error);
-      setError('Failed to generate visualization. Please try again.');
+      setError('Failed to generate visualization.');
       addMessageToHistory('system', 'Error: Failed to generate visualization.');
     }
   }, [visualActionExecutor, addMessageToHistory]);
-  
-  // Utility functions
+
+  const exportAsImage = useCallback(async () => {
+    if (!excalidrawAPI) return;
+    
+    try {
+      const canvas = await visualActionExecutor.captureCanvasScreenshot();
+      if (canvas) {
+        const link = document.createElement('a');
+        link.download = `excalidraw-diagram-${new Date().toISOString().slice(0, 10)}.png`;
+        link.href = canvas;
+        link.click();
+      }
+    } catch (error) {
+      console.error('Error exporting image:', error);
+      setError('Failed to export image.');
+    }
+  }, [excalidrawAPI, visualActionExecutor]);
+
   const clearCanvas = useCallback(() => {
-    if (excalidrawAPI) {
-      (excalidrawAPI as any).resetScene();
+    if (excalidrawAPI && !isUpdatingRef.current) {
+      excalidrawAPI.updateScene({ 
+        elements: [], 
+        appState: { 
+          ...appState, 
+          viewBackgroundColor: "#ffffff",
+          viewModeEnabled: visualActionExecutor.canvasMode.mode === 'ai_controlled' && !interactionSensor.isLaserActive
+        } 
+      });
+      setElements([]);
+      setError(null);
       addMessageToHistory('system', '🗑️ Canvas cleared.');
     }
-  }, [excalidrawAPI, addMessageToHistory]);
-  
+  }, [excalidrawAPI, appState, visualActionExecutor, interactionSensor, addMessageToHistory]);
+
   const dismissError = useCallback(() => {
     setError(null);
   }, []);
-  
-  // Cleanup timeouts on unmount
+
+  // CRITICAL FIX: Remove the problematic useEffect that was causing loops
+  // Only handle cleanup
   useEffect(() => {
     return () => {
       if (highlightTimeoutRef.current) {
@@ -297,13 +475,79 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
       }
     };
   }, []);
+
+  // Store-based visualization data listener (from memory fix)
+  const visualizationData = useSessionStore(state => state.visualizationData);
+  const setVisualizationData = useSessionStore(state => state.setVisualizationData);
   
+  useEffect(() => {
+    if (visualizationData && excalidrawAPI && !isUpdatingRef.current) {
+      console.log(`[EXCALIDRAW-INTEGRATION] Processing ${visualizationData.length} elements from store`);
+      
+      try {
+        isUpdatingRef.current = true;
+        
+        // Get existing elements from canvas to preserve them
+        const existingElements = excalidrawAPI.getSceneElements();
+        
+        // Small delay for smooth rendering
+        setTimeout(() => {
+          try {
+            // Convert skeleton data to Excalidraw format
+            if (window.__excalidrawDebug && window.__excalidrawDebug.convertSkeletonToExcalidraw) {
+              const newExcalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(visualizationData);
+              console.log(`[EXCALIDRAW-INTEGRATION] Converted to ${newExcalidrawElements.length} new Excalidraw elements`);
+              
+              // Combine existing elements with new ones (accumulative approach)
+              const allElements = [...existingElements, ...newExcalidrawElements];
+              console.log(`[EXCALIDRAW-INTEGRATION] Total elements on canvas: ${allElements.length}`);
+              
+              // Update the scene with accumulated elements
+              excalidrawAPI.updateScene({ 
+                elements: allElements,
+                appState: {
+                  ...appState,
+                  viewBackgroundColor: "transparent"
+                }
+              });
+              
+              // Scroll to content after a brief delay (if available)
+              setTimeout(() => {
+                if (window.__excalidrawDebug && (window.__excalidrawDebug as any).scrollToContent) {
+                  (window.__excalidrawDebug as any).scrollToContent();
+                }
+              }, 100);
+              
+              console.log('[EXCALIDRAW-INTEGRATION] ✅ Visualization rendered successfully');
+              
+            } else {
+              console.warn('[EXCALIDRAW-INTEGRATION] ⚠️ Debug functions not available for conversion');
+            }
+          } catch (error) {
+            console.error('[EXCALIDRAW-INTEGRATION] ❌ Error rendering visualization:', error);
+          } finally {
+            isUpdatingRef.current = false;
+            
+            // Clean up store data
+            setVisualizationData(null);
+          }
+        }, 50);
+        
+      } catch (error) {
+        console.error('[EXCALIDRAW-INTEGRATION] ❌ Error processing visualization data:', error);
+        isUpdatingRef.current = false;
+      }
+    }
+  }, [visualizationData, excalidrawAPI, appState, setVisualizationData]);
+
   return {
     // Core state
     excalidrawAPI,
     canvasMode: visualActionExecutor.canvasMode,
     isGenerating: visualActionExecutor.isGenerating,
     error,
+    elements,
+    appState,
     
     // Chat functionality
     conversationHistory,
@@ -321,6 +565,7 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
     // Core functions
     setExcalidrawAPI,
     handlePointerUpdate,
+    handleChangeWithControl,
     
     // Chat functions
     sendChatMessage,
@@ -330,6 +575,7 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
     toggleLaserPointer,
     giveStudentControl,
     takeAIControl,
+    handleCanvasModeChange,
     
     // AI visualization functions
     generateVisualization,
@@ -346,6 +592,7 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
     
     // Utility functions
     clearCanvas,
-    dismissError
+    dismissError,
+    exportAsImage
   };
 }

@@ -16,6 +16,11 @@ declare global {
       giveStudentControl: () => void;
       takeAIControl: () => void;
       getSceneElements: () => any[];
+      clearCanvas: () => void;
+      sendMessage: (message: string) => void;
+      setElements: (elements: any[]) => void;
+      updateScene: (scene: { elements?: any[], appState?: any }) => void;
+      convertSkeletonToExcalidraw: (skeletonElements: any[]) => any[];
     };
   }
 }
@@ -34,7 +39,11 @@ const ExcalidrawWrapper = () => {
     highlightElements,
     removeHighlighting,
     giveStudentControl,
-    takeAIControl
+    takeAIControl,
+    clearCanvas,
+    sendChatMessage,
+    updateElements,
+    handleChangeWithControl
   } = useExcalidrawIntegration();
 
   // Ref to prevent infinite loops when resetting scroll position
@@ -53,36 +62,68 @@ const ExcalidrawWrapper = () => {
       window.__excalidrawDebug = {
         toggleLaserPointer: () => toggleLaserPointer(),
         captureCanvasScreenshot: async () => {
-          const elements = excalidrawAPI.getSceneElements();
-          console.log('Canvas elements:', elements);
-          // Return a promise that resolves with the elements
-          return Promise.resolve(JSON.stringify(elements, null, 2));
+          const screenshot = await captureCanvasScreenshot();
+          console.log('Canvas screenshot captured');
+          return screenshot || 'No screenshot available';
         },
         highlightElements: (elementIds: string[]) => {
-          excalidrawAPI.updateScene({
-            elements: excalidrawAPI.getSceneElements().map(el => ({
-              ...el,
-              opacity: elementIds.includes(el.id) ? 0.5 : 1
-            }))
-          });
+          highlightElements(elementIds);
         },
         removeHighlighting: () => {
-          excalidrawAPI.updateScene({
-            elements: excalidrawAPI.getSceneElements().map(el => ({
-              ...el,
-              opacity: 1
-            }))
-          });
+          removeHighlighting();
         },
         giveStudentControl: () => {
-          console.log('Giving control to student');
-          // Add your student control logic here
+          giveStudentControl('Debug: Student control activated');
         },
         takeAIControl: () => {
-          console.log('AI taking control');
-          // Add your AI control logic here
+          takeAIControl('Debug: AI control activated');
         },
-        getSceneElements: () => excalidrawAPI.getSceneElements()
+        getSceneElements: () => excalidrawAPI.getSceneElements(),
+        clearCanvas: () => clearCanvas(),
+        sendMessage: (message: string) => sendChatMessage(message),
+        setElements: (elements: any[]) => updateElements(elements),
+        updateScene: (scene: { elements?: any[], appState?: any }) => {
+          excalidrawAPI.updateScene(scene);
+        },
+        convertSkeletonToExcalidraw: (skeletonElements: any[]) => {
+          // Simple fallback implementation for skeleton to Excalidraw conversion
+          return skeletonElements.map((element, index) => ({
+            id: `element_${Date.now()}_${index}`,
+            type: element.type || 'rectangle',
+            x: element.x || 0,
+            y: element.y || 0,
+            width: element.width || 120,
+            height: element.height || 60,
+            angle: 0,
+            strokeColor: element.strokeColor || '#1e1e1e',
+            backgroundColor: element.backgroundColor || 'transparent',
+            fillStyle: 'solid',
+            strokeWidth: element.strokeWidth || 2,
+            strokeStyle: 'solid',
+            roughness: 1,
+            opacity: 100,
+            groupIds: [],
+            frameId: null,
+            roundness: element.type === 'rectangle' ? { type: 3, value: 8 } : null,
+            boundElements: null,
+            updated: Date.now(),
+            link: null,
+            locked: false,
+            isDeleted: false,
+            customData: null,
+            versionNonce: Math.floor(Math.random() * 1000000),
+            seed: Math.floor(Math.random() * 2147483647),
+            text: element.text || '',
+            fontSize: element.fontSize || 16,
+            fontFamily: element.type === 'text' ? 1 : undefined,
+            textAlign: element.type === 'text' ? 'center' : undefined,
+            verticalAlign: element.type === 'text' ? 'middle' : undefined,
+            containerId: element.type === 'text' ? null : undefined,
+            originalText: element.type === 'text' ? element.text || '' : undefined,
+            lineHeight: element.type === 'text' ? 1.25 : undefined,
+            baseline: element.type === 'text' ? Math.round((element.fontSize || 16) * 0.9) : undefined
+          }));
+        }
       };
       
       console.log('Excalidraw debug functions are now available at window.__excalidrawDebug');
