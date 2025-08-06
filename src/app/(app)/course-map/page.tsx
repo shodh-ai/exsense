@@ -83,38 +83,8 @@ export const CourseMap = (): JSX.Element => {
             {/* Example position: top-right area of the visible card */}
 
 
-            <Button
-              variant="outline"
-              size="icon"
-              className="inline-flex items-center gap-2.5 p-4 absolute top-[1091px] left-[706px] bg-[#566fe91a] rounded-[36px] border-0"
-            >
-              <div className="relative w-6 h-6 bg-[url(/mic-on.svg)] bg-[100%_100%]" />
-            </Button>
-
             {/* Control buttons */}
-            <Button
-              variant="outline"
-              size="icon"
-              className="absolute w-14 h-14 top-[1091px] left-[626px] p-0 border-0"
-            >
-              <img
-                className="w-full h-full"
-                alt="Voice control button"
-                src="/2-state-button--mic--play-.svg"
-              />
-            </Button>
-
-            <Button
-              variant="outline"
-              size="icon"
-              className="absolute w-14 h-14 top-[1091px] left-[966px] p-0 border-0"
-            >
-              <img
-                className="w-full h-full"
-                alt="Message button"
-                src="/2-state-button--mic--play--1.svg"
-              />
-            </Button>
+          
 
             {/* Course Map title */}
             <h1

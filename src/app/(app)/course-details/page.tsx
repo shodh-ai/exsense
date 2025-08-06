@@ -1,6 +1,14 @@
 "use client";
-import { XIcon } from "lucide-react";
-import React, { JSX } from "react";
+import {
+  XIcon,
+  Award,
+  BadgeCheck,
+  Target,
+  Clock,
+  MessageSquareWarning,
+  Star,
+} from "lucide-react";
+import React, { JSX, useState } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -10,7 +18,7 @@ import {
 import { Avatar, AvatarImage } from "@/components/avatar";
 import { Badge } from "@/components/badge";
 import { Button } from "@/components/button";
-// import { Card, CardContent } from "@/components/card";
+import { Card, CardContent } from "@/components/card";
 import CourseMap from "@/components/CourseMap";
 import { Separator } from "@/components/separator";
 import Sphere from "@/components/Sphere";
@@ -127,7 +135,6 @@ const faqs: FaqItem[] = [
 // --- SUB-COMPONENTS ---
 const CourseHeader = () => (
   <div className="flex justify-between items-center mb-8">
-    {/* Updated styles for the h2 element as per your request */}
     <h2 className="font-semibold text-base leading-6 text-black">
       Our Interactive Courses
     </h2>
@@ -181,7 +188,10 @@ const CourseDetailsSection = ({ details }: { details: CourseDetail[] }) => (
         {[0, 3].map((start) => (
           <div key={start} className="flex flex-wrap gap-[60px]">
             {details.slice(start, start + 3).map((detail) => (
-              <div key={detail.label} className="flex items-center gap-3 w-[210px]">
+              <div
+                key={detail.label}
+                className="flex items-center gap-3 w-[210px]"
+              >
                 <div className="p-3 bg-[#566fe91a] rounded-xl">
                   <div className="w-7 h-7 relative">
                     <img
@@ -248,7 +258,6 @@ const WhatYouWillLearnSection = ({
   </section>
 );
 
-
 const TeacherProfileSection = () => (
   <section className="flex flex-col gap-6">
     <h2 className="text-xl font-semibold text-black">Meet your teacher</h2>
@@ -259,7 +268,9 @@ const TeacherProfileSection = () => (
         </Avatar>
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2.5">
-            <span className="font-semibold text-base text-black">Arjun Mehta</span>
+            <span className="font-semibold text-base text-black">
+              Arjun Mehta
+            </span>
             <Badge
               variant="outline"
               className="flex items-center gap-1 pl-2.5 pr-3.5 py-1 bg-[#566fe91a] text-[#566fe9] border-[#566fe940] rounded-[30px]"
@@ -293,9 +304,10 @@ const TeacherProfileSection = () => (
         meaningful way to be a part of the creative community.
         <br />
         <br />
-        I've spent a long time watching others learn, and teach, to refine how I
-        work with you to be efficient, useful and, most importantly, memorable.
-        I want you to carry what I've shown you into a bright future.
+        I've spent a long time watching others learn, and teach, to refine how
+        I work with you to be efficient, useful, and, most importantly,
+        memorable. I want you to carry what I've shown you into a bright
+        future.
       </p>
     </div>
   </section>
@@ -313,7 +325,9 @@ const ReviewsSection = ({ reviews }: { reviews: Review[] }) => (
                 <AvatarImage src={review.avatar} alt={review.name} />
               </Avatar>
               <div className="flex flex-col gap-2">
-                <div className="font-semibold text-base text-black">{review.name}</div>
+                <div className="font-semibold text-base text-black">
+                  {review.name}
+                </div>
                 <div className="flex items-center gap-[9px]">
                   <img className="h-5" alt="Rating" src={review.rating} />
                   <img
@@ -331,7 +345,9 @@ const ReviewsSection = ({ reviews }: { reviews: Review[] }) => (
               {review.comment}
             </p>
           </div>
-          {index < reviews.length - 1 && <Separator className="w-full h-px" />}
+          {index < reviews.length - 1 && (
+            <Separator className="w-full h-px" />
+          )}
         </React.Fragment>
       ))}
     </div>
@@ -360,8 +376,132 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
   </section>
 );
 
+// --- INSTRUCTOR SECTION COMPONENT (WITH MODIFIED BUTTON) ---
+const InstructorSection = (): JSX.Element => {
+  // Analytics data for mapping
+  const analyticsData = [
+    {
+      icon: <Award className="w-7 h-7 text-[#566fe9]" />,
+      label: "Average Test Score",
+      value: "78%",
+    },
+    {
+      icon: <BadgeCheck className="w-7 h-7 text-[#566fe9]" />,
+      label: "Completion Rate",
+      value: "65%",
+    },
+    {
+      icon: <Target className="w-7 h-7 text-[#566fe9]" />,
+      label: "Accuracy Rate",
+      value: "82%",
+    },
+    {
+      icon: <Clock className="w-7 h-7 text-[#566fe9]" />,
+      label: "Average Time Spent",
+      value: "3h 42m per student",
+    },
+    {
+      icon: <MessageSquareWarning className="w-7 h-7 text-[#566fe9]" />,
+      label: "Unresolved Doubts",
+      value: "6 pending",
+    },
+    {
+      icon: <Star className="w-7 h-7 text-[#566fe9]" />,
+      label: "Satisfaction Score",
+      value: "4.3 / 5.0 (91 reviews)",
+    },
+  ];
+
+  return (
+    <section className="flex flex-col items-start gap-8 w-full">
+      <div className="flex flex-col items-start gap-6 w-full">
+        <h2 className="font-updated-title-2 font-[number:var(--updated-title-2-font-weight)] text-[#394169] text-[length:var(--updated-title-2-font-size)] tracking-[var(--updated-title-2-letter-spacing)] leading-[var(--updated-title-2-line-height)] [font-style:var(--updated-title-2-font-style)]">
+          Course Analytics
+        </h2>
+
+        <div className="flex flex-col items-start gap-6 w-full">
+          {/* First row of analytics */}
+          <div className="flex items-center justify-between w-full">
+            {analyticsData.slice(0, 3).map((item, index) => (
+              <Card
+                key={index}
+                className="border-none shadow-none bg-transparent"
+              >
+                <CardContent className="flex items-center gap-3 p-0">
+                  <div className="p-3 bg-[#566fe91a] rounded-xl">
+                    {item.icon}
+                  </div>
+                  <div className="flex flex-col items-start gap-1.5">
+                    <p className="w-[156px] font-updated-primary font-[number:var(--updated-primary-font-weight)] text-[#8187a0] text-[length:var(--updated-primary-font-size)] tracking-[var(--updated-primary-letter-spacing)] leading-[var(--updated-primary-line-height)] [font-style:var(--updated-primary-font-style)]">
+                      {item.label}
+                    </p>
+                    <p className="font-updated-primary font-[number:var(--updated-primary-font-weight)] text-[#394169] text-[length:var(--updated-primary-font-size)] tracking-[var(--updated-primary-letter-spacing)] leading-[var(--updated-primary-line-height)] whitespace-nowrap [font-style:var(--updated-primary-font-style)]">
+                      {item.value}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Second row of analytics */}
+          <div className="flex items-center justify-between w-full">
+            {analyticsData.slice(3, 6).map((item, index) => (
+              <Card
+                key={index}
+                className="border-none shadow-none bg-transparent"
+              >
+                <CardContent className="flex items-center gap-3 p-0">
+                  <div className="p-3 bg-[#566fe91a] rounded-xl">
+                    {item.icon}
+                  </div>
+                  <div className="flex flex-col items-start gap-1.5">
+                    <p className="w-[156px] font-updated-primary font-[number:var(--updated-primary-font-weight)] text-[#8187a0] text-[length:var(--updated-primary-font-size)] tracking-[var(--updated-primary-letter-spacing)] leading-[var(--updated-primary-line-height)] [font-style:var(--updated-primary-font-style)]">
+                      {item.label}
+                    </p>
+                    <p className="font-updated-primary font-[number:var(--updated-primary-font-weight)] text-[#394169] text-[length:var(--updated-primary-font-size)] tracking-[var(--updated-primary-letter-spacing)] leading-[var(--updated-primary-line-height)] whitespace-nowrap [font-style:var(--updated-primary-font-style)]">
+                      {item.value}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-end gap-3 w-full">
+        <div className="flex items-start gap-3 w-full">
+          <Button
+            variant="outline"
+            className="flex-1 min-w-[140px] px-[81px] py-4 rounded-[100px] border border-solid border-[#566fe9] text-[#566fe9] font-updated-secondary font-[number:var(--updated-secondary-font-weight)] text-[length:var(--updated-secondary-font-size)] tracking-[var(--updated-secondary-letter-spacing)] leading-[var(--updated-secondary-line-height)] [font-style:var(--updated-secondary-font-style)]"
+          >
+            Update Course Details
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 min-w-[140px] px-[81px] py-4 rounded-[100px] border border-solid border-[#566fe9] text-[#566fe9] font-updated-secondary font-[number:var(--updated-secondary-font-weight)] text-[length:var(--updated-secondary-font-size)] tracking-[var(--updated-secondary-letter-spacing)] leading-[var(--updated-secondary-line-height)] [font-style:var(--updated-secondary-font-style)]"
+          >
+            View Enrolled Students
+          </Button>
+        </div>
+        {/* --- MODIFIED BUTTON --- */}
+        <Button className="w-full py-3 px-[81px] bg-[#566fe9] text-white rounded-[100px] font-semibold">
+          View 6 Unresolved Doubts
+        </Button>
+      </div>
+    </section>
+  );
+};
+
 // --- MAIN PAGE COMPONENT ---
 export default function MyCoursesPage(): JSX.Element {
+  const [isCourseCreated, setIsCourseCreated] = useState(false);
+
+  const handleToggle = () => {
+    setIsCourseCreated((prev) => !prev);
+  };
+
   return (
     <>
       <Sphere />
@@ -369,11 +509,23 @@ export default function MyCoursesPage(): JSX.Element {
         <main className="flex-grow overflow-y-auto">
           <div className="max-w-[1440px] mx-auto px-6 py-12 z-[-1]">
             <CourseHeader />
+
+            {/* --- TEMPORARY TOGGLE BUTTON --- */}
+            <div className="flex justify-center my-4">
+              <Button onClick={handleToggle} variant="outline">
+                Toggle Course State (Dev Only)
+              </Button>
+            </div>
+            {/* ----------------------------- */}
+
             <CourseBanner />
 
-            {/* Central Content Container */}
             <div className="flex flex-col w-full max-w-[750px] mx-auto gap-[60px]">
               <CourseIntroduction tags={courseTags} />
+
+              {/* --- CONDITIONAL INSTRUCTOR SECTION --- */}
+              {isCourseCreated && <InstructorSection />}
+
               <CourseDetailsSection details={courseDetails} />
               <WhatYouWillLearnSection
                 skills={skills}

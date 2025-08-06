@@ -125,7 +125,7 @@ const shellFragmentShader = `
 
 // --- CONSTANTS (Unchanged) ---
 const BLOB_SIZE_PERCENTAGE = 0.17;
-const BLOB_BOTTOM_PADDING_PIXELS = 40;
+const BLOB_BOTTOM_PADDING_PIXELS = 60;
 const FFT_SIZE = 32;
 const AUDIO_ANALYSIS_BINS = 5;
 const VOLUME_TO_REACH_MAX_SCALE = 15;
