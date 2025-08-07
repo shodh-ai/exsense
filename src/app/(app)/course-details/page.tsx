@@ -17,7 +17,7 @@ import {
 } from "@/components/accordion";
 import { Avatar, AvatarImage } from "@/components/avatar";
 import { Badge } from "@/components/badge";
-import { Button } from "@/components/button";
+import  Button  from "@/components/button2";
 import { Card, CardContent } from "@/components/card";
 import CourseMap from "@/components/CourseMap";
 import { Separator } from "@/components/separator";
@@ -403,7 +403,7 @@ const InstructorSection = (): JSX.Element => {
     {
       icon: <MessageSquareWarning className="w-7 h-7 text-[#566fe9]" />,
       label: "Unresolved Doubts",
-      value: "6 pending",
+      value: "5 pending",
     },
     {
       icon: <Star className="w-7 h-7 text-[#566fe9]" />,
@@ -412,12 +412,20 @@ const InstructorSection = (): JSX.Element => {
     },
   ];
 
+  // Find the unresolved doubts data from the analytics array
+  const unresolvedDoubtsData = analyticsData.find(
+    (item) => item.label === "Unresolved Doubts"
+  );
+ 
+  // Extract the number, defaulting to 0 if not found
+  const unresolvedDoubtsCount = unresolvedDoubtsData
+    ? parseInt(unresolvedDoubtsData.value) || 0
+    : 0;
+
   return (
     <section className="flex flex-col items-start gap-8 w-full">
       <div className="flex flex-col items-start gap-6 w-full">
-        <h2 className="font-updated-title-2 font-[number:var(--updated-title-2-font-weight)] text-[#394169] text-[length:var(--updated-title-2-font-size)] tracking-[var(--updated-title-2-letter-spacing)] leading-[var(--updated-title-2-line-height)] [font-style:var(--updated-title-2-font-style)]">
-          Course Analytics
-        </h2>
+        <h2 className="text-xl font-semibold text-black">Course Analytics</h2>
 
         <div className="flex flex-col items-start gap-6 w-full">
           {/* First row of analytics */}
@@ -470,24 +478,24 @@ const InstructorSection = (): JSX.Element => {
         </div>
       </div>
 
-      <div className="flex flex-col items-end gap-3 w-full">
-        <div className="flex items-start gap-3 w-full">
+      {/* --- CORRECTED WRAPPING DIV FOR BUTTONS --- */}
+      <div className="flex flex-col gap-3 w-full">
+        <div className="flex items-center gap-3 w-full">
           <Button
             variant="outline"
-            className="flex-1 min-w-[140px] px-[81px] py-4 rounded-[100px] border border-solid border-[#566fe9] text-[#566fe9] font-updated-secondary font-[number:var(--updated-secondary-font-weight)] text-[length:var(--updated-secondary-font-size)] tracking-[var(--updated-secondary-letter-spacing)] leading-[var(--updated-secondary-line-height)] [font-style:var(--updated-secondary-font-style)]"
+            className="flex-1 w-[200px]  px-[81px] py-4 rounded-[100px] border border-solid border-[#566fe9] text-[#566fe9] font-updated-secondary font-[number:var(--updated-secondary-font-weight)] text-[length:var(--updated-secondary-font-size)] tracking-[var(--updated-secondary-letter-spacing)] leading-[var(--updated-secondary-line-height)] [font-style:var(--updated-secondary-font-style)]"
           >
             Update Course Details
           </Button>
           <Button
             variant="outline"
-            className="flex-1 min-w-[140px] px-[81px] py-4 rounded-[100px] border border-solid border-[#566fe9] text-[#566fe9] font-updated-secondary font-[number:var(--updated-secondary-font-weight)] text-[length:var(--updated-secondary-font-size)] tracking-[var(--updated-secondary-letter-spacing)] leading-[var(--updated-secondary-line-height)] [font-style:var(--updated-secondary-font-style)]"
+            className="flex-1 w-[50%] px-[81px] py-4 rounded-[100px] border border-solid border-[#566fe9] text-[#566fe9] font-updated-secondary font-[number:var(--updated-secondary-font-weight)] text-[length:var(--updated-secondary-font-size)] tracking-[var(--updated-secondary-letter-spacing)] leading-[var(--updated-secondary-line-height)] [font-style:var(--updated-secondary-font-style)]"
           >
             View Enrolled Students
           </Button>
         </div>
-        {/* --- MODIFIED BUTTON --- */}
         <Button className="w-full py-3 px-[81px] bg-[#566fe9] text-white rounded-[100px] font-semibold">
-          View 6 Unresolved Doubts
+          View {unresolvedDoubtsCount} Unresolved Doubts
         </Button>
       </div>
     </section>
