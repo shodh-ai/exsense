@@ -3,8 +3,15 @@
 "use client";
 import React, { JSX, useEffect } from "react";
 import { useSessionStore } from "@/lib/store";
+import { Room } from "livekit-client";
 
-export const MicButton = ({ className }: { className?: string }): JSX.Element => {
+interface MicButtonProps {
+    className?: string;
+    room?: Room;
+    agentIdentity?: string;
+}
+
+export const MicButton = ({ className, room, agentIdentity }: MicButtonProps): JSX.Element => {
     // 1. Get all the states and actions you need from the global store.
     const {
         isMicEnabled,
@@ -13,42 +20,57 @@ export const MicButton = ({ className }: { className?: string }): JSX.Element =>
         setIsMicActivatingPending,
     } = useSessionStore();
 
-    // 2. This effect simulates the backend approval process.
-    //    It only runs when the "pending" state is activated.
-    useEffect(() => {
-        let activationTimeout: NodeJS.Timeout | null = null;
-
-        if (isMicActivatingPending) {
-            console.log("[MicButton] Simulating backend approval: Waiting 3 seconds...");
-            activationTimeout = setTimeout(() => {
-                // After the delay, we set the final "mic on" state.
-                setIsMicEnabled(true);
-                // And we clear the pending state.
-                setIsMicActivatingPending(false);
-                console.log("[MicButton] Simulated backend command received: Mic is now ON.");
-            }, 3000); // 3-second simulated delay
+    // 2. Helper function to send RPC interrupt to livekit-service
+    const sendMicInterruptRPC = async (): Promise<boolean> => {
+        if (!room || !agentIdentity) {
+            console.error("[MicButton] Room or agent identity not available for RPC");
+            return false;
         }
 
-        // Cleanup function to prevent issues if the component unmounts
-        return () => {
-            if (activationTimeout) {
-                clearTimeout(activationTimeout);
-            }
-        };
-    }, [isMicActivatingPending, setIsMicEnabled, setIsMicActivatingPending]);
+        try {
+            console.log("[MicButton] Sending mic interrupt RPC to agent...");
+            
+            // Send RPC to the agent using the new mic interrupt method
+            const response = await room.localParticipant?.performRpc({
+                destinationIdentity: agentIdentity,
+                method: "rox.interaction.AgentInteraction/student_mic_button_interrupt",
+                payload: "", // Empty payload for mic button interrupt
+            });
+
+            console.log("[MicButton] RPC response received:", response);
+            return true;
+        } catch (error) {
+            console.error("[MicButton] RPC call failed:", error);
+            return false;
+        }
+    };
 
 
-    const handleMicToggle = () => {
-        // This is your original, correct logic.
+    const handleMicToggle = async () => {
+        // This is your original, correct logic with RPC integration.
         if (isMicEnabled) {
             // If mic is currently ON, turn it OFF immediately. No pending state needed.
             setIsMicEnabled(false);
             setIsMicActivatingPending(false); // Ensure pending is also reset
             console.log("[MicButton] User intent: Turn OFF mic immediately.");
         } else if (!isMicActivatingPending) {
-            // If mic is OFF and not already pending, initiate the pending state.
+            // If mic is OFF and not already pending, initiate the pending state and send RPC.
             setIsMicActivatingPending(true);
-            console.log("[MicButton] User intent: Turn ON mic. Signaling intent to backend (simulated).");
+            console.log("[MicButton] User intent: Turn ON mic. Sending interrupt RPC to agent...");
+            
+            // Send RPC interrupt to the agent
+            const rpcSuccess = await sendMicInterruptRPC();
+            
+            if (rpcSuccess) {
+                // RPC succeeded - agent acknowledged the interrupt
+                setIsMicEnabled(true);
+                setIsMicActivatingPending(false);
+                console.log("[MicButton] Agent acknowledged interrupt. Mic is now ON.");
+            } else {
+                // RPC failed - reset pending state
+                setIsMicActivatingPending(false);
+                console.error("[MicButton] Failed to send interrupt RPC. Mic remains OFF.");
+            }
         }
     };
 

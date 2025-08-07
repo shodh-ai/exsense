@@ -84,6 +84,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [agentIdentity, setAgentIdentity] = useState<string | null>(null);
   
   const agentServiceClientRef = useRef<AgentInteractionClientImpl | null>(null);
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
@@ -436,6 +437,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
             const data = JSON.parse(new TextDecoder().decode(payload));
             if (data.type === 'agent_ready' && roomInstance.localParticipant) {
                 console.log(`[useLiveKitSession] Agent ready signal received from ${participant.identity}`);
+                setAgentIdentity(participant.identity); // Store the agent identity
                 const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, participant.identity);
                 agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
                 
@@ -518,5 +520,5 @@ export function useLiveKitSession(roomName: string, userName: string) {
     }
   }, []);
 
-  return { isConnected, isLoading, connectionError, startTask, room: roomInstance };
+  return { isConnected, isLoading, connectionError, startTask, room: roomInstance, agentIdentity };
 }

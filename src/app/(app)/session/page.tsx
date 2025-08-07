@@ -75,9 +75,6 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl }:
                     <VideoViewer />
                 </div>
             </div>
-            <div className="w-full h-[60px] flex-shrink-0">
-                <Footer />
-            </div>
         </div>
     );
 }
@@ -124,7 +121,8 @@ export default function Session() {
         isConnected,
         isLoading,
         connectionError,
-        startTask
+        startTask,
+        agentIdentity
     } = useLiveKitSession(shouldInitializeLiveKit ? roomName : '', shouldInitializeLiveKit ? userName : '');
     
     // Get URLs from environment variables
@@ -211,6 +209,7 @@ export default function Session() {
                         componentButtons={componentButtons} 
                         vncUrl={vncUrl} 
                     />
+                    <Footer room={room} agentIdentity={agentIdentity || undefined} />
                 </div>
           
             </SignedIn>
