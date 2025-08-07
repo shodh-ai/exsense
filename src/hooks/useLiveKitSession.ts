@@ -188,8 +188,18 @@ export function useLiveKitSession(roomName: string, userName: string) {
         }
       } else if (request.actionType === ClientUIActionType.START_LISTENING_VISUAL) {
         setIsMicEnabled(true);
+        // Enable microphone so user can be heard
+        if (roomInstance.localParticipant) {
+          await roomInstance.localParticipant.setMicrophoneEnabled(true);
+          console.log('[useLiveKitSession] Microphone enabled - user can now speak');
+        }
       } else if (request.actionType === ClientUIActionType.STOP_LISTENING_VISUAL) {
         setIsMicEnabled(false);
+        // Disable microphone so user cannot be heard
+        if (roomInstance.localParticipant) {
+          await roomInstance.localParticipant.setMicrophoneEnabled(false);
+          console.log('[useLiveKitSession] Microphone disabled - user cannot be heard');
+        }
       } else if (request.actionType === ClientUIActionType.JUPYTER_CLICK_PYODIDE) {
         console.log('[JUPYTER_CLICK_PYODIDE] Received jupyter_click_pyodide action');
         executeBrowserAction({
@@ -335,21 +345,30 @@ export function useLiveKitSession(roomName: string, userName: string) {
 
     const onConnected = async () => {
         setIsLoading(false);
-        // Enable microphone and publish audio track so agent can hear user
+        // Set up microphone but keep it disabled by default
         try {
             console.log('[useLiveKitSession] Setting up microphone...');
-            const audioTrack = await createLocalAudioTrack({
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-            });
             
             if (roomInstance.localParticipant) {
-                await roomInstance.localParticipant.publishTrack(audioTrack, {
-                    source: Track.Source.Microphone,
+                // Enable microphone to set up the track
+                console.log('[useLiveKitSession] Enabling microphone to create track...');
+                await roomInstance.localParticipant.setMicrophoneEnabled(true);
+                
+                // Wait a moment for the track to be properly created
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                // Now disable it so user can't be heard by default
+                console.log('[useLiveKitSession] Disabling microphone - user should not be heard by default');
+                await roomInstance.localParticipant.setMicrophoneEnabled(false);
+                
+                // Verify the actual state after disabling
+                const micTrack = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
+                const actualMicEnabled = micTrack ? !micTrack.isMuted : false;
+                console.log('[useLiveKitSession] Microphone setup complete - LiveKit mic state:', {
+                    hasTrack: !!micTrack,
+                    isMuted: micTrack?.isMuted,
+                    actualMicEnabled: actualMicEnabled
                 });
-                microphoneTrackRef.current = audioTrack;
-                console.log('[useLiveKitSession] Microphone enabled and published');
             }
         } catch (error: any) {
             console.error('[useLiveKitSession] Failed to setup microphone:', error);

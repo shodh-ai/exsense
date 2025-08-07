@@ -63,9 +63,9 @@ export const MicButton = ({ className, room, agentIdentity }: MicButtonProps): J
             
             if (rpcSuccess) {
                 // RPC succeeded - agent acknowledged the interrupt
-                setIsMicEnabled(true);
+                // Don't enable mic here - wait for backend to send START_LISTENING_VISUAL
                 setIsMicActivatingPending(false);
-                console.log("[MicButton] Agent acknowledged interrupt. Mic is now ON.");
+                console.log("[MicButton] Agent acknowledged interrupt. Waiting for backend to enable mic via START_LISTENING_VISUAL.");
             } else {
                 // RPC failed - reset pending state
                 setIsMicActivatingPending(false);
