@@ -86,43 +86,82 @@ const ExcalidrawWrapper = () => {
           excalidrawAPI.updateScene(scene);
         },
         convertSkeletonToExcalidraw: (skeletonElements: any[]) => {
-          // Simple fallback implementation for skeleton to Excalidraw conversion
-          return skeletonElements.map((element, index) => ({
-            id: `element_${Date.now()}_${index}`,
-            type: element.type || 'rectangle',
-            x: element.x || 0,
-            y: element.y || 0,
-            width: element.width || 120,
-            height: element.height || 60,
-            angle: 0,
-            strokeColor: element.strokeColor || '#1e1e1e',
-            backgroundColor: element.backgroundColor || 'transparent',
-            fillStyle: 'solid',
-            strokeWidth: element.strokeWidth || 2,
-            strokeStyle: 'solid',
-            roughness: 1,
-            opacity: 100,
-            groupIds: [],
-            frameId: null,
-            roundness: element.type === 'rectangle' ? { type: 3, value: 8 } : null,
-            boundElements: null,
-            updated: Date.now(),
-            link: null,
-            locked: false,
-            isDeleted: false,
-            customData: null,
-            versionNonce: Math.floor(Math.random() * 1000000),
-            seed: Math.floor(Math.random() * 2147483647),
-            text: element.text || '',
-            fontSize: element.fontSize || 16,
-            fontFamily: element.type === 'text' ? 1 : undefined,
-            textAlign: element.type === 'text' ? 'center' : undefined,
-            verticalAlign: element.type === 'text' ? 'middle' : undefined,
-            containerId: element.type === 'text' ? null : undefined,
-            originalText: element.type === 'text' ? element.text || '' : undefined,
-            lineHeight: element.type === 'text' ? 1.25 : undefined,
-            baseline: element.type === 'text' ? Math.round((element.fontSize || 16) * 0.9) : undefined
-          }));
+          // Enhanced implementation for skeleton to Excalidraw conversion with proper element type handling
+          return skeletonElements.map((element, index) => {
+            const baseElement = {
+              id: `element_${Date.now()}_${index}`,
+              type: element.type || 'rectangle',
+              x: element.x || 0,
+              y: element.y || 0,
+              angle: 0,
+              strokeColor: element.strokeColor || '#1e1e1e',
+              backgroundColor: element.backgroundColor || 'transparent',
+              fillStyle: 'solid',
+              strokeWidth: element.strokeWidth || 2,
+              strokeStyle: 'solid',
+              roughness: 1,
+              opacity: 100,
+              groupIds: [],
+              frameId: null,
+              boundElements: null,
+              updated: Date.now(),
+              link: null,
+              locked: false,
+              isDeleted: false,
+              customData: null,
+              versionNonce: Math.floor(Math.random() * 1000000),
+              seed: Math.floor(Math.random() * 2147483647)
+            };
+
+            // Handle different element types with their specific properties
+            switch (element.type) {
+              case 'line':
+              case 'arrow':
+                return {
+                  ...baseElement,
+                  width: 0,
+                  height: 0,
+                  points: element.points || [[0, 0], [element.width || 100, element.height || 0]],
+                  lastCommittedPoint: null,
+                  startBinding: null,
+                  endBinding: null,
+                  startArrowhead: element.type === 'arrow' ? 'arrow' : null,
+                  endArrowhead: element.type === 'arrow' ? 'arrow' : null
+                };
+              
+              case 'text':
+                return {
+                  ...baseElement,
+                  width: element.width || 120,
+                  height: element.height || 25,
+                  text: element.text || '',
+                  fontSize: element.fontSize || 16,
+                  fontFamily: 1,
+                  textAlign: 'center',
+                  verticalAlign: 'middle',
+                  containerId: null,
+                  originalText: element.text || '',
+                  lineHeight: 1.25,
+                  baseline: Math.round((element.fontSize || 16) * 0.9)
+                };
+              
+              case 'ellipse':
+                return {
+                  ...baseElement,
+                  width: element.width || 120,
+                  height: element.height || 120
+                };
+              
+              case 'rectangle':
+              default:
+                return {
+                  ...baseElement,
+                  width: element.width || 120,
+                  height: element.height || 60,
+                  roundness: { type: 3, value: 8 }
+                };
+            }
+          });
         }
       };
       
