@@ -20,17 +20,26 @@ body {
 /* In src/app/globals.css */
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 8px; /* Width of the scrollbar */
+  width: 8px; /* Thickness of the vertical scrollbar */
 }
 
+/* --- Horizontal Scrollbar --- */
+.custom-scrollbar::-webkit-scrollbar:horizontal {
+  height: 4px; /* Thickness of the horizontal scrollbar */
+}
+
+
+/* --- Shared Styles for Track and Thumb --- */
+
 .custom-scrollbar::-webkit-scrollbar-track {
-  background:#e6e8ff; /* Color of the track */
+  background: #e6e8ff; /* Color of the track */
   border-radius: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #566fe9; /* Color of the scroll thumb */
-  border-radius: 10px; /* Roundness of the scroll thumb */
+  border-radius: 10px;
+   /* Roundness of the scroll thumb */
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {

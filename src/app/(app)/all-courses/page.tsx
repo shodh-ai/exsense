@@ -1,5 +1,4 @@
 "use client";
-
 // src/pages/CoursesPage.tsx
 import { ChevronDownIcon, SearchIcon, XIcon } from "lucide-react";
 import React, { JSX } from "react";
@@ -21,7 +20,8 @@ const CoursesPage = (): JSX.Element => {
       id: 1,
       title: "Creative Writing for Beginners",
       instructor: "Prof. Akash Jain",
-      description: "Discover your writing voice and explore storytelling, dialogue, and narrative structure.",
+      description:
+        "Discover your writing voice and explore storytelling, dialogue, and narrative structure.",
       rating: "4.5",
       reviews: "1203",
       level: "Beginner",
@@ -32,7 +32,8 @@ const CoursesPage = (): JSX.Element => {
       id: 2,
       title: "Advanced Graphic Design Techniques",
       instructor: "Jane Smith",
-      description: "Master the principles of design, color theory, and advanced software tools to elevate your projects.",
+      description:
+        "Master the principles of design, color theory, and advanced software tools to elevate your projects.",
       rating: "4.8",
       reviews: "895",
       level: "Intermediate",
@@ -43,7 +44,8 @@ const CoursesPage = (): JSX.Element => {
       id: 3,
       title: "Introduction to UX/UI Design",
       instructor: "Michael Chen",
-      description: "Learn user-centered design principles, prototyping, and usability testing to create intuitive interfaces.",
+      description:
+        "Learn user-centered design principles, prototyping, and usability testing to create intuitive interfaces.",
       rating: "4.7",
       reviews: "1530",
       level: "Beginner",
@@ -54,7 +56,8 @@ const CoursesPage = (): JSX.Element => {
       id: 4,
       title: "Introduction to UX/UI Design",
       instructor: "Michael Chen",
-      description: "Learn user-centered design principles, prototyping, and usability testing to create intuitive interfaces.",
+      description:
+        "Learn user-centered design principles, prototyping, and usability testing to create intuitive interfaces.",
       rating: "4.7",
       reviews: "1530",
       level: "Beginner",
@@ -65,7 +68,8 @@ const CoursesPage = (): JSX.Element => {
       id: 5,
       title: "Introduction to UX/UI Design",
       instructor: "Michael Chen",
-      description: "Learn user-centered design principles, prototyping, and usability testing to create intuitive interfaces.",
+      description:
+        "Learn user-centered design principles, prototyping, and usability testing to create intuitive interfaces.",
       rating: "4.7",
       reviews: "1530",
       level: "Beginner",
@@ -74,18 +78,19 @@ const CoursesPage = (): JSX.Element => {
     },
   ];
 
+  // MODIFICATION: CSS for the scrollbar is defined here
+ 
   return (
-    // Main page wrapper with the background gradient effect
     <>
+      {/* MODIFICATION: Style tag to inject the CSS */}
+   
+
       <Sphere />
+      <div
+        className={`h-full w-full bg-transparent flex flex-col px-4 pt-4 pb-4 ${plusJakartaSans.className}`}
+      >
+      
 
-      <div className={`h-[97%] w-full bg-transparent flex flex-col px-4 pt-4 pb-4 ${plusJakartaSans.className}`}>
-        <div className="absolute top-0 right-0 h-full w-1/2 bg-gradient-to-bl from-blue-200/50 via-purple-200/30 to-transparent -z-0 blur-3xl"></div>
-
-        {/* 
-          MODIFICATION: Changed mb-4 to mb-2 to reduce the vertical gap 
-          between this header and the main content below.
-        */}
         <div className="w-full flex justify-between items-center mb-2 z-10">
           <h1 className="font-semibold text-black text-xl md:text-2xl">
             Our Interactive Session
@@ -95,9 +100,9 @@ const CoursesPage = (): JSX.Element => {
           </button>
         </div>
 
-        <main className="relative w-full max-w-4xl self-center overflow-y-auto rounded-3xl p-6 md:p-8 z-10 flex flex-col mt-0">
+        {/* MODIFICATION: Added 'custom-scrollbar' and 'pr-2' to the main scrolling container */}
+        <main className="relative w-full h-[80%] max-w-4xl self-center rounded-3xl p-6 md:p-8 z-10 flex flex-col mt-0 overflow-y-auto custom-scrollbar pr-2">
           {/* Filter and Search section */}
-          {/* MODIFICATION: Added responsive classes for stacking and width */}
           <div className="flex flex-col min-[500px]:flex-row min-[500px]:items-center gap-4 mb-8">
             <Button
               variant="outline"
@@ -106,7 +111,6 @@ const CoursesPage = (): JSX.Element => {
               <span className="font-medium text-sm">Browse</span>
               <ChevronDownIcon className="w-4 h-4 " />
             </Button>
-
             <div className="flex w-full flex-grow items-center rounded-full border border-solid border-gray-300/70 bg-white/80 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-200/50 transition-all duration-300">
               <Input
                 className="border-0 bg-transparent shadow-none w-full h-[48px] pl-5 pr-2 text-black placeholder:text-gray-400 placeholder:font-medium placeholder:text-sm placeholder:leading-normal focus:ring-0"
@@ -120,16 +124,20 @@ const CoursesPage = (): JSX.Element => {
               </Button>
             </div>
           </div>
-
-          {/* Course cards list */}
-          <div className="flex flex-col gap-6 overflow-y-scroll pr-2 max-h-[480px] custom-scrollbar">
+          
+          {/* This inner div no longer needs any special classes */}
+          <div className="flex flex-col gap-6">
             {courses.map((course, index) => (
-              <CourseCard key={course.id} course={course} isActive={index === 0} />
+              <CourseCard
+                key={course.id}
+                course={course}
+                isActive={index === 0}
+              />
             ))}
           </div>
         </main>
-        
-        <div >
+
+        <div>
           <Footer />
         </div>
       </div>

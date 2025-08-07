@@ -1,14 +1,11 @@
 "use client";
 
-import React, { JSX } from "react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/button";
-import { Card, CardContent } from "@/components/card";
+import { Star } from "lucide-react";
+import Image from "next/image";
+import React from "react";
 
-// 1. DEFINE THE SHAPE OF THE COURSE DATA
-// This interface defines the "contract" for the data this component expects to receive.
 export interface Course {
-  id: number | string; // Use string if your database uses UUIDs
+  id: number;
   title: string;
   instructor: string;
   description: string;
@@ -19,82 +16,70 @@ export interface Course {
   image: string;
 }
 
-// 2. DEFINE THE COMPONENT'S PROPS
-// We pass the course object, an `isActive` flag for styling, and the new interactive props.
+// MODIFICATION: Removed isActive from the component's props
 interface CourseCardProps {
   course: Course;
-  isActive: boolean;
-  isEnrolled: boolean; // NEW: Determines the button's state
-  onEnroll: (courseId: number | string) => void; // NEW: The function to call when the button is clicked
 }
 
-const CourseCard = ({ course, isActive, isEnrolled, onEnroll }: CourseCardProps): JSX.Element => {
+const CourseCard = ({ course }: CourseCardProps) => {
+  const renderStars = () => {
+    const totalStars = 5;
+    const filledStars = Math.floor(parseFloat(course.rating));
+    const stars = [];
+
+    for (let i = 0; i < totalStars; i++) {
+      stars.push(
+        <Star
+          key={i}
+          className={`w-5 h-5 ${
+            i < filledStars ? "text-indigo-500 fill-indigo-500" : "text-gray-300"
+          }`}
+        />
+      );
+    }
+    return stars;
+  };
+
   return (
-    // The main card container. It uses `cn` to conditionally apply a blue border if it's "active".
-    <Card
-      className={cn(
-        "flex w-full flex-col gap-4 overflow-hidden rounded-2xl border bg-white p-4 shadow-sm transition-all duration-300 sm:flex-row",
-        isActive && "border-blue-500 ring-2 ring-blue-200/50" // Highlight style for active card
-      )}
+    // MODIFICATION: Removed the conditional styling. 
+    // All cards will now have the same style.
+    <div
+      className="flex items-center gap-5 p-4 w-full rounded-2xl bg-white shadow-lg border border-blue-200/50"
     >
-      {/* Course Image */}
-      <img
-        className="h-32 w-full rounded-lg object-cover sm:h-full sm:w-32"
-        alt={`Cover image for ${course.title}`}
+      <Image
+        className="w-[200px] h-[140px] rounded-lg object-cover flex-shrink-0"
+        alt={course.title}
         src={course.image}
+        width={200}
+        height={140}
       />
 
-      {/* Course Content */}
-      <CardContent className="flex flex-1 flex-col p-0">
-        <div className="flex flex-1 flex-col gap-2">
-          {/* Title and Instructor */}
-          <div className="flex flex-col">
-            <h3 className="font-semibold text-lg leading-tight text-black">
-              {course.title}
-            </h3>
-            <p className="text-sm text-gray-500">by {course.instructor}</p>
-          </div>
+      <div className="flex flex-col items-start gap-3 w-full">
+        <div className="flex flex-col items-start w-full">
+          <h3 className="text-xl font-bold text-[#394169]">{course.title}</h3>
+          <p className="text-md text-[#8187a0]">{course.instructor}</p>
+        </div>
 
-          {/* Description */}
-          <p className="text-sm text-gray-700 line-clamp-2">
-            {course.description}
+        <p className="text-sm text-[#394169] w-full max-w-lg">
+          {course.description}
+        </p>
+
+        <div className="flex flex-col items-start gap-1">
+          <div className="flex items-center gap-2">
+            <span className="text-md font-bold text-[#566fe9]">
+              {course.rating}
+            </span>
+            <div className="flex items-center">{renderStars()}</div>
+            <span className="text-sm text-[#8187a0] whitespace-nowrap">
+              ({course.reviews} reviews)
+            </span>
+          </div>
+          <p className="text-sm text-[#8187a0]">
+            {course.level} · {course.duration}
           </p>
         </div>
-
-        {/* Course Details and Enroll Button */}
-        <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between">
-          {/* Details like rating, level, duration */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-600">
-            <div className="flex items-center gap-1">
-              <img src="/star.svg" alt="Rating" className="h-4 w-4" />
-              <span>{course.rating} ({course.reviews} reviews)</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <img src="/difficulty.svg" alt="Level" className="h-4 w-4" />
-              <span>{course.level}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <img src="/duration.svg" alt="Duration" className="h-4 w-4" />
-              <span>{course.duration}</span>
-            </div>
-          </div>
-
-          {/* 3. THE INTERACTIVE ENROLLMENT BUTTON */}
-          <Button
-            onClick={() => onEnroll(course.id)}
-            disabled={isEnrolled}
-            className={cn(
-              "h-9 rounded-full px-6 text-sm font-semibold",
-              isEnrolled
-                ? "cursor-not-allowed bg-gray-300 text-gray-500" // Style for when already enrolled
-                : "bg-[#566fe9] text-white hover:bg-[#4a5fcf]" // Style for when available
-            )}
-          >
-            {isEnrolled ? "Enrolled" : "Enroll Now"}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };
 
