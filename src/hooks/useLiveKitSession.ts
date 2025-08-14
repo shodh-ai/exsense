@@ -86,6 +86,10 @@ export function useLiveKitSession(roomName: string, userName: string) {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [agentIdentity, setAgentIdentity] = useState<string | null>(null);
   
+  // New state for UI display
+  const [transcriptionMessages, setTranscriptionMessages] = useState<string[]>([]);
+  const [statusMessages, setStatusMessages] = useState<string[]>([]);
+  
   const agentServiceClientRef = useRef<AgentInteractionClientImpl | null>(null);
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
 
@@ -191,14 +195,18 @@ export function useLiveKitSession(roomName: string, userName: string) {
         // Enable microphone so user can be heard
         if (roomInstance.localParticipant) {
           await roomInstance.localParticipant.setMicrophoneEnabled(true);
-          console.log('[useLiveKitSession] Microphone enabled - user can now speak');
+          const statusMsg = 'Microphone enabled - user can now speak';
+          console.log(`[useLiveKitSession] ${statusMsg}`);
+          setStatusMessages(prev => [...prev.slice(-9), statusMsg]); // Keep last 10 status messages
         }
       } else if (request.actionType === ClientUIActionType.STOP_LISTENING_VISUAL) {
         setIsMicEnabled(false);
         // Disable microphone so user cannot be heard
         if (roomInstance.localParticipant) {
           await roomInstance.localParticipant.setMicrophoneEnabled(false);
-          console.log('[useLiveKitSession] Microphone disabled - user cannot be heard');
+          const statusMsg = 'Microphone disabled - user cannot be heard';
+          console.log(`[useLiveKitSession] ${statusMsg}`);
+          setStatusMessages(prev => [...prev.slice(-9), statusMsg]); // Keep last 10 status messages
         }
       } else if (request.actionType === ClientUIActionType.JUPYTER_CLICK_PYODIDE) {
         console.log('[JUPYTER_CLICK_PYODIDE] Received jupyter_click_pyodide action');
@@ -447,7 +455,15 @@ export function useLiveKitSession(roomName: string, userName: string) {
     // Handler for transcription data
     const handleTranscriptionReceived = (transcriptions: TranscriptionSegment[], participant?: Participant, publication?: TrackPublication) => {
         console.log(`[useLiveKitSession] Transcription received:`, transcriptions);
-        // Handle transcription data if needed
+        
+        // Extract text from transcription segments and add to UI
+        transcriptions.forEach(segment => {
+            if (segment.text && segment.text.trim()) {
+                const speaker = participant?.identity || 'Unknown';
+                const message = `${speaker}: ${segment.text.trim()}`;
+                setTranscriptionMessages(prev => [...prev.slice(-19), message]); // Keep last 20 messages
+            }
+        });
     };
 
     const handleDataReceived = async (payload: Uint8Array, participant?: RemoteParticipant) => {
@@ -539,5 +555,14 @@ export function useLiveKitSession(roomName: string, userName: string) {
     }
   }, []);
 
-  return { isConnected, isLoading, connectionError, startTask, room: roomInstance, agentIdentity };
+  return { 
+    isConnected, 
+    isLoading, 
+    connectionError, 
+    startTask, 
+    room: roomInstance, 
+    agentIdentity,
+    transcriptionMessages,
+    statusMessages
+  };
 }

@@ -21,6 +21,7 @@ const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
 const ExcalidrawWrapper = dynamic(() => import('@/components/session/ExcalidrawWrapper'), { ssr: false });
 const VncViewer = dynamic(() => import('@/components/session/VncViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
+const MessageDisplay = dynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
 
 // Fallback room for when LiveKit is not connected
 const fallbackRoom = new Room();
@@ -122,7 +123,9 @@ export default function Session() {
         isLoading,
         connectionError,
         startTask,
-        agentIdentity
+        agentIdentity,
+        transcriptionMessages,
+        statusMessages
     } = useLiveKitSession(shouldInitializeLiveKit ? roomName : '', shouldInitializeLiveKit ? userName : '');
     
     // Get URLs from environment variables
@@ -211,6 +214,14 @@ export default function Session() {
                     />
                     <Footer room={room} agentIdentity={agentIdentity || undefined} />
                 </div>
+                
+                {/* Display transcription and status messages when connected */}
+                {isConnected && (
+                    <MessageDisplay 
+                        transcriptionMessages={transcriptionMessages || []}
+                        statusMessages={statusMessages || []}
+                    />
+                )}
           
             </SignedIn>
             

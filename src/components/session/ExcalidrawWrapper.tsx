@@ -165,8 +165,6 @@ const ExcalidrawWrapper = () => {
         }
       };
       
-      console.log('Excalidraw debug functions are now available at window.__excalidrawDebug');
-      console.log('Available methods:', Object.keys(window.__excalidrawDebug));
     }
 
     return () => {

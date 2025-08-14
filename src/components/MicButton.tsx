@@ -45,14 +45,42 @@ export const MicButton = ({ className, room, agentIdentity }: MicButtonProps): J
         }
     };
 
+    // 3. Helper function to send RPC when user manually stops listening
+    const sendStopListeningRPC = async (): Promise<boolean> => {
+        if (!room || !agentIdentity) {
+            console.error("[MicButton] Room or agent identity not available for stop listening RPC");
+            return false;
+        }
+
+        try {
+            console.log("[MicButton] Sending stop listening RPC to agent...");
+            
+            // Send RPC to notify agent that user manually stopped listening
+            const response = await room.localParticipant?.performRpc({
+                destinationIdentity: agentIdentity,
+                method: "rox.interaction.AgentInteraction/student_stopped_listening",
+                payload: "", // Empty payload for stop listening
+            });
+
+            console.log("[MicButton] Stop listening RPC response received:", response);
+            return true;
+        } catch (error) {
+            console.error("[MicButton] Stop listening RPC call failed:", error);
+            return false;
+        }
+    };
+
 
     const handleMicToggle = async () => {
         // This is your original, correct logic with RPC integration.
         if (isMicEnabled) {
-            // If mic is currently ON, turn it OFF immediately. No pending state needed.
+            // If mic is currently ON, turn it OFF and notify backend
             setIsMicEnabled(false);
             setIsMicActivatingPending(false); // Ensure pending is also reset
             console.log("[MicButton] User intent: Turn OFF mic immediately.");
+            
+            // Notify backend that user manually stopped listening
+            await sendStopListeningRPC();
         } else if (!isMicActivatingPending) {
             // If mic is OFF and not already pending, initiate the pending state and send RPC.
             setIsMicActivatingPending(true);
