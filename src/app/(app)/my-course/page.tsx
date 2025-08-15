@@ -47,7 +47,7 @@ export default function CoursesPage(): JSX.Element {
           apiClient.get('/api/enrollments/student/me') // Fetches courses the user is enrolled in
         ]);
 
-        setAllCourses(coursesResponse.courses || []);
+        setAllCourses(coursesResponse || []);
         setMyEnrollments(enrollmentsResponse.enrollments || []);
 
       } catch (err: any) {

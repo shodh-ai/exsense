@@ -20,7 +20,15 @@ export const createApiClient = ({ getToken }: ApiClientOptions) => {
             'Content-Type': 'application/json',
         });
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}${path}`, { // Assuming your API base URL is in an env variable
+        const fullUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}${path}`;
+        console.log('🔧 API Request Debug:', {
+            baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+            path,
+            fullUrl,
+            method
+        });
+        
+        const response = await fetch(fullUrl, {
             method,
             headers,
             body: body ? JSON.stringify(body) : undefined,
