@@ -133,6 +133,9 @@ export function useLiveKitSession(roomName: string, userName: string) {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${clerkToken}`,
                 },
+                body: JSON.stringify({
+                    curriculum_id: 'arastuthegreat', // Mock curriculum ID for testing
+                }),
             });
             
             console.log('Token fetch response status:', response.status);

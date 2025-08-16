@@ -2,6 +2,7 @@
 
 import React, { JSX, useState, useEffect, useMemo } from "react";
 import { useAuth } from "@clerk/nextjs"; // Import Clerk's auth hook
+import { useRouter } from "next/navigation"; // Import Next.js router for navigation
 import { createApiClient } from "@/lib/apiclient"; // Import our new API client
 
 // Import your components
@@ -25,6 +26,7 @@ export default function CoursesPage(): JSX.Element {
 
   // --- AUTHENTICATION & API CLIENT ---
   const { getToken, isSignedIn } = useAuth();
+  const router = useRouter(); // For navigation to session page
   // Memoize the apiClient so it's not recreated on every render
   const apiClient = useMemo(() => createApiClient({ getToken }), [getToken]);
 
@@ -79,6 +81,27 @@ export default function CoursesPage(): JSX.Element {
     }
   };
 
+  // --- SESSION HANDLER ---
+  const handleStartSession = async (courseId: string | number) => {
+    try {
+      console.log(`Starting session for course: ${courseId}`);
+      
+      // Find the course details for the session
+      const selectedCourse = allCourses.find(course => course.id === courseId);
+      
+      if (!selectedCourse) {
+        throw new Error('Course not found');
+      }
+
+      // Navigate to session page with course details
+      router.push(`/session?courseId=${courseId}&title=${encodeURIComponent(selectedCourse.title)}`);
+      
+    } catch (err: any) {
+      setError(`Failed to start session: ${err.message}`);
+      alert(`Failed to start session: ${err.message}`);
+    }
+  };
+
   // --- RENDER LOGIC ---
   if (isLoading) {
     return <div>Loading courses...</div>; // Or your fancy loading component
@@ -106,12 +129,11 @@ export default function CoursesPage(): JSX.Element {
               allCourses.map((course, index) => (
                 <CourseCard
                   key={course.id}
-                  course={{
-                    ...course,
-                    onEnroll: handleEnroll, // Pass the enroll handler
-                    isEnrolled: enrolledCourseIds.has(course.id) // Check if user is enrolled
-                  }}
-                  isActive={index === 0} // You might want to change this logic
+                  course={course}
+                  isActive={index === 0}
+                  isEnrolled={enrolledCourseIds.has(course.id)}
+                  onEnroll={handleEnroll}
+                  onStartSession={handleStartSession}
                 />
               ))
             ) : (

@@ -1,6 +1,7 @@
 // /src/hooks/useVisualActionExecutor.ts
 import { useState, useCallback, useRef } from 'react';
 import { exportToCanvas } from '@excalidraw/excalidraw';
+import { convertSkeletonToExcalidrawElements, type SkeletonElement } from './convertSkeletonToExcalidrawElements';
 
 // MODIFICATION 1: Add proper type imports and interfaces
 // Import the correct binding type from Excalidraw
@@ -18,23 +19,6 @@ export interface ToolCommand {
   parameters: Record<string, any>;
 }
 
-interface SkeletonElement {
-  type: 'rectangle' | 'ellipse' | 'diamond' | 'text' | 'arrow' | 'line';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  text?: string;
-  strokeColor?: string;
-  backgroundColor?: string;
-  fontSize?: number;
-  strokeWidth?: number;
-  connections?: { from: string; to: string }[];
-  points?: number[][];
-  id?: string;
-  startBinding?: { elementId: string; focus?: number; gap?: number };
-  endBinding?: { elementId: string; focus?: number; gap?: number };
-}
 
 interface CanvasMode {
   mode: 'ai_controlled' | 'student_controlled' | 'collaborative';
@@ -74,6 +58,8 @@ const calculateTextDimensions = (text: string, fontSize = 16) => {
 
 // Generate unique ID for elements
 const generateId = () => `element_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+// convertSkeletonToExcalidrawElements is now imported from a lightweight util
 
 const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): UseVisualActionExecutorReturn => {
   const [canvasMode, setCanvasMode] = useState<CanvasMode>({
@@ -200,279 +186,6 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
 
     return { startX, startY, endX, endY };
   }, []);
-
-  // Convert skeleton elements to Excalidraw format with enhanced functionality
-  const convertSkeletonToExcalidrawElements = useCallback((skeletonElements: SkeletonElement[]) => {
-    const elements: any[] = [];
-    let elementIndex = 0;
-    const elementMap = new Map<string, any>();
-    
-    // Create base element with proper Excalidraw structure
-    const createBaseElement = (element: any, baseId: string) => ({
-      id: baseId,
-      type: element.type || "rectangle",
-      x: Math.round(element.x || 0),
-      y: Math.round(element.y || 0),
-      width: Math.round(element.width || 120),
-      height: Math.round(element.height || 60),
-      angle: 0,
-      strokeColor: element.strokeColor || "#1e1e1e",
-      backgroundColor: element.backgroundColor || "transparent",
-      fillStyle: "solid",
-      strokeWidth: element.strokeWidth || 2,
-      strokeStyle: "solid",
-      roughness: 1,
-      opacity: 100,
-      groupIds: [],
-      frameId: null,
-      roundness: null,
-      boundElements: null,
-      updated: Date.now(),
-      link: null,
-      locked: false,
-      isDeleted: false,
-      customData: null,
-      versionNonce: Math.floor(Math.random() * 1000000),
-      seed: Math.floor(Math.random() * 2147483647),
-      index: elementIndex++
-    });
-    
-    // First pass: Create all non-arrow elements and build element map
-    skeletonElements.forEach((element, index) => {
-      if (element.type === 'arrow') return;
-      
-      const baseId = element.id || `ai_element_${Date.now()}_${elementIndex++}`;
-      
-      let adjustedWidth = element.width || 120;
-      let adjustedHeight = element.height || 60;
-      
-      if (element.text) {
-        const textDims = calculateTextDimensions(element.text, element.fontSize || 16);
-        adjustedWidth = Math.max(adjustedWidth, textDims.width + 20);
-        adjustedHeight = Math.max(adjustedHeight, textDims.height + 20);
-      }
-      
-      const baseElement = createBaseElement({
-        ...element,
-        width: adjustedWidth,
-        height: adjustedHeight
-      }, baseId);
-
-      const createTextElement = (text: string, x: number, y: number, fontSize = 16) => {
-        const textDims = calculateTextDimensions(text, fontSize);
-        return {
-          ...createBaseElement({
-            type: "text",
-            x, y,
-            width: textDims.width,
-            height: textDims.height
-          }, `text_${Date.now()}_${elementIndex++}`),
-          text: text.replace(/\\n/g, '\n'),
-          fontSize,
-          fontFamily: 1,
-          textAlign: "center",
-          verticalAlign: "middle",
-          containerId: null,
-          originalText: text.replace(/\\n/g, '\n'),
-          lineHeight: 1.25,
-          baseline: Math.round(fontSize * 0.9)
-        };
-      };
-
-      let createdElement;
-
-      switch (element.type) {
-        case "text":
-          const textDimensions = calculateTextDimensions(element.text || "Text", element.fontSize || 20);
-          createdElement = {
-            ...baseElement,
-            type: "text",
-            text: element.text || "Text",
-            fontSize: element.fontSize || 20,
-            fontFamily: 1,
-            textAlign: "left",
-            verticalAlign: "top",
-            containerId: null,
-            originalText: element.text || "Text",
-            lineHeight: 1.25,
-            baseline: Math.round((element.fontSize || 20) * 0.9),
-            width: textDimensions.width,
-            height: textDimensions.height
-          };
-          elements.push(createdElement);
-          break;
-
-        case "rectangle":
-          createdElement = { 
-            ...baseElement, 
-            type: "rectangle", 
-            roundness: { type: 3, value: 8 } 
-          };
-          elements.push(createdElement);
-          if (element.text) {
-            const textDims = calculateTextDimensions(element.text, 16);
-            elements.push(createTextElement(
-              element.text,
-              baseElement.x + (baseElement.width - textDims.width) / 2,
-              baseElement.y + (baseElement.height - textDims.height) / 2
-            ));
-          }
-          break;
-
-        case "diamond":
-          createdElement = { ...baseElement, type: "diamond" };
-          elements.push(createdElement);
-          if (element.text) {
-            const textDims = calculateTextDimensions(element.text, 14);
-            elements.push(createTextElement(
-              element.text,
-              baseElement.x + (baseElement.width - textDims.width) / 2,
-              baseElement.y + (baseElement.height - textDims.height) / 2,
-              14
-            ));
-          }
-          break;
-
-        case "ellipse":
-          createdElement = { ...baseElement, type: "ellipse" };
-          elements.push(createdElement);
-          if (element.text) {
-            const textDims = calculateTextDimensions(element.text, 16);
-            elements.push(createTextElement(
-              element.text,
-              baseElement.x + (baseElement.width - textDims.width) / 2,
-              baseElement.y + (baseElement.height - textDims.height) / 2
-            ));
-          }
-          break;
-
-        case "line":
-          const linePoints = element.points || [[0, 0], [element.width || 100, element.height || 0]];
-          createdElement = {
-            ...baseElement,
-            type: "line",
-            points: linePoints,
-            lastCommittedPoint: null,
-            startBinding: null,
-            endBinding: null,
-            startArrowhead: null,
-            endArrowhead: null
-          };
-          elements.push(createdElement);
-          break;
-
-        default:
-          createdElement = { ...baseElement };
-          elements.push(createdElement);
-          if (element.text) {
-            const textDims = calculateTextDimensions(element.text, 16);
-            elements.push(createTextElement(
-              element.text,
-              baseElement.x + (baseElement.width - textDims.width) / 2,
-              baseElement.y + (baseElement.height - textDims.height) / 2
-            ));
-          }
-      }
-
-      if (element.id && createdElement) {
-        elementMap.set(element.id, createdElement);
-      }
-    });
-
-    // Second pass: Create arrows with proper positioning and bindings
-    skeletonElements.forEach((element, index) => {
-      if (element.type !== 'arrow') return;
-      
-      const arrowId = element.id || `arrow_${Date.now()}_${elementIndex++}`;
-      
-      let startElement = null;
-      let endElement = null;
-      let hasValidBindings = false;
-
-      if (element.startBinding && element.startBinding.elementId) {
-        startElement = elementMap.get(element.startBinding.elementId);
-        if (startElement) hasValidBindings = true;
-      }
-
-      if (element.endBinding && element.endBinding.elementId) {
-        endElement = elementMap.get(element.endBinding.elementId);
-        if (endElement) hasValidBindings = true;
-      }
-
-      let arrowX = element.x || 0;
-      let arrowY = element.y || 0;
-      let arrowWidth = element.width || 100;
-      let arrowHeight = element.height || 0;
-      let arrowPoints = [[0, 0], [arrowWidth, arrowHeight]];
-
-      if (hasValidBindings && startElement && endElement) {
-        const connectionPoints = calculateConnectionPoints(startElement, endElement);
-        
-        arrowX = Math.min(connectionPoints.startX, connectionPoints.endX);
-        arrowY = Math.min(connectionPoints.startY, connectionPoints.endY);
-        arrowWidth = Math.abs(connectionPoints.endX - connectionPoints.startX);
-        arrowHeight = connectionPoints.endY - connectionPoints.startY;
-        
-        arrowPoints = [
-          [connectionPoints.startX - arrowX, connectionPoints.startY - arrowY],
-          [connectionPoints.endX - arrowX, connectionPoints.endY - arrowY]
-        ];
-      }
-
-      const arrowElement = {
-        ...createBaseElement({
-          type: "arrow",
-          x: arrowX,
-          y: arrowY,
-          width: arrowWidth,
-          height: arrowHeight,
-          strokeColor: element.strokeColor || "#1e1e1e",
-          strokeWidth: element.strokeWidth || 2
-        }, arrowId),
-        startArrowhead: null,
-        endArrowhead: "arrow",
-        points: arrowPoints,
-        lastCommittedPoint: null,
-        startBinding: null,
-        endBinding: null
-      };
-
-      // MODIFICATION 2: Fix the binding type issue
-      // Instead of assigning objects that don't match the expected type,
-      // we need to handle bindings properly or set them to null
-      if (hasValidBindings) {
-        if (element.startBinding && startElement) {
-          // OPTION 1: Set to null if we can't create proper binding
-          arrowElement.startBinding = null;
-          
-          // OPTION 2: If you need actual bindings, you would need to create them properly:
-          // arrowElement.startBinding = {
-          //   elementId: startElement.id,
-          //   focus: element.startBinding.focus || 0,
-          //   gap: element.startBinding.gap || 1,
-          //   fixedPoint: null // Required by PointBinding type
-          // } as PointBinding;
-        }
-
-        if (element.endBinding && endElement) {
-          // OPTION 1: Set to null if we can't create proper binding
-          arrowElement.endBinding = null;
-          
-          // OPTION 2: If you need actual bindings, you would need to create them properly:
-          // arrowElement.endBinding = {
-          //   elementId: endElement.id,
-          //   focus: element.endBinding.focus || 0,
-          //   gap: element.endBinding.gap || 1,
-          //   fixedPoint: null // Required by PointBinding type
-          // } as PointBinding;
-        }
-      }
-
-      elements.push(arrowElement);
-    });
-    
-    return elements;
-  }, [calculateConnectionPoints]);
 
   // Handle element modifications
   const handleElementModifications = useCallback(async (modifications: any[]) => {
@@ -904,4 +617,4 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
   };
 };
 
-export { useVisualActionExecutor };
+export { useVisualActionExecutor, type SkeletonElement };

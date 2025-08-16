@@ -10,7 +10,7 @@ import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
 import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
 
 // File: exsense/src/app/session/page.tsx
@@ -86,6 +86,13 @@ export default function Session() {
     const handleIntroComplete = () => setIsIntroActive(false);
     const { user, isSignedIn, isLoaded } = useUser();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    
+    // Get course details from URL parameters
+    const courseId = searchParams.get('courseId');
+    const courseTitle = searchParams.get('title');
+    
+    console.log('Session page - Course details:', { courseId, courseTitle });
     
     // Add debugging for authentication state
     useEffect(() => {

@@ -84,7 +84,8 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
   }]);
   const [elements, setElements] = useState<any[]>([]);
   const [appState, setAppState] = useState<any>({});
-  
+
+
   // CRITICAL FIX: Use refs to prevent infinite loops
   const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isUpdatingRef = useRef(false);

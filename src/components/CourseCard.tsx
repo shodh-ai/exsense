@@ -26,9 +26,10 @@ interface CourseCardProps {
   isActive: boolean;
   isEnrolled: boolean; // NEW: Determines the button's state
   onEnroll: (courseId: number | string) => void; // NEW: The function to call when the button is clicked
+  onStartSession?: (courseId: number | string) => void; // NEW: The function to call when starting a session
 }
 
-const CourseCard = ({ course, isActive, isEnrolled, onEnroll }: CourseCardProps): JSX.Element => {
+const CourseCard = ({ course, isActive, isEnrolled, onEnroll, onStartSession }: CourseCardProps): JSX.Element => {
   return (
     // The main card container. It uses `cn` to conditionally apply a blue border if it's "active".
     <Card
@@ -79,19 +80,24 @@ const CourseCard = ({ course, isActive, isEnrolled, onEnroll }: CourseCardProps)
             </div>
           </div>
 
-          {/* 3. THE INTERACTIVE ENROLLMENT BUTTON */}
-          <Button
-            onClick={() => onEnroll(course.id)}
-            disabled={isEnrolled}
-            className={cn(
-              "h-9 rounded-full px-6 text-sm font-semibold",
-              isEnrolled
-                ? "cursor-not-allowed bg-gray-300 text-gray-500" // Style for when already enrolled
-                : "bg-[#566fe9] text-white hover:bg-[#4a5fcf]" // Style for when available
-            )}
-          >
-            {isEnrolled ? "Enrolled" : "Enroll Now"}
-          </Button>
+          {/* 3. THE INTERACTIVE ENROLLMENT/SESSION BUTTON */}
+          {isEnrolled ? (
+            // Show "Start Session" button for enrolled courses
+            <Button
+              onClick={() => onStartSession?.(course.id)}
+              className="h-9 rounded-full px-6 text-sm font-semibold bg-green-600 text-white hover:bg-green-700"
+            >
+              Start Session
+            </Button>
+          ) : (
+            // Show "Enroll Now" button for non-enrolled courses
+            <Button
+              onClick={() => onEnroll(course.id)}
+              className="h-9 rounded-full px-6 text-sm font-semibold bg-[#566fe9] text-white hover:bg-[#4a5fcf]"
+            >
+              Enroll Now
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
