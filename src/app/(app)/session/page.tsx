@@ -87,27 +87,28 @@ export default function Session() {
     const { user, isSignedIn, isLoaded } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
+    const SESSION_DEBUG = false;
     
     // Get course details from URL parameters
     const courseId = searchParams.get('courseId');
     const courseTitle = searchParams.get('title');
     
-    console.log('Session page - Course details:', { courseId, courseTitle });
+    if (SESSION_DEBUG) console.log('Session page - Course details:', { courseId, courseTitle });
     
     // Add debugging for authentication state
     useEffect(() => {
-        console.log('Session page auth state:', { isLoaded, isSignedIn, userId: user?.id });
+        if (SESSION_DEBUG) console.log('Session page auth state:', { isLoaded, isSignedIn, userId: user?.id });
     }, [isLoaded, isSignedIn, user?.id]);
     
     // Redirect to login if not authenticated (after Clerk has loaded)
     useEffect(() => {
         if (isLoaded && !isSignedIn) {
-            console.log('User not authenticated, redirecting to login');
+            if (SESSION_DEBUG) console.log('User not authenticated, redirecting to login');
             // Use window.location.href to force a complete page refresh
             // This helps resolve Clerk authentication state synchronization issues
             const timeoutId = setTimeout(() => {
                 if (!isSignedIn) {
-                    console.log('Authentication state still not synced, forcing redirect to login');
+                    if (SESSION_DEBUG) console.log('Authentication state still not synced, forcing redirect to login');
                     window.location.href = '/login';
                 }
             }, 2000); // Increased timeout to 2 seconds for better state settling
@@ -143,7 +144,7 @@ export default function Session() {
     const { disconnectVNC } = useBrowserActionExecutor(room, sessionBubbleUrl);
     const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room);
 
-    console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
+    if (SESSION_DEBUG) console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 
     const componentButtons: ButtonConfig[] = [
         {
@@ -170,7 +171,7 @@ export default function Session() {
     useEffect(() => {
         // Only connect when the LiveKit session is fully established
         if (isConnected && sessionBubbleUrl) {
-            console.log("LiveKit connected, now connecting to session-bubble services...");
+            if (SESSION_DEBUG) console.log("LiveKit connected, now connecting to session-bubble services...");
             
             // The VNC connection is now managed by the useBrowserActionExecutor hook
             // We still need to manage the sensor connection here
@@ -180,7 +181,7 @@ export default function Session() {
         // Return a cleanup function to disconnect when the component unmounts
         return () => {
             if (isConnected) {
-                console.log("Session component unmounting, disconnecting from session-bubble.");
+                if (SESSION_DEBUG) console.log("Session component unmounting, disconnecting from session-bubble.");
                 disconnectVNC();
                 disconnectFromVNCSensor();
             }

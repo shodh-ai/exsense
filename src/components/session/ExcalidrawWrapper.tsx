@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef } from "react"; // Import useRef
+import React, { useCallback, useEffect } from "react";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { useSessionStore } from "@/lib/store";
@@ -16,6 +16,10 @@ declare global {
       giveStudentControl: () => void;
       takeAIControl: () => void;
       getSceneElements: () => any[];
+      getFiles?: () => Record<string, any>;
+      getAppState?: () => any;
+      scrollToContent?: (elements: any[], opts?: { fitToContent?: boolean; animate?: boolean }) => void;
+      centerOnAll?: () => void;
       clearCanvas: () => void;
       sendMessage: (message: string) => void;
       setElements: (elements: any[]) => void;
@@ -46,8 +50,7 @@ const ExcalidrawWrapper = () => {
     handleChangeWithControl
   } = useExcalidrawIntegration();
 
-  // Ref to prevent infinite loops when resetting scroll position
-  const isRestoringPosition = useRef(false);
+  // Removed scroll position reset to allow programmatic scrolling (scrollToContent)
 
   // Sync with session store
   useEffect(() => {
@@ -56,10 +59,11 @@ const ExcalidrawWrapper = () => {
     }
   }, [excalidrawAPI, excalidrawAPIFromStore, setExcalidrawAPIToStore]);
 
-  // Expose debug functions to window
+  // Expose debug functions to window (merge instead of overwrite)
   useEffect(() => {
     if (excalidrawAPI) {
       window.__excalidrawDebug = {
+        ...(window.__excalidrawDebug || {}),
         toggleLaserPointer: () => toggleLaserPointer(),
         captureCanvasScreenshot: async () => {
           const screenshot = await captureCanvasScreenshot();
@@ -78,12 +82,22 @@ const ExcalidrawWrapper = () => {
         takeAIControl: () => {
           takeAIControl('Debug: AI control activated');
         },
-        getSceneElements: () => excalidrawAPI.getSceneElements(),
+        getSceneElements: () => excalidrawAPI.getSceneElements?.(),
+        getAppState: () => excalidrawAPI.getAppState?.(),
+        scrollToContent: excalidrawAPI.scrollToContent?.bind(excalidrawAPI),
+        centerOnAll: () => {
+          try {
+            const els = excalidrawAPI.getSceneElements?.() || [];
+            if (els.length && excalidrawAPI.scrollToContent) {
+              excalidrawAPI.scrollToContent(els, { fitToContent: true, animate: true });
+            }
+          } catch {}
+        },
         clearCanvas: () => clearCanvas(),
         sendMessage: (message: string) => sendChatMessage(message),
         setElements: (elements: any[]) => updateElements(elements),
         updateScene: (scene: { elements?: any[], appState?: any }) => {
-          excalidrawAPI.updateScene(scene);
+          excalidrawAPI.updateScene?.(scene);
         },
         convertSkeletonToExcalidraw: (skeletonElements: any[]) => {
           // Enhanced implementation for skeleton to Excalidraw conversion with proper element type handling
@@ -164,9 +178,8 @@ const ExcalidrawWrapper = () => {
           });
         }
       };
-      
     }
-
+    
     return () => {
       // Cleanup
       delete window.__excalidrawDebug;
@@ -177,48 +190,52 @@ const ExcalidrawWrapper = () => {
   const handleExcalidrawAPI = useCallback((api: any) => {
     if (api && api !== excalidrawAPI) {
       setExcalidrawAPI(api);
+      // Expose useful debug helpers on window for quick diagnostics
+      try {
+        (window as any).__excalidrawDebug = {
+          ...(window as any).__excalidrawDebug,
+          getSceneElements: api.getSceneElements?.bind(api),
+          getFiles: api.getFiles?.bind(api),
+          updateScene: api.updateScene?.bind(api),
+          scrollToContent: api.scrollToContent?.bind(api),
+          getAppState: api.getAppState?.bind(api),
+          centerOnAll: () => {
+            try {
+              const els = api.getSceneElements?.() || [];
+              if (els.length && api.scrollToContent) {
+                api.scrollToContent(els, { fitToContent: true, animate: true });
+              }
+            } catch {}
+          },
+        };
+      } catch {}
     }
   }, [excalidrawAPI, setExcalidrawAPI]);
   
-  // This function will be called whenever the canvas changes.
-  // We use it to detect and prevent scrolling.
-  const handleCanvasChange = useCallback((elements: any, appState: any) => {
-    if (isRestoringPosition.current) {
-      return;
-    }
-
-    if (excalidrawAPI && (appState.scrollX !== 0 || appState.scrollY !== 0)) {
-      isRestoringPosition.current = true;
-      excalidrawAPI.updateScene({
-        elements,
-        appState: {
-          ...appState,
-          scrollX: 0,
-          scrollY: 0,
-        },
-      });
-      // Use setTimeout to reset the flag after the update has processed
-      setTimeout(() => {
-        isRestoringPosition.current = false;
-      }, 0);
-    }
-  }, [excalidrawAPI]);
+  // Removed handleCanvasChange which prevented scrolling
 
 
   return (
-    <div style={{ height: '100vh', width: '100%', zIndex: 10, backgroundColor: 'transparent' }}>
+    <div className="excalidraw-no-ui" style={{ position: 'relative', height: '100vh', width: '100%', zIndex: 20, backgroundColor: 'transparent' }}>
       <Excalidraw
         excalidrawAPI={handleExcalidrawAPI}
         onPointerUpdate={handlePointerUpdate}
-        onChange={handleCanvasChange} // Add the change handler to prevent scrolling
         renderTopRightUI={() => null} // This will remove the "Library" button
         UIOptions={{
-          // This hides the hand tool from the toolbar
+          canvasActions: {
+            changeViewBackgroundColor: false,
+            clearCanvas: false,
+            export: false,
+            loadScene: false,
+            saveToActiveFile: false,
+            toggleTheme: false,
+            saveAsImage: false,
+          },
           tools: {
-            hand: false,
+            image: false,
           },
         }}
-        viewModeEnabled={false}
+        viewModeEnabled={true}
         zenModeEnabled={false}
         gridModeEnabled={false}
         initialData={{
@@ -230,6 +247,19 @@ const ExcalidrawWrapper = () => {
           }
         }}
       />
+      {/* Scoped UI suppression for control panel: hide main menu, toolbar, and library trigger */}
+      <style jsx global>{`
+        .excalidraw-no-ui .layer-ui__wrapper__top-right { display: none !important; }
+        .excalidraw-no-ui .layer-ui__wrapper__top-left { display: none !important; }
+        .excalidraw-no-ui .sidebar-trigger { display: none !important; }
+        .excalidraw-no-ui .App-toolbar-container { display: none !important; }
+        .excalidraw-no-ui .App-bottom-bar { display: none !important; }
+        .excalidraw-no-ui .help-icon { display: none !important; }
+        .excalidraw-no-ui .fixed-zen-mode-transition,
+        .excalidraw-no-ui .zen-mode-transition { display: none !important; }
+        /* Fallback: hide the entire UI overlay layer if any remnants remain */
+        .excalidraw-no-ui .layer-ui__wrapper { display: none !important; }
+      `}</style>
     </div>
   );
 };

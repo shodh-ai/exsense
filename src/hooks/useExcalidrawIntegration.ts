@@ -340,7 +340,7 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
         console.log('Processing canvas update');
         
         try {
-          const excalidrawElements = visualActionExecutor.convertSkeletonToExcalidrawElements(data.elements);
+          const excalidrawElements = await visualActionExecutor.prepareElementsWithFiles(data.elements);
           
           if (excalidrawAPI && excalidrawElements.length > 0) {
             isUpdatingRef.current = true;
@@ -348,11 +348,11 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
             setTimeout(() => {
               if (!isUpdatingRef.current) return; // Safety check
               
+              const currentAppState = excalidrawAPI.getAppState?.() || appState;
               excalidrawAPI.updateScene({
                 elements: excalidrawElements,
                 appState: { 
-                  ...appState,
-                  viewBackgroundColor: "#ffffff",
+                  ...currentAppState,
                   selectedElementIds: {},
                   editingElement: null,
                   editingGroupId: null,
@@ -449,11 +449,11 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
 
   const clearCanvas = useCallback(() => {
     if (excalidrawAPI && !isUpdatingRef.current) {
+      const currentAppState = excalidrawAPI.getAppState?.() || appState;
       excalidrawAPI.updateScene({ 
         elements: [], 
         appState: { 
-          ...appState, 
-          viewBackgroundColor: "#ffffff",
+          ...currentAppState, 
           viewModeEnabled: visualActionExecutor.canvasMode.mode === 'ai_controlled' && !interactionSensor.isLaserActive
         } 
       });
@@ -480,58 +480,72 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
   // Store-based visualization data listener (from memory fix)
   const visualizationData = useSessionStore(state => state.visualizationData);
   const setVisualizationData = useSessionStore(state => state.setVisualizationData);
+  const EXCAL_DEBUG = false;
   
   useEffect(() => {
     if (visualizationData && excalidrawAPI && !isUpdatingRef.current) {
-      console.log(`[EXCALIDRAW-INTEGRATION] Processing ${visualizationData.length} elements from store`);
+      if (EXCAL_DEBUG) {
+        console.log(`[EXCALIDRAW-INTEGRATION] Processing ${visualizationData.length} elements from store`);
+      }
       
       try {
         isUpdatingRef.current = true;
         
-        // Get existing elements from canvas to preserve them
-        const existingElements = excalidrawAPI.getSceneElements();
-        
         // Small delay for smooth rendering
         setTimeout(() => {
-          try {
-            // Convert skeleton data to Excalidraw format
-            if (window.__excalidrawDebug && window.__excalidrawDebug.convertSkeletonToExcalidraw) {
-              const newExcalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(visualizationData);
-              console.log(`[EXCALIDRAW-INTEGRATION] Converted to ${newExcalidrawElements.length} new Excalidraw elements`);
-              
-              // Combine existing elements with new ones (accumulative approach)
-              const allElements = [...existingElements, ...newExcalidrawElements];
-              console.log(`[EXCALIDRAW-INTEGRATION] Total elements on canvas: ${allElements.length}`);
-              
-              // Update the scene with accumulated elements
-              excalidrawAPI.updateScene({ 
-                elements: allElements,
-                appState: {
-                  ...appState,
-                  viewBackgroundColor: "transparent"
+          (async () => {
+            try {
+              // Use image-aware converter that also loads files into Excalidraw
+              const excalidrawElements = await visualActionExecutor.prepareElementsWithFiles(visualizationData);
+              if (EXCAL_DEBUG) {
+                console.log(`[EXCALIDRAW-INTEGRATION] Prepared ${excalidrawElements.length} Excalidraw elements (image-aware)`);
+              }
+
+              // Replace canvas with current visualization batch to avoid duplicates during streaming
+              // Guard: do not clear scene on empty batches (prevents flicker/blank)
+              if (excalidrawElements.length > 0) {
+                const currentAppState = excalidrawAPI.getAppState?.() || appState;
+                excalidrawAPI.updateScene({ 
+                  elements: excalidrawElements,
+                  appState: {
+                    ...currentAppState
+                  }
+                });
+              } else if (EXCAL_DEBUG) {
+                console.log('[EXCALIDRAW-INTEGRATION] Skipping update: empty batch received, keeping previous scene');
+              }
+
+              try {
+                const files = excalidrawAPI.getFiles?.() || {};
+                const fileKeys = Object.keys(files);
+                const sceneEls = excalidrawAPI.getSceneElements?.() || [];
+                if (EXCAL_DEBUG || fileKeys.length === 0 || sceneEls.length === 0) {
+                  console.log('[EXCALIDRAW-INTEGRATION] Files in scene:', fileKeys);
+                  console.log('[EXCALIDRAW-INTEGRATION] Scene element count after update:', sceneEls.length);
                 }
-              });
-              
-              // Scroll to content after a brief delay (if available)
+              } catch {}
+
+              // Scroll to content if supported
               setTimeout(() => {
-                if (window.__excalidrawDebug && (window.__excalidrawDebug as any).scrollToContent) {
-                  (window.__excalidrawDebug as any).scrollToContent();
-                }
+                try {
+                  const els = excalidrawAPI.getSceneElements?.() || excalidrawElements;
+                  if (els.length > 0 && excalidrawAPI.scrollToContent) {
+                    excalidrawAPI.scrollToContent(els, { fitToContent: true, animate: true });
+                  }
+                } catch {}
               }, 100);
-              
-              console.log('[EXCALIDRAW-INTEGRATION] ✅ Visualization rendered successfully');
-              
-            } else {
-              console.warn('[EXCALIDRAW-INTEGRATION] ⚠️ Debug functions not available for conversion');
+
+              if (EXCAL_DEBUG) {
+                console.log('[EXCALIDRAW-INTEGRATION] ✅ Visualization rendered successfully');
+              }
+
+            } catch (error) {
+              console.error('[EXCALIDRAW-INTEGRATION] ❌ Error rendering visualization:', error);
+            } finally {
+              isUpdatingRef.current = false;
+              // Do not clear visualizationData here; streaming appends cumulatively.
             }
-          } catch (error) {
-            console.error('[EXCALIDRAW-INTEGRATION] ❌ Error rendering visualization:', error);
-          } finally {
-            isUpdatingRef.current = false;
-            
-            // Clean up store data
-            setVisualizationData(null);
-          }
+          })();
         }, 50);
         
       } catch (error) {
@@ -539,7 +553,7 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
         isUpdatingRef.current = false;
       }
     }
-  }, [visualizationData, excalidrawAPI, appState, setVisualizationData]);
+  }, [visualizationData, excalidrawAPI, appState, setVisualizationData, visualActionExecutor]);
 
   return {
     // Core state

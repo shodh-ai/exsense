@@ -8,16 +8,9 @@ interface MessageDisplayProps {
 }
 
 export default function MessageDisplay({ transcriptionMessages, statusMessages }: MessageDisplayProps) {
-  const transcriptionRef = useRef<HTMLDivElement>(null);
   const statusRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (transcriptionRef.current) {
-      transcriptionRef.current.scrollTop = transcriptionRef.current.scrollHeight;
-    }
-  }, [transcriptionMessages]);
-
   useEffect(() => {
     if (statusRef.current) {
       statusRef.current.scrollTop = statusRef.current.scrollHeight;
@@ -48,24 +41,7 @@ export default function MessageDisplay({ transcriptionMessages, statusMessages }
           </div>
         </div>
 
-        {/* Transcription Messages */}
-        <div>
-          <h4 className="text-xs font-medium mb-1 text-blue-400">Transcription</h4>
-          <div
-            ref={transcriptionRef}
-            className="max-h-32 overflow-y-auto scrollbar-thin scrollbar-thumb-white/20 scrollbar-track-transparent"
-          >
-            {transcriptionMessages.length === 0 ? (
-              <p className="text-xs text-gray-400 italic">No transcriptions yet...</p>
-            ) : (
-              transcriptionMessages.map((message, index) => (
-                <div key={index} className="text-xs py-1 border-b border-white/10 last:border-b-0">
-                  {message}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        {/* Transcription panel intentionally removed. Transcripts are displayed on the avatar bubble via TranscriptEventEmitter. */}
       </div>
     </div>
   );

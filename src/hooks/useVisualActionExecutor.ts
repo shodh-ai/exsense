@@ -42,6 +42,7 @@ interface UseVisualActionExecutorReturn {
   handleElementModifications: (modifications: any[]) => Promise<void>;
   handleElementHighlighting: (highlightedElements: any[]) => Promise<void>;
   convertSkeletonToExcalidrawElements: (skeletonElements: SkeletonElement[]) => any[];
+  prepareElementsWithFiles: (skeletonElements: SkeletonElement[]) => Promise<any[]>;
   setIsGenerating: (generating: boolean) => void;
 }
 
@@ -102,8 +103,8 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
         elements: currentElements.filter((el: any) => !el.isDeleted),
         appState: {
           ...currentAppState,
-          exportBackground: true,
-          viewBackgroundColor: '#ffffff'
+          exportBackground: false,
+          viewBackgroundColor: (currentAppState && (currentAppState as any).viewBackgroundColor) ?? 'transparent'
         },
         files: excalidrawAPI.getFiles?.() || null,
         exportPadding: 20,
@@ -116,6 +117,133 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
       return null;
     }
   }, [excalidrawAPI]);
+
+  // Helper: fetch an image URL and return a dataURL
+  const fetchAsDataURL = useCallback(async (url: string): Promise<{ dataURL: string; mimeType: string } | null> => {
+    const toDataURL = async (res: Response) => {
+      const blob = await res.blob();
+      const mimeType = blob.type || 'image/png';
+      return await new Promise<{ dataURL: string; mimeType: string }>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve({ dataURL: reader.result as string, mimeType });
+        reader.readAsDataURL(blob);
+      });
+    };
+
+    // Try direct fetch first
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (res.ok) {
+        return await toDataURL(res);
+      }
+    } catch (e) {
+      console.warn('[prepareElementsWithFiles] Direct image fetch failed, will try proxy:', url, e);
+    }
+
+    // Fallback: use Visualizer proxy to bypass CORS
+    try {
+      const proxied = `http://localhost:8002/proxy-image?url=${encodeURIComponent(url)}`;
+      const res2 = await fetch(proxied, { mode: 'cors' });
+      if (!res2.ok) return null;
+      return await toDataURL(res2);
+    } catch (e2) {
+      console.warn('[prepareElementsWithFiles] Proxy image fetch failed:', url, e2);
+      return null;
+    }
+  }, []);
+
+  // Normalize skeletons: ensure ids and fileIds for images
+  const normalizeSkeletons = useCallback((skeletons: SkeletonElement[]): SkeletonElement[] => {
+    const genId = () => `el_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    return skeletons.map((s) => {
+      const id = s.id || genId();
+      if (s.type === 'image') {
+        return { ...s, id, fileId: s.fileId || id };
+      }
+      return { ...s, id };
+    });
+  }, []);
+
+  // Build Excalidraw files from image skeletons and attach them, then return elements
+  const prepareElementsWithFiles = useCallback(async (skeletonElements: SkeletonElement[]): Promise<any[]> => {
+    const normalized = normalizeSkeletons(skeletonElements);
+    const files: Record<string, any> = {};
+
+    // Collect image URLs
+    const imageSkels = normalized.filter((s) => s.type === 'image' && !!s.imageUrl);
+    await Promise.all(
+      imageSkels.map(async (img) => {
+        const fileId = img.fileId as string;
+        const fetched = await fetchAsDataURL(img.imageUrl as string);
+        if (fetched && fileId) {
+          files[fileId] = {
+            id: fileId,
+            dataURL: fetched.dataURL,
+            mimeType: fetched.mimeType,
+            created: Date.now(),
+            // name is optional; helpful for debugging
+            name: `image-${fileId}`,
+          };
+        }
+      })
+    );
+
+    // Attach files if any
+    if (excalidrawAPI && Object.keys(files).length > 0 && typeof excalidrawAPI.addFiles === 'function') {
+      try {
+        excalidrawAPI.addFiles(files);
+      } catch (e) {
+        console.warn('addFiles failed:', e);
+      }
+    }
+
+    // Convert to elements (converter will use fileId on images)
+    const raw = convertSkeletonToExcalidrawElements(normalized);
+    // Post-normalize to guarantee visibility and valid geometry
+    const fixed = raw.map((e: any) => {
+      if (!e) return null;
+      const out: any = { ...e };
+      // Coerce coordinates
+      if (out.x == null || Number.isNaN(out.x)) out.x = 0;
+      if (out.y == null || Number.isNaN(out.y)) out.y = 0;
+      // Coerce dimensions
+      if (typeof out.width !== 'number' || Number.isNaN(out.width)) out.width = 1;
+      if (typeof out.height !== 'number' || Number.isNaN(out.height)) out.height = 1;
+      // Ensure arrays
+      if (!Array.isArray(out.groupIds)) out.groupIds = [];
+      if (!Array.isArray(out.boundElements)) out.boundElements = [];
+      // Ensure text fields
+      if (out.type === 'text') {
+        if (typeof out.text !== 'string') out.text = '';
+        if (typeof out.fontSize !== 'number' || Number.isNaN(out.fontSize)) out.fontSize = 16;
+        if (typeof out.lineHeight !== 'number' || Number.isNaN(out.lineHeight)) out.lineHeight = 1.2;
+        if (typeof out.baseline !== 'number' || Number.isNaN(out.baseline)) out.baseline = Math.round(out.fontSize);
+      }
+      // Line/arrow points
+      if (out.type === 'arrow' || out.type === 'line') {
+        if (!Array.isArray(out.points) || out.points.length < 2) {
+          const w = out.width || 100;
+          const h = out.height || 100;
+          out.points = [[0, 0], [w, h]];
+        } else {
+          out.points = out.points
+            .filter((p: any) => Array.isArray(p) && p.length === 2 && p.every((n: any) => typeof n === 'number' && !Number.isNaN(n)));
+          if (out.points.length < 2) {
+            const w = out.width || 100;
+            const h = out.height || 100;
+            out.points = [[0, 0], [w, h]];
+          }
+        }
+      }
+      // Defaults
+      if (out.isDeleted) out.isDeleted = false;
+      if (out.opacity == null) out.opacity = 100;
+      if (out.strokeWidth == null) out.strokeWidth = 2;
+      if (!out.strokeColor) out.strokeColor = '#1e1e1e';
+      return out;
+    }).filter((e: any) => e && typeof e === 'object');
+    return fixed;
+  }, [excalidrawAPI, fetchAsDataURL, normalizeSkeletons]);
 
   // Fixed arrow positioning function
   const calculateConnectionPoints = useCallback((fromElement: any, toElement: any) => {
@@ -404,11 +532,11 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
       
       // Use setTimeout to ensure proper rendering
       setTimeout(() => {
+        const currentAppState = excalidrawAPI.getAppState?.() || {};
         excalidrawAPI.updateScene({
           elements: excalidrawElements,
           appState: {
-            ...excalidrawAPI.getAppState(),
-            viewBackgroundColor: "#ffffff",
+            ...currentAppState,
             selectedElementIds: {},
             editingElement: null,
             editingGroupId: null
@@ -613,6 +741,7 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
     handleElementModifications,
     handleElementHighlighting,
     convertSkeletonToExcalidrawElements,
+    prepareElementsWithFiles,
     setIsGenerating
   };
 };

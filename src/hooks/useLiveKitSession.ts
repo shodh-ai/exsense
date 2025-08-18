@@ -6,9 +6,11 @@ import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActio
 import { useSessionStore, SessionView } from '@/lib/store';
 import { useAuth } from '@clerk/nextjs';
 import { useBrowserActionExecutor } from './useBrowserActionExecutor';
+import { transcriptEventEmitter } from '@/lib/TranscriptEventEmitter';
 
 // File: exsense/src/hooks/useLiveKitSession.ts
 
+const LIVEKIT_DEBUG = false;
 
 
 // --- RPC UTILITIES ---
@@ -42,7 +44,7 @@ class LiveKitRpcAdapter implements Rpc {
     const fullMethodName = `${service}/${method}`;
     const payloadString = uint8ArrayToBase64(data);
     try {
-      console.log(`F2B RPC Request: To=${this.agentIdentity}, Method=${fullMethodName}`);
+      if (LIVEKIT_DEBUG) console.log(`F2B RPC Request: To=${this.agentIdentity}, Method=${fullMethodName}`);
       const responseString = await this.localParticipant.performRpc({
         destinationIdentity: this.agentIdentity,
         method: fullMethodName,
@@ -102,17 +104,17 @@ export function useLiveKitSession(roomName: string, userName: string) {
     
     let mounted = true;
     const connectToRoom = async () => {
-        console.log('useLiveKitSession - connectToRoom called:', { roomName, userName });
+        if (LIVEKIT_DEBUG) console.log('useLiveKitSession - connectToRoom called:', { roomName, userName });
         if (!roomName || !userName) {
-            console.log('Missing roomName or userName, skipping connection');
+            if (LIVEKIT_DEBUG) console.log('Missing roomName or userName, skipping connection');
             return;
         }
         if (roomInstance.state === ConnectionState.Connected || roomInstance.state === ConnectionState.Connecting) {
-            console.log('Room already connected/connecting, skipping');
+            if (LIVEKIT_DEBUG) console.log('Room already connected/connecting, skipping');
             return;
         }
 
-        console.log('Starting LiveKit connection process');
+        if (LIVEKIT_DEBUG) console.log('Starting LiveKit connection process');
         setIsLoading(true);
         setConnectionError(null);
         try {
@@ -321,20 +323,17 @@ export function useLiveKitSession(roomName: string, userName: string) {
       } else if ((request.actionType as number) === 49) { // GENERATE_VISUALIZATION
         console.log('[B2F RPC] Handling GENERATE_VISUALIZATION');
         try {
-          // Extract elements from request parameters
-          const elements = request.parameters?.elements ? JSON.parse(request.parameters.elements) : null;
-          
+          const params = request.parameters || {} as any;
+          // Path A: Precomputed elements provided
+          const elements = params.elements ? JSON.parse(params.elements) : null;
           if (elements && Array.isArray(elements)) {
             console.log(`[B2F RPC] Parsed ${elements.length} elements from RPC`);
-            
-            // Use store-based approach (from memory fix)
             const { setVisualizationData } = useSessionStore.getState();
             if (setVisualizationData) {
               console.log('[B2F RPC] Setting visualization data in store...');
               setVisualizationData(elements);
             } else {
               console.warn('[B2F RPC] Store setVisualizationData not available, using direct method');
-              // Fallback to direct rendering
               if (typeof window !== 'undefined' && window.__excalidrawDebug) {
                 const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(elements);
                 window.__excalidrawDebug.setElements(excalidrawElements);
@@ -342,11 +341,241 @@ export function useLiveKitSession(roomName: string, userName: string) {
               }
             }
           } else {
-            console.error('[B2F RPC] ❌ No valid elements found in GENERATE_VISUALIZATION request');
+          // Path B: Only prompt provided -> call Visualizer service from frontend
+          const prompt = params.prompt as string | undefined;
+          const topicContext = (params.topic_context as string | undefined) || '';
+          if (!prompt) {
+            console.error('[B2F RPC] ❌ GENERATE_VISUALIZATION missing both elements and prompt');
+          } else {
+            console.log('[B2F RPC] Optimistic UI: showing placeholder and calling Visualizer...');
+            // --- Optimistic UI: show placeholder immediately ---
+            const placeholderSkeleton = [
+              {
+                id: 'generating_placeholder',
+                type: 'text',
+                text: '🎨 Generating diagram...',
+                x: 100,
+                y: 80,
+                width: 260,
+                height: 40,
+                fontSize: 20,
+                strokeColor: '#1e1e1e'
+              }
+            ];
+            try {
+              const { setVisualizationData } = useSessionStore.getState();
+              if (setVisualizationData) {
+                setVisualizationData(placeholderSkeleton as any);
+              } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
+                const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(placeholderSkeleton);
+                window.__excalidrawDebug.setElements(excalidrawElements);
+              }
+            } catch (phErr) {
+              console.warn('[B2F RPC] Placeholder render failed (non-fatal):', phErr);
+            }
+
+            console.log('[B2F RPC] Attempting streaming Visualizer service...');
+            try {
+              const streamingResp = await fetch('http://localhost:8002/generate-diagram-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
+              });
+
+              if (streamingResp.ok && streamingResp.body) {
+                const reader = streamingResp.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffered = '';
+                let gotAny = false;
+                // Local accumulators for both store and direct Excalidraw path
+                const byId = new Map<string, any>();
+                const byKey = new Map<string, any>();
+                let ordered: any[] = [];
+                let localSkeleton: any[] = [];
+                // Clear placeholder before first element
+                try {
+                  const { setVisualizationData } = useSessionStore.getState();
+                  if (setVisualizationData) {
+                    setVisualizationData([] as any);
+                  } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
+                    window.__excalidrawDebug.setElements([]);
+                  }
+                } catch {}
+
+                while (true) {
+                  const { value, done } = await reader.read();
+                  if (done) break;
+                  buffered += decoder.decode(value, { stream: true });
+                  // Process complete lines (NDJSON)
+                  while (true) {
+                    const nl = buffered.indexOf('\n');
+                    if (nl === -1) break;
+                    const line = buffered.slice(0, nl).trim();
+                    buffered = buffered.slice(nl + 1);
+                    if (!line || line.startsWith('```')) continue;
+                    try {
+                      const elementObj = JSON.parse(line);
+                      gotAny = true;
+                      // Build a stable geometry-based key for id-less elements
+                      const makeKey = (e: any) => {
+                        const t = e?.type || 'unknown';
+                        const step = 16;
+                        const q = (n: any) => Math.round(Number(n ?? 0) / step) * step;
+                        const x = q(e?.x);
+                        const y = q(e?.y);
+                        const w = q(e?.width);
+                        const h = q(e?.height);
+                        const cid = e?.containerId || '';
+                        if (t === 'text') {
+                          // For text, use position + containerId only; sizes churn a lot during layout
+                          return `${t}|${cid}|${x}|${y}`;
+                        }
+                        return `${t}|${cid}|${x}|${y}|${w}|${h}`;
+                      };
+
+                      const id = elementObj?.id as string | undefined;
+                      const key = makeKey(elementObj);
+                      const isDelete = !!elementObj?.isDeleted;
+
+                      const replaceInOrdered = (predicate: (e: any) => boolean, replacement?: any) => {
+                        const idx = ordered.findIndex(predicate);
+                        if (idx >= 0) {
+                          if (replacement) ordered[idx] = replacement; else ordered.splice(idx, 1);
+                        } else if (replacement) {
+                          ordered.push(replacement);
+                        }
+                      };
+
+                      if (id) {
+                        // If something already occupies this geometry key with a different id, remove it first
+                        const prevAtKey = byKey.get(key);
+                        if (prevAtKey && prevAtKey.id && prevAtKey.id !== id) {
+                          byId.delete(prevAtKey.id);
+                          replaceInOrdered((e) => (e.id ? e.id === prevAtKey.id : makeKey(e) === key));
+                        }
+
+                        if (byId.has(id)) {
+                          if (isDelete) {
+                            byId.delete(id);
+                            replaceInOrdered((e) => e.id === id);
+                          } else {
+                            byId.set(id, elementObj);
+                            // Replace by id and by key to cover id churn scenarios
+                            replaceInOrdered((e) => e.id === id, elementObj);
+                            replaceInOrdered((e) => makeKey(e) === key, elementObj);
+                          }
+                        } else if (!isDelete) {
+                          byId.set(id, elementObj);
+                          replaceInOrdered((e) => e.id === id, elementObj);
+                          replaceInOrdered((e) => makeKey(e) === key, elementObj);
+                        }
+                        // Keep key map in sync
+                        byKey.set(key, elementObj);
+                      } else {
+                        // No id: use geometry key
+                        if (byKey.has(key)) {
+                          if (isDelete) {
+                            const existing = byKey.get(key);
+                            replaceInOrdered((e) => makeKey(e) === key);
+                            byKey.delete(key);
+                          } else {
+                            // Dedupe id-less text at same quantized position
+                            if (elementObj?.type === 'text') {
+                              const xq = Math.round(Number(elementObj?.x ?? 0) / 16);
+                              const yq = Math.round(Number(elementObj?.y ?? 0) / 16);
+                              ordered = ordered.filter((e: any) => !(e?.type === 'text' && !e?.id && Math.round(Number(e?.x ?? 0) / 16) === xq && Math.round(Number(e?.y ?? 0) / 16) === yq));
+                            }
+                            byKey.set(key, elementObj);
+                            replaceInOrdered((e) => makeKey(e) === key, elementObj);
+                          }
+                        } else if (!isDelete) {
+                          // Dedupe id-less text at same quantized position
+                          if (elementObj?.type === 'text') {
+                            const xq = Math.round(Number(elementObj?.x ?? 0) / 16);
+                            const yq = Math.round(Number(elementObj?.y ?? 0) / 16);
+                            ordered = ordered.filter((e: any) => !(e?.type === 'text' && !e?.id && Math.round(Number(e?.x ?? 0) / 16) === xq && Math.round(Number(e?.y ?? 0) / 16) === yq));
+                          }
+                          byKey.set(key, elementObj);
+                          replaceInOrdered((e) => makeKey(e) === key, elementObj);
+                        }
+                      }
+
+                      const { setVisualizationData } = useSessionStore.getState();
+                      if (setVisualizationData) {
+                        setVisualizationData(ordered as any);
+                      } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
+                        localSkeleton = [...ordered];
+                        const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(localSkeleton);
+                        window.__excalidrawDebug.setElements(excalidrawElements);
+                      }
+                    } catch (perLineErr) {
+                      console.warn('[B2F RPC] Streaming line parse failed:', line, perLineErr);
+                    }
+                  }
+                }
+                if (!gotAny) {
+                  console.warn('[B2F RPC] Streaming returned no elements, falling back to batch endpoint');
+                  throw new Error('No streaming elements');
+                }
+                if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Streaming visualization completed');
+              } else {
+                throw new Error(`Streaming not available: status ${streamingResp.status}`);
+              }
+            } catch (streamErr) {
+              console.warn('[B2F RPC] Streaming failed, falling back to non-streaming:', streamErr);
+              try {
+                const resp = await fetch('http://localhost:8002/generate-diagram', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
+                });
+                if (!resp.ok) {
+                  throw new Error(`Visualizer service returned ${resp.status}`);
+                }
+                const diagramData = await resp.json();
+                const returned = Array.isArray(diagramData?.elements) ? diagramData.elements : [];
+                if (returned.length === 0) {
+                  console.warn('[B2F RPC] Visualizer returned no elements');
+                }
+                const { setVisualizationData } = useSessionStore.getState();
+                if (setVisualizationData) {
+                  setVisualizationData(returned);
+                } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
+                  const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(returned);
+                  window.__excalidrawDebug.setElements(excalidrawElements);
+                }
+                if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Visualization generated via Visualizer service');
+              } catch (svcErr) {
+                console.error('[B2F RPC] ❌ Failed to call Visualizer service:', svcErr);
+                // Replace placeholder with an error message on failure
+                try {
+                  const errorSkeleton = [
+                    {
+                      id: 'generating_error',
+                      type: 'text',
+                      text: '⚠️ Could not generate diagram.'
+                    }
+                  ];
+                  const { setVisualizationData } = useSessionStore.getState();
+                  if (setVisualizationData) {
+                    setVisualizationData(errorSkeleton as any);
+                  } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
+                    const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(errorSkeleton);
+                    window.__excalidrawDebug.setElements(excalidrawElements);
+                  }
+                } catch (errRender) {
+                  console.warn('[B2F RPC] Error placeholder render failed (non-fatal):', errRender);
+                }
+              }
+            }
           }
-        } catch (error) {
-          console.error('[B2F RPC] ❌ Error handling GENERATE_VISUALIZATION:', error);
+          // Close the outer `else` branch for when no precomputed elements are provided
         }
+        } catch (error) {
+          console.error('[B2F RPC] GENERATE_VISUALIZATION handler failed:', error);
+        }
+      } else {
+        if (LIVEKIT_DEBUG) console.log('[B2F RPC] Unknown action type:', request.actionType);
       }
       
       // We still need to return an acknowledgment
@@ -358,24 +587,24 @@ export function useLiveKitSession(roomName: string, userName: string) {
         setIsLoading(false);
         // Set up microphone but keep it disabled by default
         try {
-            console.log('[useLiveKitSession] Setting up microphone...');
+            if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Setting up microphone...');
             
             if (roomInstance.localParticipant) {
                 // Enable microphone to set up the track
-                console.log('[useLiveKitSession] Enabling microphone to create track...');
+                if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Enabling microphone to create track...');
                 await roomInstance.localParticipant.setMicrophoneEnabled(true);
                 
                 // Wait a moment for the track to be properly created
                 await new Promise(resolve => setTimeout(resolve, 100));
                 
                 // Now disable it so user can't be heard by default
-                console.log('[useLiveKitSession] Disabling microphone - user should not be heard by default');
+                if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Disabling microphone - user should not be heard by default');
                 await roomInstance.localParticipant.setMicrophoneEnabled(false);
                 
                 // Verify the actual state after disabling
                 const micTrack = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
                 const actualMicEnabled = micTrack ? !micTrack.isMuted : false;
-                console.log('[useLiveKitSession] Microphone setup complete - LiveKit mic state:', {
+                if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Microphone setup complete - LiveKit mic state:', {
                     hasTrack: !!micTrack,
                     isMuted: micTrack?.isMuted,
                     actualMicEnabled: actualMicEnabled
@@ -409,19 +638,22 @@ export function useLiveKitSession(roomName: string, userName: string) {
             microphoneTrackRef.current.stop();
             microphoneTrackRef.current = null;
         }
+
+        // Clear any lingering transcript bubble in the UI
+        try { transcriptEventEmitter.emitTranscript(''); } catch {}
     };
 
     // The handler for the agent's "I'm ready" signal
     // Handler for audio tracks (agent voice output)
     const handleTrackSubscribed = (track: Track, publication: TrackPublication, participant: RemoteParticipant) => {
-        console.log(`[useLiveKitSession] Track subscribed:`, {
+        if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Track subscribed:`, {
             kind: track.kind,
             source: publication.source,
             participant: participant.identity
         });
         
         if (track.kind === Track.Kind.Audio) {
-            console.log(`[useLiveKitSession] Audio track received from agent ${participant.identity}`);
+            if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Audio track received from agent ${participant.identity}`);
             const audioTrack = track as AudioTrack;
             
             // Attach the audio track to play agent voice
@@ -444,7 +676,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
     };
     
     const handleTrackUnsubscribed = (track: Track, publication: TrackPublication, participant: RemoteParticipant) => {
-        console.log(`[useLiveKitSession] Track unsubscribed:`, {
+        if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Track unsubscribed:`, {
             kind: track.kind,
             source: publication.source,
             participant: participant.identity
@@ -457,13 +689,18 @@ export function useLiveKitSession(roomName: string, userName: string) {
     
     // Handler for transcription data
     const handleTranscriptionReceived = (transcriptions: TranscriptionSegment[], participant?: Participant, publication?: TrackPublication) => {
-        console.log(`[useLiveKitSession] Transcription received:`, transcriptions);
+        if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Transcription received:`, transcriptions);
         
-        // Extract text from transcription segments and add to UI
+        // Forward transcript text to global emitter and maintain legacy message list
         transcriptions.forEach(segment => {
-            if (segment.text && segment.text.trim()) {
+            const text = segment.text?.trim();
+            if (text) {
+                // Emit plain text for the avatar bubble UI
+                try { transcriptEventEmitter.emitTranscript(text); } catch {}
+
+                // Preserve speaker-tagged history for any consumers still using it
                 const speaker = participant?.identity || 'Unknown';
-                const message = `${speaker}: ${segment.text.trim()}`;
+                const message = `${speaker}: ${text}`;
                 setTranscriptionMessages(prev => [...prev.slice(-19), message]); // Keep last 20 messages
             }
         });
@@ -474,14 +711,14 @@ export function useLiveKitSession(roomName: string, userName: string) {
         try {
             const data = JSON.parse(new TextDecoder().decode(payload));
             if (data.type === 'agent_ready' && roomInstance.localParticipant) {
-                console.log(`[useLiveKitSession] Agent ready signal received from ${participant.identity}`);
+                if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Agent ready signal received from ${participant.identity}`);
                 setAgentIdentity(participant.identity); // Store the agent identity
                 const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, participant.identity);
                 agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
                 
                 // Send confirmation RPC to agent to complete handshake
                 try {
-                    console.log(`[useLiveKitSession] Sending confirmation RPC to agent...`);
+                    if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Sending confirmation RPC to agent...`);
                     const confirmationResponse = await roomInstance.localParticipant.performRpc({
                         destinationIdentity: participant.identity,
                         method: 'rox.interaction.AgentInteraction/TestPing',
@@ -493,7 +730,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
                         })))
                     });
                     
-                    console.log(`[useLiveKitSession] Agent confirmation response:`, confirmationResponse);
+                    if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Agent confirmation response:`, confirmationResponse);
                     setIsConnected(true); // NOW we are fully connected and ready to interact
                     
                 } catch (rpcError) {
