@@ -12,6 +12,15 @@ import { transcriptEventEmitter } from '@/lib/TranscriptEventEmitter';
 
 const LIVEKIT_DEBUG = false;
 
+// Type declaration for Mermaid debug interface
+declare global {
+  interface Window {
+    __mermaidDebug?: {
+      setDiagram: (diagram: string) => void;
+    };
+  }
+}
+
 
 // --- RPC UTILITIES ---
 // These helpers are essential for the hook's operation.
@@ -406,111 +415,15 @@ export function useLiveKitSession(roomName: string, userName: string) {
                   const { value, done } = await reader.read();
                   if (done) break;
                   buffered += decoder.decode(value, { stream: true });
-                  // Process complete lines (NDJSON)
-                  while (true) {
-                    const nl = buffered.indexOf('\n');
-                    if (nl === -1) break;
-                    const line = buffered.slice(0, nl).trim();
-                    buffered = buffered.slice(nl + 1);
-                    if (!line || line.startsWith('```')) continue;
-                    try {
-                      const elementObj = JSON.parse(line);
-                      gotAny = true;
-                      // Build a stable geometry-based key for id-less elements
-                      const makeKey = (e: any) => {
-                        const t = e?.type || 'unknown';
-                        const step = 16;
-                        const q = (n: any) => Math.round(Number(n ?? 0) / step) * step;
-                        const x = q(e?.x);
-                        const y = q(e?.y);
-                        const w = q(e?.width);
-                        const h = q(e?.height);
-                        const cid = e?.containerId || '';
-                        if (t === 'text') {
-                          // For text, use position + containerId only; sizes churn a lot during layout
-                          return `${t}|${cid}|${x}|${y}`;
-                        }
-                        return `${t}|${cid}|${x}|${y}|${w}|${h}`;
-                      };
-
-                      const id = elementObj?.id as string | undefined;
-                      const key = makeKey(elementObj);
-                      const isDelete = !!elementObj?.isDeleted;
-
-                      const replaceInOrdered = (predicate: (e: any) => boolean, replacement?: any) => {
-                        const idx = ordered.findIndex(predicate);
-                        if (idx >= 0) {
-                          if (replacement) ordered[idx] = replacement; else ordered.splice(idx, 1);
-                        } else if (replacement) {
-                          ordered.push(replacement);
-                        }
-                      };
-
-                      if (id) {
-                        // If something already occupies this geometry key with a different id, remove it first
-                        const prevAtKey = byKey.get(key);
-                        if (prevAtKey && prevAtKey.id && prevAtKey.id !== id) {
-                          byId.delete(prevAtKey.id);
-                          replaceInOrdered((e) => (e.id ? e.id === prevAtKey.id : makeKey(e) === key));
-                        }
-
-                        if (byId.has(id)) {
-                          if (isDelete) {
-                            byId.delete(id);
-                            replaceInOrdered((e) => e.id === id);
-                          } else {
-                            byId.set(id, elementObj);
-                            // Replace by id and by key to cover id churn scenarios
-                            replaceInOrdered((e) => e.id === id, elementObj);
-                            replaceInOrdered((e) => makeKey(e) === key, elementObj);
-                          }
-                        } else if (!isDelete) {
-                          byId.set(id, elementObj);
-                          replaceInOrdered((e) => e.id === id, elementObj);
-                          replaceInOrdered((e) => makeKey(e) === key, elementObj);
-                        }
-                        // Keep key map in sync
-                        byKey.set(key, elementObj);
-                      } else {
-                        // No id: use geometry key
-                        if (byKey.has(key)) {
-                          if (isDelete) {
-                            const existing = byKey.get(key);
-                            replaceInOrdered((e) => makeKey(e) === key);
-                            byKey.delete(key);
-                          } else {
-                            // Dedupe id-less text at same quantized position
-                            if (elementObj?.type === 'text') {
-                              const xq = Math.round(Number(elementObj?.x ?? 0) / 16);
-                              const yq = Math.round(Number(elementObj?.y ?? 0) / 16);
-                              ordered = ordered.filter((e: any) => !(e?.type === 'text' && !e?.id && Math.round(Number(e?.x ?? 0) / 16) === xq && Math.round(Number(e?.y ?? 0) / 16) === yq));
-                            }
-                            byKey.set(key, elementObj);
-                            replaceInOrdered((e) => makeKey(e) === key, elementObj);
-                          }
-                        } else if (!isDelete) {
-                          // Dedupe id-less text at same quantized position
-                          if (elementObj?.type === 'text') {
-                            const xq = Math.round(Number(elementObj?.x ?? 0) / 16);
-                            const yq = Math.round(Number(elementObj?.y ?? 0) / 16);
-                            ordered = ordered.filter((e: any) => !(e?.type === 'text' && !e?.id && Math.round(Number(e?.x ?? 0) / 16) === xq && Math.round(Number(e?.y ?? 0) / 16) === yq));
-                          }
-                          byKey.set(key, elementObj);
-                          replaceInOrdered((e) => makeKey(e) === key, elementObj);
-                        }
-                      }
-
-                      const { setVisualizationData } = useSessionStore.getState();
-                      if (setVisualizationData) {
-                        setVisualizationData(ordered as any);
-                      } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                        localSkeleton = [...ordered];
-                        const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(localSkeleton);
-                        window.__excalidrawDebug.setElements(excalidrawElements);
-                      }
-                    } catch (perLineErr) {
-                      console.warn('[B2F RPC] Streaming line parse failed:', line, perLineErr);
+                  gotAny = true;
+                  
+                  // Update Mermaid diagram with accumulated text
+                  try {
+                    if (typeof window !== 'undefined' && window.__mermaidDebug) {
+                      window.__mermaidDebug.setDiagram(buffered.trim());
                     }
+                  } catch (mermaidErr) {
+                    console.warn('[B2F RPC] Mermaid update failed:', mermaidErr);
                   }
                 }
                 if (!gotAny) {

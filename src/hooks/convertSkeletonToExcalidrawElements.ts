@@ -1,15 +1,17 @@
 export interface SkeletonElement {
-  type: 'rectangle' | 'ellipse' | 'diamond' | 'text' | 'arrow' | 'line' | 'image';
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+  type: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  // Backend sends w/h instead of width/height
+  w?: number;
+  h?: number;
   text?: string;
+  fontSize?: number;
   strokeColor?: string;
   backgroundColor?: string;
-  fontSize?: number;
   strokeWidth?: number;
-  connections?: { from: string; to: string }[];
   points?: number[][];
   id?: string;
   startBinding?: { elementId: string; focus?: number; gap?: number } | null;
@@ -20,9 +22,7 @@ export interface SkeletonElement {
 }
 
 // Pure utility with no external imports to keep tests lightweight
-export const convertSkeletonToExcalidrawElements = (
-  skeletonElements: SkeletonElement[]
-): any[] => {
+export function convertSkeletonToExcalidrawElements(skeletonElements: SkeletonElement[]): any[] {
   const elements: any[] = [];
   const genId = () => `el_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const q = (n: any, step = 8) => Math.round(Number(n ?? 0) / step) * step;
@@ -93,28 +93,37 @@ export const convertSkeletonToExcalidrawElements = (
         type: 'text',
         x: baseX,
         y: baseY,
-        width: skel.width || 200,
-        height: skel.height || Math.max(24, Math.round(fontSize * 1.2)),
+        width: skel.width || skel.w || 200,
+        height: skel.height || skel.h || Math.max(24, Math.round(fontSize * 1.2)),
         text: (skel.text || '').toString(),
         fontSize,
         fontFamily: 1,
-        textAlign: 'center',
-        verticalAlign: 'middle',
+        textAlign: 'left',
+        verticalAlign: 'top',
         baseline: Math.round(fontSize),
-        lineHeight: 1.2,
+        lineHeight: 1.25,
         containerId: null,
+        originalText: (skel.text || '').toString(),
+        autoResize: true,
         strokeColor: '#1e1e1e',
         backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 0,
+        opacity: 100,
         angle: 0,
         seed: Math.floor(Math.random() * 1_000_000),
         version: Date.now(),
         versionNonce: Math.floor(Math.random() * 1_000_000),
         isDeleted: false,
-        boundElements: [],
+        boundElements: null,
         updated: Date.now(),
         link: null,
         locked: false,
         groupIds: [] as string[],
+        frameId: null,
+        roundness: null,
       };
       elements.push(textElement);
       return;
@@ -128,8 +137,8 @@ export const convertSkeletonToExcalidrawElements = (
         type: 'image',
         x: baseX,
         y: baseY,
-        width: skel.width || 200,
-        height: skel.height || 150,
+        width: skel.width || skel.w || 200,
+        height: skel.height || skel.h || 150,
         fileId,
         // Common element props to satisfy Excalidraw schema
         strokeColor: 'transparent',
@@ -164,25 +173,28 @@ export const convertSkeletonToExcalidrawElements = (
       type: skel.type,
       x: baseX,
       y: baseY,
-      width: skel.width || 120,
-      height: skel.height || 60,
+      width: skel.width || skel.w || 120,
+      height: skel.height || skel.h || 60,
       strokeColor: skel.strokeColor || '#1e1e1e',
       backgroundColor: skel.backgroundColor || 'transparent',
       fillStyle: 'solid',
       strokeWidth: skel.strokeWidth || 2,
       strokeStyle: 'solid',
-      roughness: 0,
+      roughness: 1,
       opacity: 100,
-      groupIds: [] as string[],
+      groupIds: [],
+      frameId: null,
+      roundness: skel.type === 'rectangle' ? { type: 3, value: 32 } : null,
       angle: 0,
       seed: Math.floor(Math.random() * 1_000_000),
       version: Date.now(),
       versionNonce: Math.floor(Math.random() * 1_000_000),
       isDeleted: false,
-      boundElements: [],
+      boundElements: null,
       updated: Date.now(),
       link: null,
       locked: false,
+      customData: null,
     };
     elements.push(shapeElement);
 
@@ -192,40 +204,54 @@ export const convertSkeletonToExcalidrawElements = (
       const wantText = (skel.text || '').toString().trim().toLowerCase();
       const tx = baseX + 10;
       const ty = baseY + 10;
-      const tw = (skel.width || 120) - 20;
-      const th = (skel.height || 60) - 20;
+      const tw = (skel.width || skel.w || 120) - 20;
+      const th = (skel.height || skel.h || 60) - 20;
       const near = textSkels.some((t) => {
         const within = Math.abs(t.x - tx) < 20 && Math.abs(t.y - ty) < 20;
         const similar = !wantText || !t.text || t.text === wantText;
         return within && similar;
       });
       if (!near) {
+      const shapeWidth = skel.width || skel.w || 120;
+      const shapeHeight = skel.height || skel.h || 60;
+      const fontSize = skel.fontSize || 16;
+      
       const textElement = {
         id: `${baseId}_text`,
         type: 'text',
-        x: baseX + 10,
-        y: baseY + 10,
-        width: (skel.width || 120) - 20,
-        height: (skel.height || 60) - 20,
+        x: baseX + shapeWidth * 0.1,
+        y: baseY + shapeHeight * 0.5 - fontSize * 0.6,
+        width: shapeWidth * 0.8,
+        height: fontSize * 1.2,
         text: skel.text.trim(),
-        fontSize: skel.fontSize || 16,
+        fontSize,
         fontFamily: 1,
         textAlign: 'center',
         verticalAlign: 'middle',
-        baseline: Math.round((skel.fontSize || 16)),
-        lineHeight: 1.2,
+        baseline: fontSize,
+        lineHeight: 1.25,
         containerId: baseId,
+        originalText: skel.text.trim(),
+        autoResize: false,
         strokeColor: '#1e1e1e',
+        backgroundColor: 'transparent',
+        fillStyle: 'solid',
+        strokeWidth: 1,
+        strokeStyle: 'solid',
+        roughness: 0,
+        opacity: 100,
         angle: 0,
         seed: Math.floor(Math.random() * 1_000_000),
         version: Date.now(),
         versionNonce: Math.floor(Math.random() * 1_000_000),
         isDeleted: false,
-        boundElements: [],
+        boundElements: null,
         updated: Date.now(),
         link: null,
         locked: false,
         groupIds: [] as string[],
+        frameId: null,
+        roundness: null,
       };
       elements.push(textElement);
       }
@@ -236,37 +262,52 @@ export const convertSkeletonToExcalidrawElements = (
   skeletonElements.forEach((skel) => {
     if ((skel.type !== 'arrow' && skel.type !== 'line') || !skel.id) return;
 
-    const w = skel.width || 100;
-    const h = skel.height || 100;
-    const pts = (skel.points && skel.points.length >= 2) ? skel.points : [[0, 0], [w, h]];
+    const w = skel.width || skel.w || 100;
+    const h = skel.height || skel.h || 0;
+    // For arrows with bindings, calculate points based on element positions
+    let pts = [[0, 0], [w, h]];
+    if (skel.points && skel.points.length >= 2) {
+      pts = skel.points;
+    } else if (w > 0 || h != 0) {
+      pts = [[0, 0], [w, h]];
+    }
 
     const lineLike = {
       id: skel.id,
       type: skel.type,
       x: skel.x ?? 0,
       y: skel.y ?? 0,
-      width: w,
-      height: h,
+      width: 0,
+      height: 0,
       strokeColor: skel.strokeColor || '#1e1e1e',
       backgroundColor: 'transparent',
       strokeWidth: skel.strokeWidth || 2,
-      startBinding: skel.startBinding ? { elementId: skel.startBinding.elementId, focus: 0.5, gap: 4 } : null,
-      endBinding: skel.endBinding ? { elementId: skel.endBinding.elementId, focus: 0.5, gap: 4 } : null,
+      fillStyle: 'solid',
+      strokeStyle: 'solid',
+      roughness: 1,
+      opacity: 100,
+      groupIds: [],
+      frameId: null,
+      roundness: null,
+      startBinding: skel.startBinding ? { elementId: skel.startBinding.elementId, focus: 0.5, gap: 4 } : 
+                   (skel as any).startBindingId ? { elementId: (skel as any).startBindingId, focus: 0.5, gap: 4 } : null,
+      endBinding: skel.endBinding ? { elementId: skel.endBinding.elementId, focus: 0.5, gap: 4 } : 
+                 (skel as any).endBindingId ? { elementId: (skel as any).endBindingId, focus: 0.5, gap: 4 } : null,
       points: pts,
-      startArrowhead: null as any,
+      lastCommittedPoint: null,
+      startArrowhead: null,
       endArrowhead: (skel.type === 'arrow') ? 'arrow' : null,
-      groupIds: [] as string[],
+      elbowed: false,
       angle: 0,
       seed: Math.floor(Math.random() * 1_000_000),
       version: Date.now(),
       versionNonce: Math.floor(Math.random() * 1_000_000),
       isDeleted: false,
-      boundElements: [],
+      boundElements: null,
       updated: Date.now(),
       link: null,
       locked: false,
-      opacity: 100,
-      roughness: 0,
+      customData: null,
     };
     elements.push(lineLike);
   });

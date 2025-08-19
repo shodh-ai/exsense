@@ -9,6 +9,7 @@ import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
 import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
+import { useMermaidVisualization } from '@/hooks/useMermaidVisualization';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
@@ -18,7 +19,7 @@ import Sphere from '@/components/Sphere';
 
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
-const ExcalidrawWrapper = dynamic(() => import('@/components/session/ExcalidrawWrapper'), { ssr: false });
+const MermaidWrapper = dynamic(() => import('@/components/session/MermaidWrapper'), { ssr: false });
 const VncViewer = dynamic(() => import('@/components/session/VncViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
 const MessageDisplay = dynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
@@ -41,9 +42,11 @@ interface SessionContentProps {
     setActiveView: (view: ViewKey) => void;
     componentButtons: ButtonConfig[];
     vncUrl: string;
+    diagramDefinition: string;
+    onDiagramUpdate: (definition: string) => void;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, vncUrl }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, diagramDefinition, onDiagramUpdate }: SessionContentProps) {
     return (
         <div className='w-full h-full flex flex-col items-center justify-between'>
             <div className="w-full flex justify-center pt-[20px]">
@@ -67,7 +70,11 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl }:
             
             <div className="flex-grow relative w-full h-full">
                 <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
-                    <ExcalidrawWrapper />
+                    <MermaidWrapper 
+                        diagramDefinition={diagramDefinition}
+                        onDiagramUpdate={onDiagramUpdate}
+                        className="w-full h-full"
+                    />
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
                     <VncViewer url={vncUrl} />
@@ -143,6 +150,16 @@ export default function Session() {
     // Initialize browser automation hooks
     const { disconnectVNC } = useBrowserActionExecutor(room, sessionBubbleUrl);
     const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room);
+    
+    // Initialize Mermaid visualization hook
+    const { 
+        diagramDefinition, 
+        isStreaming, 
+        error: mermaidError, 
+        startVisualization, 
+        clearDiagram, 
+        updateDiagram 
+    } = useMermaidVisualization();
 
     if (SESSION_DEBUG) console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 
@@ -219,6 +236,8 @@ export default function Session() {
                         setActiveView={setActiveView} 
                         componentButtons={componentButtons} 
                         vncUrl={vncUrl} 
+                        diagramDefinition={diagramDefinition}
+                        onDiagramUpdate={updateDiagram}
                     />
                     <Footer room={room} agentIdentity={agentIdentity || undefined} />
                 </div>

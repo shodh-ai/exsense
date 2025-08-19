@@ -87,7 +87,7 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
 
 
   // CRITICAL FIX: Use refs to prevent infinite loops
-  const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isUpdatingRef = useRef(false);
   const preventLoopRef = useRef(false);
   const lastElementsRef = useRef<any[]>([]);
@@ -480,55 +480,141 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
   // Store-based visualization data listener (from memory fix)
   const visualizationData = useSessionStore(state => state.visualizationData);
   const setVisualizationData = useSessionStore(state => state.setVisualizationData);
-  const EXCAL_DEBUG = false;
+  const EXCAL_DEBUG = (() => {
+    try {
+      const envFlag = (process.env.REACT_APP_EXCAL_DEBUG === '1');
+      const lsFlag = typeof window !== 'undefined' && window.localStorage && window.localStorage.getItem('EXCAL_DEBUG') === '1';
+      return envFlag || lsFlag;
+    } catch {
+      return false;
+    }
+  })();
+
+  const summarize = (e: any) => {
+    if (!e) return { id: null, type: 'null' };
+    const txt = typeof e.text === 'string' ? e.text : '';
+    return {
+      id: e.id,
+      type: e.type,
+      x: e.x, y: e.y, w: e.width, h: e.height,
+      text: txt ? (txt.length > 40 ? txt.slice(0, 40) + '…' : txt) : undefined,
+      points_len: Array.isArray(e.points) ? e.points.length : undefined,
+      startBindingId: e.startBinding?.elementId,
+      endBindingId: e.endBinding?.elementId,
+      isDeleted: !!e.isDeleted,
+    };
+  };
   
   useEffect(() => {
     if (visualizationData && excalidrawAPI && !isUpdatingRef.current) {
       if (EXCAL_DEBUG) {
-        console.log(`[EXCALIDRAW-INTEGRATION] Processing ${visualizationData.length} elements from store`);
+        const sampleIn = visualizationData.slice(0, 5).map(summarize);
+        console.log(`[EXCALIDRAW-INTEGRATION] Processing ${visualizationData.length} elements from store`, sampleIn);
       }
-      
+
       try {
         isUpdatingRef.current = true;
-        
         // Small delay for smooth rendering
         setTimeout(() => {
           (async () => {
             try {
-              // Use image-aware converter that also loads files into Excalidraw
-              const excalidrawElements = await visualActionExecutor.prepareElementsWithFiles(visualizationData);
+              // Convert incoming skeletons to Excalidraw elements with files
+              const prepared = await visualActionExecutor.prepareElementsWithFiles(visualizationData);
               if (EXCAL_DEBUG) {
-                console.log(`[EXCALIDRAW-INTEGRATION] Prepared ${excalidrawElements.length} Excalidraw elements (image-aware)`);
+                const samplePrepared = prepared.slice(0, 5).map(summarize);
+                console.log('[EXCALIDRAW-INTEGRATION] Prepared elements sample:', samplePrepared);
               }
 
-              // Replace canvas with current visualization batch to avoid duplicates during streaming
-              // Guard: do not clear scene on empty batches (prevents flicker/blank)
-              if (excalidrawElements.length > 0) {
-                const currentAppState = excalidrawAPI.getAppState?.() || appState;
-                excalidrawAPI.updateScene({ 
-                  elements: excalidrawElements,
-                  appState: {
-                    ...currentAppState
+              // Final safety: ensure arrow/line points and infer arrow bindings to nearby shapes
+              const normalizeStreamArrows = (els: any[]) => {
+                const rectDist2 = (px: number, py: number, rx: number, ry: number, rw: number, rh: number) => {
+                  let dx = 0; if (px < rx) dx = rx - px; else if (px > rx + rw) dx = px - (rx + rw);
+                  let dy = 0; if (py < ry) dy = ry - py; else if (py > ry + rh) dy = py - (ry + rh);
+                  return dx * dx + dy * dy;
+                };
+                const shapes = els.filter((e) => e && !e.isDeleted && ["rectangle","ellipse","diamond","image"].includes(e.type));
+                const THRESH2 = 64 * 64;
+                const nearestShape = (px: number, py: number) => {
+                  let best: any = null; let bestD2 = Infinity;
+                  for (const s of shapes) {
+                    const d2 = rectDist2(px, py, Number(s.x||0), Number(s.y||0), Number(s.width||0), Number(s.height||0));
+                    if (d2 < bestD2) { bestD2 = d2; best = s; }
                   }
+                  return (best && bestD2 <= THRESH2) ? best : null;
+                };
+                return els.map((e) => {
+                  if (!e || e.isDeleted) return e;
+                  if (e.type !== 'arrow' && e.type !== 'line') return e;
+                  let points: any[] | null = null;
+                  if (Array.isArray(e.points)) {
+                    const filtered = e.points.filter(
+                      (p: any) => Array.isArray(p) && p.length === 2 && p.every((n: any) => typeof n === 'number' && !Number.isNaN(n))
+                    );
+                    if (filtered.length >= 2) {
+                      points = filtered.map((p: any) => [Number(p[0]) || 0, Number(p[1]) || 0]);
+                    }
+                  }
+                  if (!points) {
+                    const dx = Math.round(Number(e.width ?? 100));
+                    const dy = Math.round(Number(e.height ?? 0));
+                    points = [[0, 0], [dx, dy]];
+                  }
+                  let startBinding = e.startBinding || null;
+                  let endBinding = e.endBinding || null;
+                  if (e.type === 'arrow') {
+                    const p0 = points[0];
+                    const p1 = points[points.length - 1];
+                    const baseX = Math.round(Number(e.x||0));
+                    const baseY = Math.round(Number(e.y||0));
+                    const sx = baseX + Number(p0?.[0]||0);
+                    const sy = baseY + Number(p0?.[1]||0);
+                    const ex = baseX + Number(p1?.[0]||0);
+                    const ey = baseY + Number(p1?.[1]||0);
+                    if (!startBinding) {
+                      const s = nearestShape(sx, sy);
+                      if (s?.id) startBinding = { elementId: s.id, focus: 0.5, gap: 1 };
+                    }
+                    if (!endBinding) {
+                      const s = nearestShape(ex, ey);
+                      if (s?.id) endBinding = { elementId: s.id, focus: 0.5, gap: 1 };
+                    }
+                  }
+                  return { ...e, points, startBinding, endBinding };
                 });
+              };
+
+              const safeElements = normalizeStreamArrows(prepared);
+              if (EXCAL_DEBUG) {
+                const sampleSafe = safeElements.slice(0, 5).map(summarize);
+                const counts: Record<string, number> = {};
+                for (const el of safeElements) counts[el.type] = (counts[el.type] || 0) + 1;
+                console.log('[EXCALIDRAW-INTEGRATION] Normalized elements:', { counts, sample: sampleSafe });
+              }
+
+              // Replace scene with current batch to avoid duplicates during streaming
+              if (safeElements.length > 0) {
+                const currentAppState = excalidrawAPI.getAppState?.() || appState;
+                if (EXCAL_DEBUG) {
+                  console.log('[EXCALIDRAW-INTEGRATION] Calling updateScene with elements=', safeElements.length);
+                }
+                excalidrawAPI.updateScene({ 
+                  elements: safeElements,
+                  appState: { ...currentAppState }
+                });
+                if (EXCAL_DEBUG) {
+                  try {
+                    const sceneEls = excalidrawAPI.getSceneElements?.() || [];
+                    console.log('[EXCALIDRAW-INTEGRATION] Scene updated. Scene element count=', sceneEls.length);
+                  } catch {}
+                }
               } else if (EXCAL_DEBUG) {
                 console.log('[EXCALIDRAW-INTEGRATION] Skipping update: empty batch received, keeping previous scene');
               }
 
-              try {
-                const files = excalidrawAPI.getFiles?.() || {};
-                const fileKeys = Object.keys(files);
-                const sceneEls = excalidrawAPI.getSceneElements?.() || [];
-                if (EXCAL_DEBUG || fileKeys.length === 0 || sceneEls.length === 0) {
-                  console.log('[EXCALIDRAW-INTEGRATION] Files in scene:', fileKeys);
-                  console.log('[EXCALIDRAW-INTEGRATION] Scene element count after update:', sceneEls.length);
-                }
-              } catch {}
-
-              // Scroll to content if supported
+              // Scroll to content if available
               setTimeout(() => {
                 try {
-                  const els = excalidrawAPI.getSceneElements?.() || excalidrawElements;
+                  const els = excalidrawAPI.getSceneElements?.() || safeElements;
                   if (els.length > 0 && excalidrawAPI.scrollToContent) {
                     excalidrawAPI.scrollToContent(els, { fitToContent: true, animate: true });
                   }
@@ -547,7 +633,7 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
             }
           })();
         }, 50);
-        
+
       } catch (error) {
         console.error('[EXCALIDRAW-INTEGRATION] ❌ Error processing visualization data:', error);
         isUpdatingRef.current = false;
