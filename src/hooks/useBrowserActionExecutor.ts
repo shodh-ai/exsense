@@ -35,6 +35,7 @@ interface VNCMessage {
   timestamp: number;
   tool_name?: string;
   parameters?: any;
+  [key: string]: any;
 }
 
 // Hook return interface
@@ -45,6 +46,7 @@ interface UseBrowserActionExecutorReturn {
   executeBrowserAction: (command: BrowserActionCommand) => Promise<any>;
   disconnectVNC: () => void;
   sendVNCMessage: (message: VNCMessage) => void;
+  setOnVNCResponse: (handler: (response: any) => void) => void;
 }
 
 // Utility function to convert command to VNC message
@@ -66,7 +68,8 @@ const commandToVNCMessage = (command: BrowserActionCommand): VNCMessage => {
     'jupyter_click_pyodide': 'jupyter_click_pyodide',
     'jupyter_type_in_cell': 'execute_jupyter_command',
     'jupyter_run_cell': 'execute_jupyter_command',
-    'jupyter_create_new_cell': 'execute_jupyter_command'
+    'jupyter_create_new_cell': 'execute_jupyter_command',
+    'setup_jupyter': 'execute_jupyter_command'
   };
 
   const vncMessage: VNCMessage = {
@@ -81,10 +84,21 @@ const commandToVNCMessage = (command: BrowserActionCommand): VNCMessage => {
     timestamp: Date.now()
   };
 
-  // For Jupyter commands, include all parameters
-  if (tool_name.startsWith('jupyter_') && tool_name !== 'jupyter_click_pyodide') {
+  // For Jupyter commands (and setup_jupyter), include all parameters
+  if ((tool_name.startsWith('jupyter_') && tool_name !== 'jupyter_click_pyodide') || tool_name === 'setup_jupyter') {
     vncMessage.tool_name = tool_name;
     vncMessage.parameters = parameters;
+  }
+
+  // For all commands, pass through any extra parameters not explicitly mapped above
+  // (e.g., session_id, screenshot_interval_sec, tab_index, etc.)
+  if (parameters && typeof parameters === 'object') {
+    for (const [k, v] of Object.entries(parameters)) {
+      if (v === undefined) continue;
+      if (!(k in vncMessage)) {
+        (vncMessage as any)[k] = v;
+      }
+    }
   }
 
   console.log(`[BrowserActionExecutor] Converting command to VNC message:`, {
@@ -105,6 +119,7 @@ export const useBrowserActionExecutor = (room: Room | null, vncUrl?: string): Us
   const vncWebSocketRef = useRef<WebSocket | null>(null);
   const vncDataChannelRef = useRef<RTCDataChannel | null>(null);
   const messageQueueRef = useRef<VNCMessage[]>([]);
+  const onVNCResponseRef = useRef<((response: any) => void) | null>(null);
   
   // Send message over VNC connection
   const sendVNCMessage = useCallback((message: VNCMessage) => {
@@ -115,6 +130,11 @@ export const useBrowserActionExecutor = (room: Room | null, vncUrl?: string): Us
       console.warn('[BrowserActionExecutor] VNC connection not open, queueing message');
       messageQueueRef.current.push(message);
     }
+  }, []);
+  
+  // Allow consumer to register a response handler
+  const setOnVNCResponse = useCallback((handler: (response: any) => void) => {
+    onVNCResponseRef.current = handler;
   }, []);
   
   // RPC handler for Browser/ExecuteAction calls from LiveKit Conductor
@@ -232,6 +252,14 @@ export const useBrowserActionExecutor = (room: Room | null, vncUrl?: string): Us
       try {
         const response = JSON.parse(event.data);
         console.log('[BrowserActionExecutor] VNC response:', response);
+        // Forward response to consumer if handler is registered
+        try {
+          if (onVNCResponseRef.current) {
+            onVNCResponseRef.current(response);
+          }
+        } catch (cbErr) {
+          console.error('[BrowserActionExecutor] Error in onVNCResponse handler:', cbErr);
+        }
       } catch (error) {
         console.error('[BrowserActionExecutor] Failed to parse VNC response:', error);
       }
@@ -290,6 +318,7 @@ export const useBrowserActionExecutor = (room: Room | null, vncUrl?: string): Us
     lastError,
     executeBrowserAction,
     disconnectVNC,
-    sendVNCMessage
+    sendVNCMessage,
+    setOnVNCResponse
   };
 };

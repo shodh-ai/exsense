@@ -44,9 +44,10 @@ interface SessionContentProps {
     vncUrl: string;
     diagramDefinition: string;
     onDiagramUpdate: (definition: string) => void;
+    handleVncInteraction: (interaction: { action: string; x: number; y: number }) => void;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, diagramDefinition, onDiagramUpdate }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, diagramDefinition, onDiagramUpdate, handleVncInteraction }: SessionContentProps) {
     return (
         <div className='w-full h-full flex flex-col items-center justify-between'>
             <div className="w-full flex justify-center pt-[20px]">
@@ -77,7 +78,7 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, d
                     />
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
-                    <VncViewer url={vncUrl} />
+                    <VncViewer url={vncUrl} onInteraction={handleVncInteraction} />
                 </div>
                 <div className={`${activeView === 'video' ? 'block' : 'hidden'} w-full h-full`}>
                     <VideoViewer />
@@ -148,7 +149,7 @@ export default function Session() {
     const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
 
     // Initialize browser automation hooks
-    const { disconnectVNC } = useBrowserActionExecutor(room, sessionBubbleUrl);
+    const { disconnectVNC, executeBrowserAction } = useBrowserActionExecutor(room, sessionBubbleUrl);
     const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room);
     
     // Initialize Mermaid visualization hook
@@ -162,6 +163,15 @@ export default function Session() {
     } = useMermaidVisualization();
 
     if (SESSION_DEBUG) console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
+
+    // Wire VNC interactions directly from VncViewer
+    const handleVncInteraction = (interaction: { action: string; x: number; y: number }) => {
+        console.log('[SessionPage] Interaction detected, sending to VNC listener:', interaction);
+        executeBrowserAction({
+            tool_name: 'browser_click',
+            parameters: { x: interaction.x, y: interaction.y },
+        });
+    };
 
     const componentButtons: ButtonConfig[] = [
         {
@@ -238,6 +248,7 @@ export default function Session() {
                         vncUrl={vncUrl} 
                         diagramDefinition={diagramDefinition}
                         onDiagramUpdate={updateDiagram}
+                        handleVncInteraction={handleVncInteraction}
                     />
                     <Footer room={room} agentIdentity={agentIdentity || undefined} />
                 </div>

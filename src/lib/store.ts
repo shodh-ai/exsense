@@ -16,6 +16,10 @@ interface SessionState {
     isMicActivatingPending: boolean;
     visualizationData: any[] | null; // <-- NEW: For store-based visualization communication
 
+    // --- Imprinting / Session Controller State ---
+    imprinting_mode: string; // e.g., 'DEBRIEF_CONCEPTUAL' | 'WORKFLOW' | 'DEBRIEF_PRACTICAL'
+    currentLO: string | null;
+
     // --- Actions ---
     setActiveView: (view: SessionView) => void;
     setExcalidrawAPI: (api: ExcalidrawAPIType) => void;
@@ -27,6 +31,10 @@ interface SessionState {
     setIsMusicButtonPlaying: (isPlaying: boolean) => void;
     setIsMicActivatingPending: (isPending: boolean) => void;
     setVisualizationData: (data: any[] | null) => void; // <-- NEW: Set visualization data for canvas rendering
+
+    // --- Imprinting Actions ---
+    setImprintingMode: (mode: string) => void;
+    setCurrentLO: (lo: string | null) => void;
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -44,6 +52,10 @@ export const useSessionStore = create<SessionState>()(
             isMicActivatingPending: false,
             visualizationData: null, // <-- No visualization data initially
 
+            // --- Imprinting defaults ---
+            imprinting_mode: 'DEBRIEF_CONCEPTUAL',
+            currentLO: null,
+
             // --- Actions Implementation ---
             setActiveView: (view) => set({ activeView: view }),
             setExcalidrawAPI: (api) => set({ excalidrawAPI: api }),
@@ -55,6 +67,10 @@ export const useSessionStore = create<SessionState>()(
             setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
             setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }),
             setVisualizationData: (data) => set({ visualizationData: data }), // <-- NEW ACTION IMPLEMENTATION
+
+            // --- Imprinting Actions ---
+            setImprintingMode: (mode) => set({ imprinting_mode: mode }),
+            setCurrentLO: (lo) => set({ currentLO: lo }),
         }),
         { name: "SessionUIStore" }
     )
