@@ -44,7 +44,7 @@ export default function ShodhAiWebsite(): JSX.Element {
             />
             <div className="flex items-center gap-x-2 sm:gap-x-3">
               <Button
-                className="bg-transparent text-[#000042] rounded-[40px] py-2 sm:py-3 lg:py-5 font-manrope font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px] border-[#000042] border-[1px]"
+                className="bg-transparent text-[#000042] rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px] border-[#000042] border-[1px]"
                 asChild
               >
                 <a href="/register">
@@ -87,7 +87,7 @@ export default function ShodhAiWebsite(): JSX.Element {
           {/* Main heading - responsive typography */}
           <div className="order-1 lg:order-2 flex-1 lg:pr-[8%]">
             <h1
-              className="font-extrabold text-[#000042] text-[32px] sm:text-[48px] md:text-[64px] lg:text-[72px] xl:text-[80px] 2xl:text-[130px] text-center lg:text-right leading-[1.1] sm:leading-[1.05] lg:leading-[0.95] font-['Manrope',Helvetica] max-w-full lg:max-w-[780px]"
+              className="font-extrabold text-[#000042] text-[32px] sm:text-[48px] md:text-[64px] lg:text-[72px] xl:text-[80px] 2xl:text-[130px] text-center lg:text-right leading-[1.1] sm:leading-[1.05] lg:leading-[0.95] max-w-full lg:max-w-[780px]"
             >
               BUILDING FUTURE OF EDUCATION
             </h1>

@@ -78,7 +78,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
   // --- CLERK AUTHENTICATION ---
   const { getToken, isSignedIn } = useAuth();
   // VNC WebSocket URL for browser automation
-  const vncUrl = process.env.NEXT_PUBLIC_VNC_URL || 'ws://localhost:8765';
+  const vncUrl = process.env.NEXT_PUBLIC_VNC_URL || 'ws://localhost:6901';
   const { executeBrowserAction, disconnectVNC } = useBrowserActionExecutor(roomInstance, vncUrl);
   
   // --- ZUSTAND STORE ACTIONS ---
@@ -137,8 +137,12 @@ export function useLiveKitSession(roomName: string, userName: string) {
                 throw new Error('Failed to get authentication token from Clerk.');
             }
 
-            console.log('Fetching LiveKit token and room from webrtc-token-service...');
-            const response = await fetch(`${process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL}/api/generate-room`, {
+            const tokenServiceUrl = process.env.NODE_ENV === 'development' 
+                ? 'http://localhost:3002' 
+                : process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL;
+
+            console.log(`Fetching LiveKit token from ${tokenServiceUrl}...`);
+            const response = await fetch(`${tokenServiceUrl}/api/generate-room`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

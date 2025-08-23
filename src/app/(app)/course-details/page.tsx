@@ -1,5 +1,5 @@
 "use client";
-import { XIcon } from "lucide-react";
+import { XIcon, Star } from "lucide-react";
 import React, { JSX } from "react";
 import {
   Accordion,
@@ -26,7 +26,7 @@ type CourseDetail = {
 type Review = {
   name: string;
   avatar: string;
-  rating: string;
+  rating: number;
   time: string;
   comment: string;
 };
@@ -69,7 +69,7 @@ const reviews: Review[] = [
   {
     name: "Peter Lewis",
     avatar: "/learner1.svg",
-    rating: "/frame-218.svg",
+    rating: 5,
     time: "3 months ago",
     comment:
       "This course truly transformed my understanding of machine learning. The AI explanations were not only clear but also engaging, making complex concepts like propagation easy to grasp. I found myself excited to learn more with each lesson!",
@@ -77,7 +77,7 @@ const reviews: Review[] = [
   {
     name: "Sarah Johnson",
     avatar: "/learner2.svg",
-    rating: "/frame-218-3.svg",
+    rating: 5,
     time: "1 month ago",
     comment:
       "The hands-on projects were a game changer for me. They allowed me to apply what I learned in a practical way, reinforcing the concepts and boosting my confidence in using machine learning techniques in real-world scenarios.",
@@ -85,7 +85,7 @@ const reviews: Review[] = [
   {
     name: "Michael Chen",
     avatar: "/learner3.svg",
-    rating: "/frame-218-2.svg",
+    rating: 4.5,
     time: "2 weeks ago",
     comment:
       "I really appreciated the focus on real-world applications throughout the course. The case studies were particularly helpful, as they provided valuable context for the theories we explored, making the learning experience much more relevant.",
@@ -93,7 +93,7 @@ const reviews: Review[] = [
   {
     name: "Emily Davis",
     avatar: "/learner4.svg",
-    rating: "/frame-218-1.svg",
+    rating: 5,
     time: "5 days ago",
     comment:
       "The community support was outstanding! I connected with fellow learners and gained insights from their experiences, which enriched my own learning journey. The collaborative environment made the course even more enjoyable.",
@@ -125,22 +125,47 @@ const faqs: FaqItem[] = [
 ];
 
 // --- SUB-COMPONENTS ---
+
+const StarRating = ({ rating }: { rating: number }) => {
+  const totalStars = 5;
+
+  return (
+    <div className="flex items-center">
+      {Array.from({ length: totalStars }, (_, index) => {
+        const starValue = index + 1;
+        const fillPercentage =
+          rating >= starValue
+            ? "100%"
+            : rating > index
+            ? `${(rating - index) * 100}%`
+            : "0%";
+
+        return (
+          <div key={index} className="relative h-5 w-5">
+            <Star className="absolute left-0 top-0 h-5 w-5 fill-gray-300 text-gray-300" />
+            <div
+              className="absolute left-0 top-0 h-full overflow-hidden"
+              style={{ width: fillPercentage }}
+            >
+              <Star className="h-5 w-5 flex-shrink-0 fill-[#566FE9] text-[#566FE9]" />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const CourseHeader = () => (
-  <div className="flex justify-between items-center mb-8">
-    {/* Updated styles for the h2 element as per your request */}
-    <h2 className="font-semibold text-base leading-6 text-black">
-      Our Interactive Courses
-    </h2>
-    <Button variant="ghost" size="icon" className="h-6 w-6 p-0">
-      <XIcon className="h-6 w-6" />
-    </Button>
+  <div className="flex justify-between items-center">
+    <h2 className="text-base font-semibold text-black">Course Overview</h2>
   </div>
 );
 
 const CourseBanner = () => (
-  <div className="flex justify-center mb-8">
+  <div className="flex justify-center">
     <img
-      className="w-[750px] h-[200px]"
+      className="w-full rounded-lg h-auto max-h-48 md:max-h-[200px] object-cover"
       alt="Course banner"
       src="/banner.svg"
     />
@@ -154,14 +179,14 @@ const CourseIntroduction = ({ tags }: { tags: string[] }) => (
         <Badge
           key={tag}
           variant="outline"
-          className="bg-[#566fe91a] text-[#566fe9] font-medium px-4 py-1.5 rounded-[30px]"
+          className="rounded-[30px] bg-[#566fe91a] px-4 py-1.5 font-medium text-[#566fe9]"
         >
           {tag}
         </Badge>
       ))}
     </div>
     <div className="flex flex-col gap-4">
-      <h1 className="text-[28px] leading-[33.6px] font-semibold text-black">
+      <h1 className="text-2xl font-semibold leading-tight text-black md:text-[28px] md:leading-[33.6px]">
         AI Foundations with TensorFlow
       </h1>
       <p className="text-base leading-6 text-black">
@@ -177,33 +202,32 @@ const CourseDetailsSection = ({ details }: { details: CourseDetail[] }) => (
   <section className="flex flex-col gap-7">
     <div className="flex flex-col gap-6">
       <h2 className="text-xl font-semibold text-black">Course details</h2>
-      <div className="flex flex-col gap-6">
-        {[0, 3].map((start) => (
-          <div key={start} className="flex flex-wrap gap-[60px]">
-            {details.slice(start, start + 3).map((detail) => (
-              <div key={detail.label} className="flex items-center gap-3 w-[210px]">
-                <div className="p-3 bg-[#566fe91a] rounded-xl">
-                  <div className="w-7 h-7 relative">
-                    <img
-                      className="absolute inset-0 m-auto"
-                      alt={detail.label}
-                      src={detail.icon}
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <div className="text-sm font-medium text-black opacity-60">
-                    {detail.label}
-                  </div>
-                  <div className="text-base text-black">{detail.value}</div>
-                </div>
+      <div className="flex flex-col gap-6 md:flex-row md:flex-wrap md:gap-x-12 md:gap-y-8">
+        {details.map((detail) => (
+          <div
+            key={detail.label}
+            className="flex items-center gap-3 md:w-[210px]"
+          >
+            <div className="p-3 bg-[#566fe91a] rounded-xl">
+              <div className="w-7 h-7 relative">
+                <img
+                  className="absolute inset-0 m-auto"
+                  alt={detail.label}
+                  src={detail.icon}
+                />
               </div>
-            ))}
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="text-sm font-medium text-black opacity-60">
+                {detail.label}
+              </div>
+              <div className="text-base text-black">{detail.value}</div>
+            </div>
           </div>
         ))}
       </div>
     </div>
-    <Button className="w-full py-3 px-[81px] bg-[#566fe9] text-white rounded-[100px] font-semibold z-[-1]">
+    <Button className="w-full rounded-[100px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20">
       Start Your Journey
     </Button>
   </section>
@@ -219,12 +243,11 @@ const WhatYouWillLearnSection = ({
   <section className="flex flex-col gap-6">
     <h2 className="text-xl font-semibold text-black">What you'll learn</h2>
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-3">
         {skills.map((skill) => (
           <Badge
             key={skill}
-            variant="outline"
-            className="h-10 px-5 py-2.5 bg-[#566fe91a] text-[#566fe9] font-medium rounded-[100px]"
+            className="flex h-10 items-center rounded-full bg-[#eef2ff] px-5 text-sm font-medium text-[#566fe9]"
           >
             {skill}
           </Badge>
@@ -232,10 +255,10 @@ const WhatYouWillLearnSection = ({
       </div>
       <div className="flex flex-col gap-4">
         {outcomes.map((outcome) => (
-          <div key={outcome} className="flex items-center gap-2">
-            <div className="w-5 h-5 relative">
+          <div key={outcome} className="flex items-start gap-3">
+            <div className="flex-shrink-0 mt-1">
               <img
-                className="absolute w-4 h-4 top-0.5 left-0.5"
+                className="h-[16.25px] w-[16.25px]"
                 alt="Checkmark"
                 src="/ticked.svg"
               />
@@ -248,31 +271,32 @@ const WhatYouWillLearnSection = ({
   </section>
 );
 
-
 const TeacherProfileSection = () => (
   <section className="flex flex-col gap-6">
     <h2 className="text-xl font-semibold text-black">Meet your teacher</h2>
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-4">
-        <Avatar className="w-14 h-14">
+        <Avatar className="h-14 w-14">
           <AvatarImage src="/teacher1.svg" alt="Arjun Mehta" />
         </Avatar>
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2.5">
-            <span className="font-semibold text-base text-black">Arjun Mehta</span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-base font-semibold text-black">
+              Arjun Mehta
+            </span>
             <Badge
               variant="outline"
-              className="flex items-center gap-1 pl-2.5 pr-3.5 py-1 bg-[#566fe91a] text-[#566fe9] border-[#566fe940] rounded-[30px]"
+              className="flex items-center gap-1 rounded-[30px] border-[#566fe940] bg-[#566fe91a] py-1 pl-2.5 pr-3.5 text-[#566fe9]"
             >
-              <div className="relative w-4 h-4">
-                <div className="relative w-3.5 h-[13px] top-px left-px">
+              <div className="relative h-4 w-4">
+                <div className="relative left-px top-px h-[13px] w-3.5">
                   <img
-                    className="absolute w-[13px] h-3 top-0 left-px"
+                    className="absolute left-px top-0 h-3 w-[13px]"
                     alt="Vector"
                     src="/vector.svg"
                   />
                   <img
-                    className="absolute w-3.5 h-[13px] top-0 left-0"
+                    className="absolute left-0 top-0 h-[13px] w-3.5"
                     alt="Vector"
                     src="/star1.svg"
                   />
@@ -309,15 +333,17 @@ const ReviewsSection = ({ reviews }: { reviews: Review[] }) => (
         <React.Fragment key={review.name}>
           <div className="flex flex-col gap-3">
             <div className="flex items-start gap-4">
-              <Avatar className="w-12 h-12">
+              <Avatar className="h-12 w-12">
                 <AvatarImage src={review.avatar} alt={review.name} />
               </Avatar>
               <div className="flex flex-col gap-2">
-                <div className="font-semibold text-base text-black">{review.name}</div>
-                <div className="flex items-center gap-[9px]">
-                  <img className="h-5" alt="Rating" src={review.rating} />
+                <div className="text-base font-semibold text-black">
+                  {review.name}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-[9px] gap-y-2">
+                  <StarRating rating={review.rating} />
                   <img
-                    className="w-[1.5px] h-[15px]"
+                    className="hidden h-[15px] w-[1.5px] sm:block"
                     alt="Divider"
                     src="/line-21.svg"
                   />
@@ -327,11 +353,11 @@ const ReviewsSection = ({ reviews }: { reviews: Review[] }) => (
                 </div>
               </div>
             </div>
-            <p className="text-base leading-6 text-black pl-16">
+            <p className="text-base leading-6 text-black sm:pl-16">
               {review.comment}
             </p>
           </div>
-          {index < reviews.length - 1 && <Separator className="w-full h-px" />}
+          {index < reviews.length - 1 && <Separator className="h-px w-full" />}
         </React.Fragment>
       ))}
     </div>
@@ -348,10 +374,10 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
           value={`faq-${index}`}
           className="border-b border-solid border-gray-200"
         >
-          <AccordionTrigger className="py-4 text-base font-semibold text-left text-black">
+          <AccordionTrigger className="py-4 text-left text-base font-semibold text-black">
             {faq.question}
           </AccordionTrigger>
-          <AccordionContent className="text-base text-black pb-4">
+          <AccordionContent className="pb-4 text-base text-black">
             {faq.answer}
           </AccordionContent>
         </AccordionItem>
@@ -365,14 +391,16 @@ export default function MyCoursesPage(): JSX.Element {
   return (
     <>
       <Sphere />
-      <div className="w-full h-full flex flex-col font-sans text-gray-900">
+      <div className="flex h-full w-full flex-col font-sans text-gray-900">
         <main className="flex-grow overflow-y-auto">
-          <div className="max-w-[1440px] mx-auto px-6 py-12 z-[-1]">
-            <CourseHeader />
-            <CourseBanner />
-
+          <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             {/* Central Content Container */}
-            <div className="flex flex-col w-full max-w-[750px] mx-auto gap-[60px]">
+            <div className="mx-auto flex w-full max-w-[80%] flex-col gap-10 md:gap-12">
+              <div className="flex flex-col gap-6">
+                <CourseHeader />
+                <CourseBanner />
+              </div>
+
               <CourseIntroduction tags={courseTags} />
               <CourseDetailsSection details={courseDetails} />
               <WhatYouWillLearnSection
@@ -386,7 +414,7 @@ export default function MyCoursesPage(): JSX.Element {
             </div>
           </div>
         </main>
-        <div className="w-full h-[60px] flex-shrink-0 mr-10 ">
+        <div className="h-[60px] w-full flex-shrink-0">
           <Footer />
         </div>
       </div>

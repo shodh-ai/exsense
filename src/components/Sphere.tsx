@@ -498,7 +498,7 @@ const Sphere: React.FC = () => {
                         transition: 'opacity 0.3s ease-in-out',
                         willChange: 'top, left, opacity',
                         backgroundColor: 'rgba(246, 246, 254, 0.9)',
-                        fontFamily: 'Plus Jakarta Sans, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"',
+                        fontFamily: 'var(--font-plus-jakarta-sans), Plus Jakarta Sans, ui-sans-serif, system-ui, -apple-system, sans-serif',
                         fontWeight: 600,
                         fontSize: '16px',
                         lineHeight: '20px',
