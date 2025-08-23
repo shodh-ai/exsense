@@ -12,7 +12,10 @@ import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
-import { submitImprintingEpisode, stageAsset, conversationalTurn, submitSeed } from '@/lib/imprinterService';
+import { submitImprintingEpisode, stageAsset, conversationalTurn, submitSeed, processSeedDocument, fetchCurriculumDraft } from '@/lib/imprinterService';
+import SeedInput from '@/components/imprinting/SeedInput';
+import CurriculumEditor from '@/components/imprinting/CurriculumEditor';
+import LoSelector from '@/components/imprinting/LoSelector';
 
 // File: exsense/src/app/session/page.tsx
 
@@ -186,7 +189,7 @@ async function convertBlobToWavDataURL(blob: Blob): Promise<string> {
 }
 
 export default function Session() {
-    const { activeView, setActiveView, imprinting_mode, setImprintingMode, currentLO, setCurrentLO } = useSessionStore();
+    const { activeView, setActiveView, imprinting_mode, setImprintingMode, currentLO, setCurrentLO, imprintingPhase, setImprintingPhase, curriculumDraft, setCurriculumDraft } = useSessionStore();
     const [isIntroActive, setIsIntroActive] = useState(true);
     const handleIntroComplete = () => setIsIntroActive(false);
     const { user, isSignedIn, isLoaded } = useUser();
@@ -299,6 +302,29 @@ export default function Session() {
     const [isStartAllowed, setIsStartAllowed] = useState<boolean>(true);
 
     const curriculumId = courseId || 'pandas_expert_test_01';
+
+    // --- New Imprinting Phase Handlers ---
+    const handleSeedSubmit = async (content: string) => {
+        setImprintingPhase('SEED_PROCESSING');
+        try {
+            await processSeedDocument({ curriculum_id: String(curriculumId), content });
+            const draft = await fetchCurriculumDraft(String(curriculumId));
+            setCurriculumDraft(draft);
+            setImprintingPhase('REVIEW_DRAFT');
+        } catch (error) {
+            console.error('Seed processing failed:', error);
+            setImprintingPhase('SEED_INPUT');
+        }
+    };
+
+    const handleReviewComplete = () => {
+        setImprintingPhase('LO_SELECTION');
+    };
+
+    const handleLoSelected = (loName: string) => {
+        setCurrentLO(loName);
+        setImprintingPhase('LIVE_IMPRINTING');
+    };
 
     // ---- Conceptual chat state ----
     const [conceptualInput, setConceptualInput] = useState<string>('');
@@ -693,169 +719,187 @@ export default function Session() {
         <>
             <SignedIn>
                 <Sphere />
-                <div className='flex flex-col w-full h-full items-center justify-between pb-28'>
-                    <SessionContent 
-                        activeView={activeView} 
-                        setActiveView={setActiveView} 
-                        componentButtons={componentButtons} 
-                        vncUrl={viewerUrl}
-                        vncOverlay={null}
-                        handleVncInteraction={handleVncInteraction}
-                    />
+                {imprintingPhase !== 'LIVE_IMPRINTING' ? (
+                    <div className='w-full h-full'>
+                        {imprintingPhase === 'SEED_INPUT' && (
+                            <SeedInput onSubmit={handleSeedSubmit} />
+                        )}
+                        {imprintingPhase === 'SEED_PROCESSING' && (
+                            <div className="w-full h-full flex items-center justify-center text-white">Analyzing your curriculum... Please wait.</div>
+                        )}
+                        {imprintingPhase === 'REVIEW_DRAFT' && (
+                            <CurriculumEditor initialDraft={curriculumDraft} onFinalize={handleReviewComplete} curriculumId={String(curriculumId)} />
+                        )}
+                        {imprintingPhase === 'LO_SELECTION' && (
+                            <LoSelector learningObjectives={curriculumDraft} onSelect={handleLoSelected} />
+                        )}
+                    </div>
+                ) : (
+                    <>
+                        <div className='flex flex-col w-full h-full items-center justify-between pb-28'>
+                            <SessionContent 
+                                activeView={activeView} 
+                                setActiveView={setActiveView} 
+                                componentButtons={componentButtons} 
+                                vncUrl={viewerUrl}
+                                vncOverlay={null}
+                                handleVncInteraction={handleVncInteraction}
+                            />
 
-                    {/* Fixed bottom Episode Controls bar */}
-                    <div className="fixed bottom-0 left-0 right-0 z-50">
-                        <div className="mx-auto w-full md:w-[90%] lg:w-[70%] px-3 pb-3">
-                            <div className="bg-[#0F1226]/90 border border-[#2A2F4A] backdrop-blur-md rounded-t-xl p-3 text-white">
-                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                                    <div className="flex flex-wrap gap-2 items-center">
-                                        <button
-                                            onClick={handleSelectPractical}
-                                            className={`rounded-md px-4 py-2 text-sm font-medium ${imprinting_mode === 'WORKFLOW' ? 'bg-blue-700' : 'bg-slate-600 hover:bg-slate-500'}`}
-                                        >
-                                            Practical
-                                        </button>
-                                        <button
-                                            onClick={handleSelectConceptual}
-                                            className={`rounded-md px-4 py-2 text-sm font-medium ${imprinting_mode === 'DEBRIEF_CONCEPTUAL' ? 'bg-blue-700' : 'bg-slate-600 hover:bg-slate-500'}`}
-                                        >
-                                            Conceptual
-                                        </button>
-                                        <div className="flex items-center gap-2">
-                                            <input
-                                                ref={topicInputRef}
-                                                type="text"
-                                                value={topicInput}
-                                                onChange={(e) => {
-                                                    const v = e.target.value;
-                                                    setTopicInput(v);
-                                                    // Update current LO only if not mid conceptual Q&A
-                                                    if (!(imprinting_mode === 'DEBRIEF_CONCEPTUAL' && isConceptualStarted)) {
-                                                        setCurrentLO(v);
-                                                    }
-                                                }}
-                                                placeholder={imprinting_mode === 'DEBRIEF_CONCEPTUAL' ? (isConceptualStarted ? 'Answer AI...' : 'Topic (Current LO)') : 'Topic (Current LO)'}
-                                                className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-56 text-xs"
-                                            />
-                                            {imprinting_mode === 'DEBRIEF_CONCEPTUAL' && (
+                            {/* Fixed bottom Episode Controls bar */}
+                            <div className="fixed bottom-0 left-0 right-0 z-50">
+                                <div className="mx-auto w-full md:w-[90%] lg:w-[70%] px-3 pb-3">
+                                    <div className="bg-[#0F1226]/90 border border-[#2A2F4A] backdrop-blur-md rounded-t-xl p-3 text-white">
+                                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                            <div className="flex flex-wrap gap-2 items-center">
                                                 <button
-                                                    onClick={handleSendConceptual}
-                                                    className="rounded-md px-3 py-1 text-xs font-medium bg-indigo-600 hover:bg-indigo-500"
+                                                    onClick={handleSelectPractical}
+                                                    className={`rounded-md px-4 py-2 text-sm font-medium ${imprinting_mode === 'WORKFLOW' ? 'bg-blue-700' : 'bg-slate-600 hover:bg-slate-500'}`}
                                                 >
-                                                    Send
+                                                    Practical
                                                 </button>
-                                            )}
-                                        </div>
-                                        <button
-                                            onClick={handleStartRecording}
-                                            disabled={isRecording || !isStartAllowed || isSubmitting}
-                                            className={`rounded-md px-4 py-2 text-sm font-medium ${(isRecording || !isStartAllowed || isSubmitting) ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}
-                                        >
-                                            Start Recording
-                                        </button>
-                                        <button
-                                            onClick={handleStopRecording}
-                                            disabled={!isRecording}
-                                            className={`rounded-md px-4 py-2 text-sm font-medium ${!isRecording ? 'bg-gray-600 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-500'}`}
-                                        >
-                                            Stop/Pause
-                                        </button>
-                                        
-                                        <label className="text-xs opacity-80">
-                                            <span className="sr-only">Upload Asset</span>
-                                            <input
-                                                type="file"
-                                                onChange={handleAssetUpload}
-                                                disabled={!isRecording}
-                                                className="block text-xs"
-                                            />
-                                        </label>
-                                        <button
-                                            onClick={handleSubmitEpisode}
-                                            disabled={isSubmitting || packetsCount === 0}
-                                            className={`rounded-md px-4 py-2 text-sm font-medium ${isSubmitting || packetsCount === 0 ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}
-                                        >
-                                            {isSubmitting ? 'Submitting...' : 'Submit Episode'}
-                                        </button>
-                                        <button
-                                            onClick={handleFinish}
-                                            disabled={isSubmitting}
-                                            className={`rounded-md px-4 py-2 text-sm font-medium ${isSubmitting ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500'}`}
-                                        >
-                                            Finish Session
-                                        </button>
-                                    </div>
-                                    <div className="text-xs text-gray-300 space-y-1 md:text-right">
-                                        <div><span className="text-gray-400">Mic:</span> {isRecording ? 'Recording' : 'Idle'}</div>
-                                        <div><span className="text-gray-400">Packets:</span> {packetsCount}</div>
-                                        <div><span className="text-gray-400">Action WS:</span> {isVNCConnected ? 'Connected' : 'Disconnected'}</div>
-                                        <div className="opacity-80 break-all"><span className="text-gray-400">Viewer:</span> {viewerUrl}</div>
-                                        <div className="opacity-80 break-all"><span className="text-gray-400">Action:</span> {actionUrl}</div>
-                                        {viewerUrl === actionUrl && (
-                                            <div className="text-amber-300">Warning: Viewer and Action URLs are identical. Use 6901 for viewer, 8765 for action.</div>
-                                        )}
-                                        {statusMessage && <div className="text-sky-300">{statusMessage}</div>}
-                                        {submitMessage && <div className="text-emerald-300">{submitMessage}</div>}
-                                        {submitError && <div className="text-red-300">{submitError}</div>}
-                                        <div className="mt-2 flex flex-col gap-2">
-                                            
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={seedText}
-                                                    onChange={(e) => setSeedText(e.target.value)}
-                                                    className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-64"
-                                                    placeholder="Seed text (curriculum seed)"
-                                                />
                                                 <button
-                                                    onClick={handleSubmitSeed}
-                                                    className="rounded-md px-3 py-1 text-xs font-medium bg-purple-600 hover:bg-purple-500"
+                                                    onClick={handleSelectConceptual}
+                                                    className={`rounded-md px-4 py-2 text-sm font-medium ${imprinting_mode === 'DEBRIEF_CONCEPTUAL' ? 'bg-blue-700' : 'bg-slate-600 hover:bg-slate-500'}`}
                                                 >
-                                                    Submit Seed
+                                                    Conceptual
+                                                </button>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        ref={topicInputRef}
+                                                        type="text"
+                                                        value={topicInput}
+                                                        onChange={(e) => {
+                                                            const v = e.target.value;
+                                                            setTopicInput(v);
+                                                            // Update current LO only if not mid conceptual Q&A
+                                                            if (!(imprinting_mode === 'DEBRIEF_CONCEPTUAL' && isConceptualStarted)) {
+                                                                setCurrentLO(v);
+                                                            }
+                                                        }}
+                                                        placeholder={imprinting_mode === 'DEBRIEF_CONCEPTUAL' ? (isConceptualStarted ? 'Answer AI...' : 'Topic (Current LO)') : 'Topic (Current LO)'}
+                                                        className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-56 text-xs"
+                                                    />
+                                                    {imprinting_mode === 'DEBRIEF_CONCEPTUAL' && (
+                                                        <button
+                                                            onClick={handleSendConceptual}
+                                                            className="rounded-md px-3 py-1 text-xs font-medium bg-indigo-600 hover:bg-indigo-500"
+                                                        >
+                                                            Send
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    onClick={handleStartRecording}
+                                                    disabled={isRecording || !isStartAllowed || isSubmitting}
+                                                    className={`rounded-md px-4 py-2 text-sm font-medium ${(isRecording || !isStartAllowed || isSubmitting) ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-500'}`}
+                                                >
+                                                    Start Recording
+                                                </button>
+                                                <button
+                                                    onClick={handleStopRecording}
+                                                    disabled={!isRecording}
+                                                    className={`rounded-md px-4 py-2 text-sm font-medium ${!isRecording ? 'bg-gray-600 cursor-not-allowed' : 'bg-yellow-600 hover:bg-yellow-500'}`}
+                                                >
+                                                    Stop/Pause
+                                                </button>
+                                                
+                                                <label className="text-xs opacity-80">
+                                                    <span className="sr-only">Upload Asset</span>
+                                                    <input
+                                                        type="file"
+                                                        onChange={handleAssetUpload}
+                                                        disabled={!isRecording}
+                                                        className="block text-xs"
+                                                    />
+                                                </label>
+                                                <button
+                                                    onClick={handleSubmitEpisode}
+                                                    disabled={isSubmitting || packetsCount === 0}
+                                                    className={`rounded-md px-4 py-2 text-sm font-medium ${isSubmitting || packetsCount === 0 ? 'bg-gray-600 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-500'}`}
+                                                >
+                                                    {isSubmitting ? 'Submitting...' : 'Submit Episode'}
+                                                </button>
+                                                <button
+                                                    onClick={handleFinish}
+                                                    disabled={isSubmitting}
+                                                    className={`rounded-md px-4 py-2 text-sm font-medium ${isSubmitting ? 'bg-gray-600 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500'}`}
+                                                >
+                                                    Finish Session
                                                 </button>
                                             </div>
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={viewerUrlInput}
-                                                    onChange={(e) => setViewerUrlInput(e.target.value)}
-                                                    className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-52"
-                                                    placeholder="Viewer URL (ws://localhost:6901)"
-                                                />
-                                                <input
-                                                    type="text"
-                                                    value={actionUrlInput}
-                                                    onChange={(e) => setActionUrlInput(e.target.value)}
-                                                    className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-52"
-                                                    placeholder="Action URL (ws://localhost:8765)"
-                                                />
-                                                <button
-                                                    onClick={() => { setViewerUrl(viewerUrlInput); setActionUrl(actionUrlInput); }}
-                                                    className="rounded-md px-3 py-1 text-xs font-medium bg-slate-600 hover:bg-slate-500"
-                                                >
-                                                    Apply URLs
-                                                </button>
+                                            <div className="text-xs text-gray-300 space-y-1 md:text-right">
+                                                <div><span className="text-gray-400">Mic:</span> {isRecording ? 'Recording' : 'Idle'}</div>
+                                                <div><span className="text-gray-400">Packets:</span> {packetsCount}</div>
+                                                <div><span className="text-gray-400">Action WS:</span> {isVNCConnected ? 'Connected' : 'Disconnected'}</div>
+                                                <div className="opacity-80 break-all"><span className="text-gray-400">Viewer:</span> {viewerUrl}</div>
+                                                <div className="opacity-80 break-all"><span className="text-gray-400">Action:</span> {actionUrl}</div>
+                                                {viewerUrl === actionUrl && (
+                                                    <div className="text-amber-300">Warning: Viewer and Action URLs are identical. Use 6901 for viewer, 8765 for action.</div>
+                                                )}
+                                                {statusMessage && <div className="text-sky-300">{statusMessage}</div>}
+                                                {submitMessage && <div className="text-emerald-300">{submitMessage}</div>}
+                                                {submitError && <div className="text-red-300">{submitError}</div>}
+                                                <div className="mt-2 flex flex-col gap-2">
+                                                    
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={seedText}
+                                                            onChange={(e) => setSeedText(e.target.value)}
+                                                            className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-64"
+                                                            placeholder="Seed text (curriculum seed)"
+                                                        />
+                                                        <button
+                                                            onClick={handleSubmitSeed}
+                                                            className="rounded-md px-3 py-1 text-xs font-medium bg-purple-600 hover:bg-purple-500"
+                                                        >
+                                                            Submit Seed
+                                                        </button>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="text"
+                                                            value={viewerUrlInput}
+                                                            onChange={(e) => setViewerUrlInput(e.target.value)}
+                                                            className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-52"
+                                                            placeholder="Viewer URL (ws://localhost:6901)"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={actionUrlInput}
+                                                            onChange={(e) => setActionUrlInput(e.target.value)}
+                                                            className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-52"
+                                                            placeholder="Action URL (ws://localhost:8765)"
+                                                        />
+                                                        <button
+                                                            onClick={() => { setViewerUrl(viewerUrlInput); setActionUrl(actionUrlInput); }}
+                                                            className="rounded-md px-3 py-1 text-xs font-medium bg-slate-600 hover:bg-slate-500"
+                                                        >
+                                                            Apply URLs
+                                                        </button>
+                                                    </div>
+                                                    {lastConceptualReply && imprinting_mode === 'DEBRIEF_CONCEPTUAL' && (
+                                                        <div className="text-xs text-sky-300 break-words">AI: {lastConceptualReply}</div>
+                                                    )}
+                                                </div>
                                             </div>
-                                            {lastConceptualReply && imprinting_mode === 'DEBRIEF_CONCEPTUAL' && (
-                                                <div className="text-xs text-sky-300 break-words">AI: {lastConceptualReply}</div>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-                <Footer room={room} agentIdentity={agentIdentity || undefined} />
-                
-                {/* Display transcription and status messages when connected */}
-                {isConnected && (
-                    <MessageDisplay 
-                        transcriptionMessages={transcriptionMessages || []}
-                        statusMessages={statusMessages || []}
-                    />
+                        <Footer room={room} agentIdentity={agentIdentity || undefined} />
+                        
+                        {/* Display transcription and status messages when connected */}
+                        {isConnected && (
+                            <MessageDisplay 
+                                transcriptionMessages={transcriptionMessages || []}
+                                statusMessages={statusMessages || []}
+                            />
+                        )}
+                    </>
                 )}
-          
             </SignedIn>
             
             <SignedOut>

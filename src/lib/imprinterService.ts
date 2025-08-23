@@ -2,6 +2,8 @@
 
 const IMPRINTER_URL = process.env.NEXT_PUBLIC_IMPRINTER_URL || 'http://localhost:8002';
 
+import type { LearningObjective } from './store';
+
 
 export async function submitImprintingEpisode(payload: {
   expert_id: string;
@@ -79,5 +81,66 @@ export async function submitSeed(payload: {
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(`Failed to submit seed (${response.status})`);
+  return response.json();
+}
+
+// --- NEW: Curriculum management endpoints ---
+export async function processSeedDocument(payload: { curriculum_id: string; content: string }) {
+  const response = await fetch(`${IMPRINTER_URL}/curriculum/process_seed`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`Failed to process seed document (${response.status})`);
+  return response.json();
+}
+
+export async function fetchCurriculumDraft(curriculum_id: string): Promise<LearningObjective[]> {
+  const response = await fetch(`${IMPRINTER_URL}/curriculum/${curriculum_id}`);
+  if (!response.ok) throw new Error(`Failed to fetch curriculum draft (${response.status})`);
+  const data = await response.json();
+  return data.curriculum as LearningObjective[];
+}
+
+export async function updateNode(payload: {
+  curriculum_id: string;
+  node_type: 'LO' | 'Concept';
+  old_name: string;
+  new_data: any;
+}) {
+  const response = await fetch(`${IMPRINTER_URL}/curriculum/update_node`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`Failed to update node (${response.status})`);
+  return response.json();
+}
+
+export async function createNode(payload: {
+  curriculum_id: string;
+  node_type: 'LO' | 'Concept' | 'WorkflowStep';
+  new_data: any;
+}) {
+  const response = await fetch(`${IMPRINTER_URL}/curriculum/create_node`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`Failed to create node (${response.status})`);
+  return response.json();
+}
+
+export async function deleteNode(payload: {
+  curriculum_id: string;
+  node_type: 'LO' | 'Concept' | 'WorkflowStep';
+  name: string;
+}) {
+  const response = await fetch(`${IMPRINTER_URL}/curriculum/delete_node`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`Failed to delete node (${response.status})`);
   return response.json();
 }
