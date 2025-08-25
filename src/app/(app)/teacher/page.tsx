@@ -2,17 +2,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Footer from '@/components/Footer';
-import { Room } from 'livekit-client';
 
 import dynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
-import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
 import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
-import { submitImprintingEpisode, stageAsset, conversationalTurn, submitSeed, processSeedDocument, fetchCurriculumDraft } from '@/lib/imprinterService';
+import { submitImprintingEpisode, stageAsset, conversationalTurn, submitSeed, processSeedDocument, fetchCurriculumDraft, saveSetupScript } from '@/lib/imprinterService';
 import SeedInput from '@/components/imprinting/SeedInput';
 import CurriculumEditor from '@/components/imprinting/CurriculumEditor';
 import LoSelector from '@/components/imprinting/LoSelector';
@@ -26,10 +24,7 @@ type TipTapEditorPropsLocal = { className?: string; initialContent?: string; pla
 const TipTapEditor = dynamic<TipTapEditorPropsLocal>(() => import('@/components/session/TipTapEditor'), { ssr: false });
 const VncViewer = dynamic(() => import('@/components/session/VncViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
-const MessageDisplay = dynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
 
-// Fallback room for when LiveKit is not connected
-const fallbackRoom = new Room();
 type ViewKey = ReturnType<typeof useSessionStore.getState>['activeView'];
 
 // Define a type for button configuration, including both active and inactive icon paths
@@ -225,24 +220,8 @@ export default function Session() {
         }
     }, [isLoaded, isSignedIn, router]);
     
-    // Wait for authentication to settle before initializing LiveKit
-    const shouldInitializeLiveKit = isLoaded && isSignedIn && user?.id;
-    
-    // Generate unique room and user identifiers using Clerk user data
-    const roomName = shouldInitializeLiveKit ? `session-${user.id}` : `session-${Date.now()}`;
-    const userName = shouldInitializeLiveKit ? (user.emailAddresses[0]?.emailAddress || user.username || `user-${user.id}`) : `student-${Date.now()}`;
-    
-    // Initialize LiveKit session only when authenticated
-    const {
-        room,
-        isConnected,
-        isLoading,
-        connectionError,
-        startTask,
-        agentIdentity,
-        transcriptionMessages,
-        statusMessages
-    } = useLiveKitSession(shouldInitializeLiveKit ? roomName : '', shouldInitializeLiveKit ? userName : '');
+    // Generate a session identifier for backend usage (independent of LiveKit)
+    const roomName = user?.id ? `session-${user.id}` : `session-${Date.now()}`;
     
     // Get URLs from environment variables
     // Viewer (noVNC): typically 6901
@@ -258,8 +237,9 @@ export default function Session() {
     const [actionUrlInput, setActionUrlInput] = useState<string>(vncActionUrl);
 
     // Initialize browser automation hooks (connect to action listener, not viewer)
-    const { isVNCConnected, disconnectVNC, executeBrowserAction, setOnVNCResponse } = useBrowserActionExecutor(room, actionUrl);
-    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room);
+    // LiveKit is not used here; pass null for room to disable RPC registration
+    const { isVNCConnected, disconnectVNC, executeBrowserAction, setOnVNCResponse, awaitVNCOpen } = useBrowserActionExecutor(null, actionUrl);
+    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(null);
     
     // Initialize Mermaid visualization hook
 
@@ -290,6 +270,7 @@ export default function Session() {
     // ---- Episode Recording + Packet Collection ----
     const [isRecording, setIsRecording] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSavingSetup, setIsSavingSetup] = useState(false);
     const [statusMessage, setStatusMessage] = useState<string>('Session started. Waiting for initial prompt.');
     const [submitMessage, setSubmitMessage] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
@@ -298,7 +279,8 @@ export default function Session() {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<BlobPart[]>([]);
     const audioBlobRef = useRef<Blob | null>(null);
-    const stagedAssetsRef = useRef<any[]>([]);
+    // Staged assets uploaded to imprinter store; kept locally with role metadata for episode submit
+    const [stagedAssets, setStagedAssets] = useState<{ filename: string; role: string; asset_id: string }[]>([]);
     const [isStartAllowed, setIsStartAllowed] = useState<boolean>(true);
 
     const curriculumId = courseId || 'pandas_expert_test_01';
@@ -314,6 +296,50 @@ export default function Session() {
         } catch (error) {
             console.error('Seed processing failed:', error);
             setImprintingPhase('SEED_INPUT');
+        }
+    };
+
+    // --- Setup Script Textbox (manual JSON of actions) ---
+    const [setupActionsText, setSetupActionsText] = useState<string>('');
+
+    const handleSaveSetupText = async () => {
+        if (!currentLO) {
+            setSubmitError('Please enter/select a Topic (LO) before saving setup.');
+            return;
+        }
+        const raw = (setupActionsText || '').trim();
+        if (!raw) {
+            setSubmitError('Please paste setup actions JSON into the textbox.');
+            return;
+        }
+        let actions: any[];
+        try {
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) throw new Error('JSON must be an array of action objects');
+            actions = parsed;
+        } catch (e: any) {
+            setSubmitError(`Invalid JSON: ${e?.message || e}`);
+            return;
+        }
+
+        setIsSavingSetup(true);
+        setSubmitMessage(null);
+        setSubmitError(null);
+        try {
+            setStatusMessage('Saving setup script...');
+            const resp = await saveSetupScript({
+                curriculum_id: String(curriculumId),
+                lo_name: currentLO,
+                actions,
+            });
+            setSubmitMessage(resp?.message || `Setup script saved for ${currentLO}.`);
+            setStatusMessage('Setup script saved.');
+        } catch (err: any) {
+            console.error('Save setup script failed:', err);
+            setSubmitError(err?.message || 'Failed to save setup script');
+            setStatusMessage(`Error: ${err?.message || 'Failed to save setup script'}`);
+        } finally {
+            setIsSavingSetup(false);
         }
     };
 
@@ -333,6 +359,7 @@ export default function Session() {
     const [topicInput, setTopicInput] = useState<string>(currentLO || '');
     const [seedText, setSeedText] = useState<string>('');
     const topicInputRef = useRef<HTMLInputElement | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     // --- Lightweight response awaiter infrastructure ---
     type PendingResolver = { id: string; expectAction: string; resolve: (resp: any) => void; reject: (err: any) => void; timeoutId: any };
@@ -387,6 +414,7 @@ export default function Session() {
             const resp = await submitSeed({
                 expert_id: user.id,
                 session_id: roomName,
+                curriculum_id: String(curriculumId),
                 content: seedText,
             });
             setStatusMessage(resp?.message || 'Seed submitted.');
@@ -406,7 +434,22 @@ export default function Session() {
             setStatusMessage('Initializing recording on server...');
             // Reset local counters (server will track actions)
             setPacketsCount(0);
-            stagedAssetsRef.current = [];
+            setStagedAssets([]);
+
+            // Ensure VNC connection is open before sending critical command
+            if (!isVNCConnected) {
+                setStatusMessage('Connecting to VNC backend...');
+                try {
+                    await awaitVNCOpen(15000);
+                    console.log('[SessionPage] VNC connection established. Proceeding to start recording.');
+                } catch (connErr: any) {
+                    console.error('[SessionPage] Failed to establish VNC connection before start:', connErr);
+                    setSubmitError(connErr?.message || 'Failed to connect to VNC backend');
+                    setStatusMessage(connErr?.message || 'Failed to connect to VNC backend');
+                    setIsRecording(false);
+                    return;
+                }
+            }
 
             // 1) Tell backend to start recording and await server ack
             const startResp = await sendAndAwait('start_recording', {
@@ -470,10 +513,8 @@ export default function Session() {
             setStatusMessage('Sending conceptual turn...');
             // If not started, kick off using the topicInput as both current_lo and initial expert response
             if (!isConceptualStarted) {
-                const topic = (topicInput || '').trim();
+                const topic = (currentLO || '').trim();
                 if (!topic) return;
-                // Persist topic as current LO for practical submissions
-                setCurrentLO(topic);
                 const resp = await conversationalTurn({
                     curriculum_id: curriculumId,
                     session_id: roomName,
@@ -578,10 +619,11 @@ export default function Session() {
             const response = await submitImprintingEpisode({
                 expert_id: user?.id || 'unknown_expert',
                 session_id: roomName,
+                curriculum_id: String(curriculumId),
                 narration: 'Expert narration from episode.',
                 audio_b64,
                 expert_actions: packets,
-                staged_assets: stagedAssetsRef.current,
+                staged_assets: stagedAssets,
                 current_lo: currentLO || undefined,
             });
 
@@ -613,6 +655,7 @@ export default function Session() {
             setPacketsCount(0);
             audioChunksRef.current = [];
             audioBlobRef.current = null;
+            setStagedAssets([]);
         } catch (err: any) {
             console.error('Submit episode failed:', err);
             setSubmitError(err?.message || 'Failed to submit');
@@ -625,19 +668,28 @@ export default function Session() {
     const handleAssetUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !user?.id) return;
+        const role = window.prompt("Role for this file? (e.g., STARTER_CODE, DATASET)", "STARTER_CODE") || "STARTER_CODE";
         setStatusMessage(`Uploading asset: ${file.name}...`);
         try {
             const assetInfo = await stageAsset({
                 expert_id: user.id,
                 session_id: roomName,
+                curriculum_id: String(curriculumId),
                 file,
             });
-            stagedAssetsRef.current.push({ filename: assetInfo.filename, asset_id: assetInfo.asset_id });
-            setStatusMessage(`Asset '${file.name}' staged successfully.`);
-            // TODO: push into VNC via a new listener command
+            const item = { filename: assetInfo.filename || file.name, role, asset_id: assetInfo.asset_id };
+            setStagedAssets(prev => [...prev, item]);
+            setStatusMessage(`Asset '${file.name}' staged successfully as ${role}.`);
         } catch (e: any) {
-            setStatusMessage(`Error uploading asset: ${e.message}`);
+            setStatusMessage(`Error uploading asset: ${e?.message || e}`);
+        } finally {
+            // Clear the input value so selecting the same file again triggers onChange
+            if (event.target) event.target.value = '';
         }
+    };
+
+    const handleRemoveStagedAsset = (index: number) => {
+        setStagedAssets(prev => prev.filter((_, i) => i !== index));
     };
 
     const handleFinish = async () => {
@@ -673,47 +725,31 @@ export default function Session() {
         }
     };
 
-    // Effect to manage WebSocket connections for browser automation
+    // Effect to manage WebSocket connections for browser automation (no LiveKit dependency)
     useEffect(() => {
-        // Only connect when the LiveKit session is fully established
-        if (isConnected && sessionBubbleUrl) {
-            if (SESSION_DEBUG) console.log("LiveKit connected, now connecting to session-bubble services...");
-            
-            // The VNC connection is now managed by the useBrowserActionExecutor hook
-            // We still need to manage the sensor connection here
+        if (sessionBubbleUrl) {
+            if (SESSION_DEBUG) console.log("Connecting to session-bubble services...");
+            // The VNC connection is managed by useBrowserActionExecutor; set up the sensor connection here
             connectToVNCSensor(sessionBubbleUrl);
         }
 
-        // Return a cleanup function to disconnect when the component unmounts
+        // Cleanup on unmount
         return () => {
-            if (isConnected) {
-                if (SESSION_DEBUG) console.log("Session component unmounting, disconnecting from session-bubble.");
-                disconnectVNC();
-                disconnectFromVNCSensor();
-            }
+            disconnectVNC();
+            disconnectFromVNCSensor();
         };
-    }, [isConnected, sessionBubbleUrl, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
+    }, [sessionBubbleUrl, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
 
     // Show loading while Clerk is initializing
     if (!isLoaded) {
         return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
     }
     
-    // Show loading while authentication is settling
-    if (!isLoaded) {
-        return <div className="w-full h-full flex items-center justify-center text-white">Loading authentication...</div>;
-    }
-    
-    // Show loading while LiveKit is initializing
-    if (isLoading) {
-        return <div className="w-full h-full flex items-center justify-center text-white">Initializing Session...</div>;
-    }
-    if (connectionError) {
-        return <div className="w-full h-full flex items-center justify-center text-red-400">Connection Error: {connectionError}</div>;
-    }
     if (isIntroActive) {
         return <IntroPage onAnimationComplete={handleIntroComplete} />;
     }
+
+// ...
 
     return (
         <>
@@ -765,28 +801,27 @@ export default function Session() {
                                                     Conceptual
                                                 </button>
                                                 <div className="flex items-center gap-2">
-                                                    <input
-                                                        ref={topicInputRef}
-                                                        type="text"
-                                                        value={topicInput}
-                                                        onChange={(e) => {
-                                                            const v = e.target.value;
-                                                            setTopicInput(v);
-                                                            // Update current LO only if not mid conceptual Q&A
-                                                            if (!(imprinting_mode === 'DEBRIEF_CONCEPTUAL' && isConceptualStarted)) {
-                                                                setCurrentLO(v);
-                                                            }
-                                                        }}
-                                                        placeholder={imprinting_mode === 'DEBRIEF_CONCEPTUAL' ? (isConceptualStarted ? 'Answer AI...' : 'Topic (Current LO)') : 'Topic (Current LO)'}
-                                                        className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-56 text-xs"
-                                                    />
-                                                    {imprinting_mode === 'DEBRIEF_CONCEPTUAL' && (
-                                                        <button
-                                                            onClick={handleSendConceptual}
-                                                            className="rounded-md px-3 py-1 text-xs font-medium bg-indigo-600 hover:bg-indigo-500"
-                                                        >
-                                                            Send
-                                                        </button>
+                                                    {imprinting_mode === 'DEBRIEF_CONCEPTUAL' ? (
+                                                        <>
+                                                            <input
+                                                                ref={topicInputRef}
+                                                                type="text"
+                                                                value={topicInput}
+                                                                onChange={(e) => setTopicInput(e.target.value)}
+                                                                placeholder={isConceptualStarted ? 'Answer AI...' : 'Message (optional)'}
+                                                                className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-56 text-xs"
+                                                            />
+                                                            <button
+                                                                onClick={handleSendConceptual}
+                                                                className="rounded-md px-3 py-1 text-xs font-medium bg-indigo-600 hover:bg-indigo-500"
+                                                            >
+                                                                Send
+                                                            </button>
+                                                        </>
+                                                    ) : (
+                                                        <div className="text-xs text-gray-300">
+                                                            <span className="text-gray-400">LO:</span> {currentLO || '—'}
+                                                        </div>
                                                     )}
                                                 </div>
                                                 <button
@@ -803,16 +838,35 @@ export default function Session() {
                                                 >
                                                     Stop/Pause
                                                 </button>
-                                                
-                                                <label className="text-xs opacity-80">
-                                                    <span className="sr-only">Upload Asset</span>
-                                                    <input
-                                                        type="file"
-                                                        onChange={handleAssetUpload}
-                                                        disabled={!isRecording}
-                                                        className="block text-xs"
+                                                {/* Setup Script Textbox (manual) */}
+                                                <div className="ml-2 flex items-start gap-2">
+                                                    <textarea
+                                                        value={setupActionsText}
+                                                        onChange={(e) => setSetupActionsText(e.target.value)}
+                                                        placeholder='Paste setup actions JSON array, e.g. [{"action":"open_url","url":"https://example.com"}]'
+                                                        className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-64 h-16 text-xs"
                                                     />
-                                                </label>
+                                                    <button
+                                                        onClick={handleSaveSetupText}
+                                                        disabled={isSavingSetup || !currentLO}
+                                                        className={`rounded-md px-3 py-2 text-xs font-medium ${(isSavingSetup || !currentLO) ? 'bg-gray-600 cursor-not-allowed' : 'bg-indigo-700 hover:bg-indigo-600'}`}
+                                                    >
+                                                        {isSavingSetup ? 'Saving Setup...' : 'Save Setup Script'}
+                                                    </button>
+                                                </div>
+                                                
+                                                <input
+                                                    ref={fileInputRef}
+                                                    type="file"
+                                                    onChange={handleAssetUpload}
+                                                    className="hidden"
+                                                />
+                                                <button
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    className="rounded-md px-3 py-2 text-xs font-medium bg-amber-600 hover:bg-amber-500"
+                                                >
+                                                    Upload Asset
+                                                </button>
                                                 <button
                                                     onClick={handleSubmitEpisode}
                                                     disabled={isSubmitting || packetsCount === 0}
@@ -840,6 +894,28 @@ export default function Session() {
                                                 {statusMessage && <div className="text-sky-300">{statusMessage}</div>}
                                                 {submitMessage && <div className="text-emerald-300">{submitMessage}</div>}
                                                 {submitError && <div className="text-red-300">{submitError}</div>}
+                                                {stagedAssets.length > 0 && (
+                                                    <div className="mt-2">
+                                                        <div className="text-gray-400">Staged assets:</div>
+                                                        <ul className="mt-1 max-h-24 overflow-y-auto space-y-1">
+                                                            {stagedAssets.map((a, i) => (
+                                                                <li key={`${a.asset_id}-${i}`} className="flex items-center justify-between gap-2 text-[11px] bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1">
+                                                                    <div className="truncate" title={`${a.filename} (${a.role})`}>
+                                                                        <span className="text-white">{a.filename}</span>
+                                                                        <span className="text-gray-400"> · {a.role}</span>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => handleRemoveStagedAsset(i)}
+                                                                        className="text-red-300 hover:text-red-200"
+                                                                        disabled={isSubmitting}
+                                                                    >
+                                                                        Remove
+                                                                    </button>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                )}
                                                 <div className="mt-2 flex flex-col gap-2">
                                                     
                                                     <div className="flex items-center gap-2">
@@ -889,15 +965,7 @@ export default function Session() {
                                 </div>
                             </div>
                         </div>
-                        <Footer room={room} agentIdentity={agentIdentity || undefined} />
-                        
-                        {/* Display transcription and status messages when connected */}
-                        {isConnected && (
-                            <MessageDisplay 
-                                transcriptionMessages={transcriptionMessages || []}
-                                statusMessages={statusMessages || []}
-                            />
-                        )}
+                        <Footer />
                     </>
                 )}
             </SignedIn>

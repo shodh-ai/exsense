@@ -47,6 +47,7 @@ interface UseBrowserActionExecutorReturn {
   disconnectVNC: () => void;
   sendVNCMessage: (message: VNCMessage) => void;
   setOnVNCResponse: (handler: (response: any) => void) => void;
+  awaitVNCOpen: (timeoutMs?: number) => Promise<void>;
 }
 
 // Utility function to convert command to VNC message
@@ -69,7 +70,14 @@ const commandToVNCMessage = (command: BrowserActionCommand): VNCMessage => {
     'jupyter_type_in_cell': 'execute_jupyter_command',
     'jupyter_run_cell': 'execute_jupyter_command',
     'jupyter_create_new_cell': 'execute_jupyter_command',
-    'setup_jupyter': 'execute_jupyter_command'
+    'setup_jupyter': 'execute_jupyter_command',
+    // Recording lifecycle
+    'start_recording': 'start_recording',
+    'stop_recording': 'stop_recording',
+    'get_recorded_actions': 'get_recorded_actions',
+    // Tab management
+    'open_new_tab': 'open_new_tab',
+    'switch_to_tab': 'switch_to_tab',
   };
 
   const vncMessage: VNCMessage = {
@@ -120,6 +128,7 @@ export const useBrowserActionExecutor = (room: Room | null, vncUrl?: string): Us
   const vncDataChannelRef = useRef<RTCDataChannel | null>(null);
   const messageQueueRef = useRef<VNCMessage[]>([]);
   const onVNCResponseRef = useRef<((response: any) => void) | null>(null);
+  const openWaitersRef = useRef<{ resolve: () => void; reject: (e: any) => void; timeoutId: any }[]>([]);
   
   // Send message over VNC connection
   const sendVNCMessage = useCallback((message: VNCMessage) => {
@@ -183,6 +192,37 @@ export const useBrowserActionExecutor = (room: Room | null, vncUrl?: string): Us
       setIsExecuting(false);
     }
   }, [sendVNCMessage]);
+
+  // Await VNC WebSocket connection open
+  const awaitVNCOpen = useCallback((timeoutMs: number = 10000): Promise<void> => {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        // Already open
+        if (vncWebSocketRef.current && vncWebSocketRef.current.readyState === WebSocket.OPEN) {
+          resolve();
+          return;
+        }
+        // No URL configured
+        if (!vncUrl) {
+          reject(new Error('No VNC URL configured'));
+          return;
+        }
+        const timeoutId = setTimeout(() => {
+          // On timeout, remove this waiter and reject
+          const idx = openWaitersRef.current.findIndex(w => w.timeoutId === timeoutId);
+          if (idx >= 0) openWaitersRef.current.splice(idx, 1);
+          reject(new Error('Timed out waiting for VNC connection to open'));
+        }, timeoutMs);
+        openWaitersRef.current.push({
+          resolve: () => { clearTimeout(timeoutId); resolve(); },
+          reject: (e: any) => { clearTimeout(timeoutId); reject(e); },
+          timeoutId,
+        });
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }, [vncUrl]);
   
   // Register RPC handler when room is available
   useEffect(() => {
@@ -226,6 +266,14 @@ export const useBrowserActionExecutor = (room: Room | null, vncUrl?: string): Us
         console.log('[BrowserActionExecutor] Sent queued VNC message:', message);
       });
       messageQueueRef.current = [];
+
+      // Resolve any waiters awaiting connection open
+      if (openWaitersRef.current.length > 0) {
+        const waiters = openWaitersRef.current.splice(0, openWaitersRef.current.length);
+        waiters.forEach(w => {
+          try { w.resolve(); } catch {}
+        });
+      }
     };
 
     ws.onclose = () => {
@@ -246,6 +294,14 @@ export const useBrowserActionExecutor = (room: Room | null, vncUrl?: string): Us
       });
       setLastError(`VNC connection error: ${errorMessage}`);
       setIsVNCConnected(false);
+
+      // Reject any open waiters due to error
+      if (openWaitersRef.current.length > 0) {
+        const waiters = openWaitersRef.current.splice(0, openWaitersRef.current.length);
+        waiters.forEach(w => {
+          try { w.reject(new Error(`VNC connection error: ${errorMessage}`)); } catch {}
+        });
+      }
     };
 
     ws.onmessage = (event) => {
@@ -319,6 +375,7 @@ export const useBrowserActionExecutor = (room: Room | null, vncUrl?: string): Us
     executeBrowserAction,
     disconnectVNC,
     sendVNCMessage,
-    setOnVNCResponse
+    setOnVNCResponse,
+    awaitVNCOpen
   };
 };

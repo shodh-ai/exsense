@@ -8,6 +8,7 @@ import type { LearningObjective } from './store';
 export async function submitImprintingEpisode(payload: {
   expert_id: string;
   session_id: string;
+  curriculum_id?: string;
   narration: string;
   audio_b64: string;
   expert_actions: any[];
@@ -47,11 +48,13 @@ export async function conversationalTurn(payload: {
 export async function stageAsset(payload: {
   expert_id: string;
   session_id: string;
+  curriculum_id?: string;
   file: File;
 }) {
   const formData = new FormData();
   formData.append('expert_id', payload.expert_id);
   formData.append('session_id', payload.session_id);
+  if (payload.curriculum_id) formData.append('curriculum_id', payload.curriculum_id);
   formData.append('file', payload.file);
 
   // Try namespaced endpoint first
@@ -73,6 +76,7 @@ export async function stageAsset(payload: {
 export async function submitSeed(payload: {
   expert_id: string;
   session_id: string;
+  curriculum_id?: string;
   content: string;
 }) {
   const response = await fetch(`${IMPRINTER_URL}/session/seed`, {
@@ -142,5 +146,20 @@ export async function deleteNode(payload: {
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(`Failed to delete node (${response.status})`);
+  return response.json();
+}
+
+// --- NEW: Save Setup Script for an LO ---
+export async function saveSetupScript(payload: {
+  curriculum_id: string;
+  lo_name: string;
+  actions: any[];
+}) {
+  const response = await fetch(`${IMPRINTER_URL}/curriculum/lo/setup_script`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`Failed to save setup script (${response.status})`);
   return response.json();
 }
