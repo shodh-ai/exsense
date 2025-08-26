@@ -149,6 +149,17 @@ export async function deleteNode(payload: {
   return response.json();
 }
 
+// --- LO Finalization ---
+export async function finalizeLO(payload: { curriculum_id: string; lo_name: string }) {
+  const response = await fetch(`${IMPRINTER_URL}/curriculum/finalize_lo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`Failed to finalize LO (${response.status})`);
+  return response.json();
+}
+
 // --- NEW: Save Setup Script for an LO ---
 export async function saveSetupScript(payload: {
   curriculum_id: string;

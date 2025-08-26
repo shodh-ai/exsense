@@ -10,7 +10,7 @@ import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
-import { submitImprintingEpisode, stageAsset, conversationalTurn, submitSeed, processSeedDocument, fetchCurriculumDraft, saveSetupScript } from '@/lib/imprinterService';
+import { submitImprintingEpisode, stageAsset, conversationalTurn, submitSeed, processSeedDocument, fetchCurriculumDraft, saveSetupScript, finalizeLO } from '@/lib/imprinterService';
 import SeedInput from '@/components/imprinting/SeedInput';
 import CurriculumEditor from '@/components/imprinting/CurriculumEditor';
 import LoSelector from '@/components/imprinting/LoSelector';
@@ -271,6 +271,7 @@ export default function Session() {
     const [isRecording, setIsRecording] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingSetup, setIsSavingSetup] = useState(false);
+    const [isFinalizingLO, setIsFinalizingLO] = useState(false);
     const [statusMessage, setStatusMessage] = useState<string>('Session started. Waiting for initial prompt.');
     const [submitMessage, setSubmitMessage] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
@@ -340,6 +341,31 @@ export default function Session() {
             setStatusMessage(`Error: ${err?.message || 'Failed to save setup script'}`);
         } finally {
             setIsSavingSetup(false);
+        }
+    };
+
+    const handleFinalizeTopic = async () => {
+        if (!currentLO) {
+            setSubmitError('Please select a Topic (LO) before finalizing.');
+            return;
+        }
+        const ok = window.confirm(`Finalize topic "${currentLO}"? This stops further questions for this topic.`);
+        if (!ok) return;
+        setIsFinalizingLO(true);
+        setSubmitMessage(null);
+        setSubmitError(null);
+        try {
+            setStatusMessage(`Finalizing "${currentLO}"...`);
+            const resp = await finalizeLO({ curriculum_id: String(curriculumId), lo_name: currentLO });
+            setSubmitMessage(resp?.message || `Topic "${currentLO}" finalized.`);
+            setStatusMessage('Topic finalized.');
+            setIsStartAllowed(true);
+        } catch (err: any) {
+            console.error('Finalize topic failed:', err);
+            setSubmitError(err?.message || 'Failed to finalize topic');
+            setStatusMessage(`Error: ${err?.message || 'Failed to finalize topic'}`);
+        } finally {
+            setIsFinalizingLO(false);
         }
     };
 
@@ -824,6 +850,13 @@ export default function Session() {
                                                         </div>
                                                     )}
                                                 </div>
+                                                <button
+                                                    onClick={handleFinalizeTopic}
+                                                    disabled={!currentLO || isFinalizingLO}
+                                                    className={`rounded-md px-3 py-2 text-xs font-medium ${(!currentLO || isFinalizingLO) ? 'bg-gray-600 cursor-not-allowed' : 'bg-emerald-700 hover:bg-emerald-600'}`}
+                                                >
+                                                    {isFinalizingLO ? 'Finalizing...' : 'Finalize Topic'}
+                                                </button>
                                                 <button
                                                     onClick={handleStartRecording}
                                                     disabled={isRecording || !isStartAllowed || isSubmitting}

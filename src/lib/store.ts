@@ -19,6 +19,8 @@ export interface Concept {
 export interface LearningObjective {
   name: string;
   description?: string;
+  scope?: string;
+  status?: string;
   concepts: Concept[];
 }
 

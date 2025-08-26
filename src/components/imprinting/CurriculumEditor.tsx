@@ -29,13 +29,35 @@ export default function CurriculumEditor({ initialDraft, onFinalize, curriculumI
         curriculum_id: curriculumId,
         node_type: 'LO',
         old_name: old.name,
-        new_data: { name: newName, description: old.description },
+        new_data: { name: newName, description: old.description, scope: old.scope },
       });
       const updated = draft.map((lo, i) => (i === idx ? { ...lo, name: newName } : lo));
       setDraft(updated);
       setCurriculumDraft(updated);
     } catch (e: any) {
       setError(e?.message || 'Failed to rename LO');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const handleUpdateScope = async (idx: number, newScope: string) => {
+    const lo = draft[idx];
+    if (!lo) return;
+    setBusyKey(`lo-scope-${idx}`);
+    setError(null);
+    try {
+      await updateNode({
+        curriculum_id: curriculumId,
+        node_type: 'LO',
+        old_name: lo.name,
+        new_data: { scope: newScope },
+      });
+      const updated = draft.map((l, i) => (i === idx ? { ...l, scope: newScope } : l));
+      setDraft(updated);
+      setCurriculumDraft(updated);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to update scope');
     } finally {
       setBusyKey(null);
     }
@@ -108,12 +130,30 @@ export default function CurriculumEditor({ initialDraft, onFinalize, curriculumI
                 className="flex-1 bg-transparent border border-[#2A2F4A] rounded px-2 py-1"
                 defaultValue={lo.name}
                 onBlur={(e) => handleRenameLO(i, e.target.value)}
-                disabled={busyKey === `lo-${i}`}
+                disabled={busyKey === `lo-${i}` || lo.status === 'finalized'}
               />
+              {lo.status && (
+                <span className={`text-xs px-2 py-1 rounded ${lo.status === 'finalized' ? 'bg-emerald-700' : 'bg-[#23284e]'}`}>
+                  {lo.status}
+                </span>
+              )}
             </div>
             {lo.description && (
               <p className="mt-1 text-sm text-slate-300">{lo.description}</p>
             )}
+            <div className="mt-3">
+              <h4 className="font-semibold mb-1">Scope</h4>
+              <textarea
+                className="w-full bg-transparent border border-[#2A2F4A] rounded px-2 py-1 text-sm min-h-[70px]"
+                placeholder="Define the in-scope and out-of-scope boundaries for this LO."
+                defaultValue={lo.scope || ''}
+                onBlur={(e) => handleUpdateScope(i, e.target.value)}
+                disabled={busyKey === `lo-scope-${i}` || lo.status === 'finalized'}
+              />
+              {lo.status === 'finalized' && (
+                <div className="mt-1 text-xs text-slate-400">This LO is finalized; editing is disabled.</div>
+              )}
+            </div>
             <div className="mt-3">
               <h4 className="font-semibold mb-2">Concepts</h4>
               <ul className="space-y-2">

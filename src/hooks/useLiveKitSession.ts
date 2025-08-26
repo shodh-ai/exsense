@@ -145,7 +145,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
                     'Authorization': `Bearer ${clerkToken}`,
                 },
                 body: JSON.stringify({
-                    curriculum_id: 'pandas_expert_test_01', // Mock curriculum ID for testing
+                    curriculum_id: 'demo_user_59', // Mock curriculum ID for testing
                 }),
             });
             
