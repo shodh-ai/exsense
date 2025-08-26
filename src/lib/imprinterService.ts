@@ -15,6 +15,7 @@ export async function submitImprintingEpisode(payload: {
   current_lo?: string;
   modified_files?: any[];
   staged_assets?: any[];
+  in_response_to_question?: string;
 }) {
   const response = await fetch(`${IMPRINTER_URL}/session/imprint_episode`, {
     method: 'POST',
@@ -35,6 +36,7 @@ export async function conversationalTurn(payload: {
   imprinting_mode: 'DEBRIEF_CONCEPTUAL' | string;
   latest_expert_response: string;
   current_lo?: string;
+  in_response_to_question?: string;
 }) {
   const response = await fetch(`${IMPRINTER_URL}/session/turn`, {
     method: 'POST',

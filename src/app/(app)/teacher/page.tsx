@@ -283,6 +283,13 @@ export default function Session() {
     // Staged assets uploaded to imprinter store; kept locally with role metadata for episode submit
     const [stagedAssets, setStagedAssets] = useState<{ filename: string; role: string; asset_id: string }[]>([]);
     const [isStartAllowed, setIsStartAllowed] = useState<boolean>(true);
+    // Timer interval control for periodic screenshots (seconds)
+    const [screenshotIntervalSec, setScreenshotIntervalSec] = useState<number>(10);
+    // UI-only countdown (approximate) for next periodic screenshot
+    const [timeToNextScreenshot, setTimeToNextScreenshot] = useState<number | null>(null);
+    // Show Me demo state
+    const [isShowMeRecording, setIsShowMeRecording] = useState<boolean>(false);
+    const showMeQuestionRef = useRef<string | null>(null);
 
     const curriculumId = courseId || 'pandas_expert_test_01';
 
@@ -297,6 +304,25 @@ export default function Session() {
         } catch (error) {
             console.error('Seed processing failed:', error);
             setImprintingPhase('SEED_INPUT');
+        }
+    };
+
+    // Manual on-demand screenshot capture
+    const handleCaptureScreenshot = async () => {
+        try {
+            if (!isRecording) {
+                setStatusMessage('Start recording to capture and persist screenshots.');
+                return;
+            }
+            setStatusMessage('Capturing screenshot...');
+            const resp = await sendAndAwait('browser_screenshot', {}, 'screenshot');
+            console.log('[EpisodeControls] Manual screenshot response:', resp);
+            setStatusMessage('Manual screenshot captured.');
+            // Reset local countdown, since we just captured one manually
+            setTimeToNextScreenshot(screenshotIntervalSec);
+        } catch (e: any) {
+            console.error('Manual screenshot failed:', e);
+            setStatusMessage(`Screenshot failed: ${e?.message || e}`);
         }
     };
 
@@ -480,9 +506,11 @@ export default function Session() {
             // 1) Tell backend to start recording and await server ack
             const startResp = await sendAndAwait('start_recording', {
                 session_id: roomName,
-                screenshot_interval_sec: 10,
+                screenshot_interval_sec: screenshotIntervalSec,
             }, 'start_recording', 45000);
             console.log('[SessionPage] Backend acknowledged start_recording:', startResp);
+            // Initialize countdown when recording starts
+            setTimeToNextScreenshot(screenshotIntervalSec);
 
             // 2) Start local microphone recording
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -531,6 +559,7 @@ export default function Session() {
         setImprintingMode('DEBRIEF_CONCEPTUAL');
         setActiveView('excalidraw');
         setIsConceptualStarted(false);
+        setIsShowMeRecording(false);
     };
 
     const handleSendConceptual = async () => {
@@ -549,7 +578,10 @@ export default function Session() {
                     current_lo: topic,
                 });
                 const aiText = resp?.text || '';
-                setLastConceptualReply(aiText);
+                // Only update lastConceptualReply if AI asked a follow-up question
+                if (aiText && /\?/.test(aiText)) {
+                    setLastConceptualReply(aiText);
+                }
                 setStatusMessage(aiText ? `AI: ${aiText}` : '');
                 // Enable start only if AI did not ask a follow-up question
                 setIsStartAllowed(!(aiText && /\?/.test(aiText)));
@@ -568,7 +600,10 @@ export default function Session() {
                     current_lo: currentLO || undefined,
                 });
                 const aiText = resp?.text || '';
-                setLastConceptualReply(aiText);
+                // Only update lastConceptualReply if AI asked a follow-up question
+                if (aiText && /\?/.test(aiText)) {
+                    setLastConceptualReply(aiText);
+                }
                 setStatusMessage(aiText ? `AI: ${aiText}` : '');
                 // If no more question from AI, allow starting a new episode and return to Practical
                 if (!(aiText && /\?/.test(aiText))) {
@@ -581,6 +616,35 @@ export default function Session() {
             }
         } catch (e: any) {
             setStatusMessage(`Conceptual turn failed: ${e?.message || e}`);
+        }
+    };
+
+    // New: Handle "Show Me" button - immediately switch to Browser and start a demo recording linked to last AI question
+    const handleShowMe = async () => {
+        if (imprinting_mode !== 'DEBRIEF_CONCEPTUAL') return;
+        if (!isConceptualStarted) return;
+        const lastQ = (lastConceptualReply || '').trim();
+        if (!lastQ) return;
+        const msg = (topicInput || '').trim();
+        if (!msg) {
+            setStatusMessage('Type what you want me to demonstrate, then click Show Me.');
+            setTimeout(() => topicInputRef.current?.focus(), 0);
+            return;
+        }
+        // Mark this upcoming recording as a Show Me demo answering lastQ
+        showMeQuestionRef.current = lastQ;
+        setIsShowMeRecording(true);
+        // Switch to practical/browser view and start recording immediately
+        setImprintingMode('WORKFLOW');
+        setActiveView('vnc');
+        setStatusMessage('Show Me: switched to Browser. Starting recording...');
+        setTopicInput('');
+        if (!isRecording) {
+            try {
+                await handleStartRecording();
+            } catch (e: any) {
+                setStatusMessage(`Failed to start Show Me recording: ${e?.message || e}`);
+            }
         }
     };
 
@@ -608,8 +672,24 @@ export default function Session() {
             setStatusMessage(`Error: ${err?.message || 'Failed to stop recording'}`);
         } finally {
             setIsRecording(false);
+            setTimeToNextScreenshot(null);
         }
     };
+
+    // Countdown effect: approximate time-to-next periodic screenshot
+    useEffect(() => {
+        if (!isRecording) return;
+        // Ensure we have an initial value
+        setTimeToNextScreenshot((prev) => (prev == null ? screenshotIntervalSec : prev));
+        const id = setInterval(() => {
+            setTimeToNextScreenshot((prev) => {
+                if (prev == null) return screenshotIntervalSec;
+                const next = prev - 1;
+                return next <= 0 ? screenshotIntervalSec : next;
+            });
+        }, 1000);
+        return () => clearInterval(id);
+    }, [isRecording, screenshotIntervalSec]);
 
     const handleSubmitEpisode = async () => {
         console.log('[EpisodeControls] Submit Episode clicked');
@@ -651,6 +731,7 @@ export default function Session() {
                 expert_actions: packets,
                 staged_assets: stagedAssets,
                 current_lo: currentLO || undefined,
+                in_response_to_question: isShowMeRecording && showMeQuestionRef.current ? showMeQuestionRef.current : undefined,
             });
 
             console.log('[EpisodeControls] Submit success', response);
@@ -666,6 +747,7 @@ export default function Session() {
                     setIsConceptualStarted(true);
                     setIsStartAllowed(false);
                     setStatusMessage(`AI: ${aiText}`);
+                    setLastConceptualReply(aiText);
                     setTimeout(() => topicInputRef.current?.focus(), 0);
                 } else {
                     // No follow-up questions; allow starting a new episode
@@ -682,6 +764,8 @@ export default function Session() {
             audioChunksRef.current = [];
             audioBlobRef.current = null;
             setStagedAssets([]);
+            setIsShowMeRecording(false);
+            showMeQuestionRef.current = null;
         } catch (err: any) {
             console.error('Submit episode failed:', err);
             setSubmitError(err?.message || 'Failed to submit');
@@ -826,30 +910,33 @@ export default function Session() {
                                                 >
                                                     Conceptual
                                                 </button>
-                                                <div className="flex items-center gap-2">
-                                                    {imprinting_mode === 'DEBRIEF_CONCEPTUAL' ? (
-                                                        <>
-                                                            <input
-                                                                ref={topicInputRef}
-                                                                type="text"
-                                                                value={topicInput}
-                                                                onChange={(e) => setTopicInput(e.target.value)}
-                                                                placeholder={isConceptualStarted ? 'Answer AI...' : 'Message (optional)'}
-                                                                className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-56 text-xs"
-                                                            />
-                                                            <button
-                                                                onClick={handleSendConceptual}
-                                                                className="rounded-md px-3 py-1 text-xs font-medium bg-indigo-600 hover:bg-indigo-500"
-                                                            >
-                                                                Send
-                                                            </button>
-                                                        </>
-                                                    ) : (
-                                                        <div className="text-xs text-gray-300">
-                                                            <span className="text-gray-400">LO:</span> {currentLO || '—'}
-                                                        </div>
-                                                    )}
-                                                </div>
+                                                {imprinting_mode === 'DEBRIEF_CONCEPTUAL' && (
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            ref={topicInputRef}
+                                                            type="text"
+                                                            value={topicInput}
+                                                            onChange={(e) => setTopicInput(e.target.value)}
+                                                            className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-64"
+                                                            placeholder={isConceptualStarted ? "Type your answer..." : (currentLO ? `Start debrief for '${currentLO}'` : "Select a Topic first")}
+                                                        />
+                                                        <button
+                                                            onClick={handleSendConceptual}
+                                                            className="rounded-md px-3 py-2 text-xs font-medium bg-sky-700 hover:bg-sky-600"
+                                                        >
+                                                            Send
+                                                        </button>
+                                                        <button
+                                                            onClick={handleShowMe}
+                                                            disabled={!isConceptualStarted}
+                                                            title={!isConceptualStarted ? 'Start conceptual chat first' : undefined}
+                                                            className={`rounded-md px-3 py-2 text-xs font-medium ${(!isConceptualStarted) ? 'bg-gray-600 cursor-not-allowed' : 'bg-indigo-700 hover:bg-indigo-600'}`}
+                                                        >
+                                                            Show Me
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                
                                                 <button
                                                     onClick={handleFinalizeTopic}
                                                     disabled={!currentLO || isFinalizingLO}
@@ -871,6 +958,27 @@ export default function Session() {
                                                 >
                                                     Stop/Pause
                                                 </button>
+                                                <button
+                                                    onClick={handleCaptureScreenshot}
+                                                    disabled={!isRecording}
+                                                    className={`rounded-md px-3 py-2 text-xs font-medium ${!isRecording ? 'bg-gray-600 cursor-not-allowed' : 'bg-teal-700 hover:bg-teal-600'}`}
+                                                >
+                                                    Capture Screenshot
+                                                </button>
+                                                <div className="flex items-center gap-1 text-xs ml-1">
+                                                    <label htmlFor="ss-interval" className="text-gray-300">Timer</label>
+                                                    <input
+                                                        id="ss-interval"
+                                                        type="number"
+                                                        min={2}
+                                                        max={120}
+                                                        value={screenshotIntervalSec}
+                                                        onChange={(e) => setScreenshotIntervalSec(Number(e.target.value) || 10)}
+                                                        className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-16 text-xs"
+                                                    />
+                                                    <span className="text-gray-400">s</span>
+                                                    <span className="ml-2 text-gray-400">Next: {isRecording && timeToNextScreenshot != null ? `${timeToNextScreenshot}s` : '—'}</span>
+                                                </div>
                                                 {/* Setup Script Textbox (manual) */}
                                                 <div className="ml-2 flex items-start gap-2">
                                                     <textarea
@@ -914,6 +1022,15 @@ export default function Session() {
                                                 >
                                                     Finish Session
                                                 </button>
+                                                {isShowMeRecording && (
+                                                    <span
+                                                        title={showMeQuestionRef.current ? `In response to: ${showMeQuestionRef.current}` : 'Show Me demo active'}
+                                                        className="ml-2 inline-flex items-center gap-1 rounded-full border border-indigo-400/70 bg-indigo-600/20 px-2 py-1 text-[11px] text-indigo-200"
+                                                    >
+                                                        <span className="inline-block h-2 w-2 rounded-full bg-indigo-300 animate-pulse" />
+                                                        Show Me demo active
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="text-xs text-gray-300 space-y-1 md:text-right">
                                                 <div><span className="text-gray-400">Mic:</span> {isRecording ? 'Recording' : 'Idle'}</div>
