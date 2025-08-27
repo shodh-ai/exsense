@@ -25,7 +25,7 @@ export const MermaidWrapper: React.FC<MermaidWrapperProps> = ({
         startOnLoad: false,
         theme: 'default',
         securityLevel: 'loose',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontFamily: 'var(--font-plus-jakarta-sans), Plus Jakarta Sans, system-ui, -apple-system, sans-serif',
         flowchart: {
           useMaxWidth: true,
           htmlLabels: true,

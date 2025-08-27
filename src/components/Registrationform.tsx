@@ -122,9 +122,8 @@ const RecordingBar: React.FC<RecordingBarProps> = ({ isRecording, duration, maxD
         <div className="w-full h-full flex items-center gap-2 p-2 pl-4 border border-gray-200 bg-white/80 rounded-full shadow-sm">
             <div className="flex-grow flex items-center gap-1.5">
                 <img src="/timer.svg" alt="Duration" className="w-5 h-5" />
-                <span className="font-Plus Jakarta Sans text-[16px] font-16px text-[#566FE9]">{formatTime(duration)} / {formatTime(maxDuration)}</span>
-                {/* THIS IS THE CHANGE: The span now has the requested styling */}
-                <span className="ml-[1px] font-Plus Jakarta Sans font-[16px] text-[#566fe9] hidden sm:inline-block">{statusText}</span>
+                <span className="text-[16px] text-[#566FE9]">{formatTime(duration)} / {formatTime(maxDuration)}</span>
+                <span className="ml-[1px] text-[16px] text-[#566fe9] hidden sm:inline-block">{statusText}</span>
             </div>
             <div className="flex items-center gap-[6px]">
                 {isRecording ? (
@@ -264,7 +263,7 @@ const RegistrationFormContent: React.FC<RegistrationFormContentProps> = ({ curre
                 <div key={currentStep} className="animate-in fade-in slide-in-from-bottom-5 duration-500">
                     <Card className="border-none shadow-none bg-transparent w-full">
                         <CardContent className="p-0 space-y-3">
-                            <div className="font-label-extra-large font-[600] text-black text-[0.875rem] leading-[170%] tracking-normal transition-opacity duration-300">
+                            <div className="font-[600] text-black text-[0.875rem] leading-[170%] tracking-normal transition-opacity duration-300">
                                 {currentStep === 1 && name ? (
                                     <>Nice to meet you, <span className="text-[#566FE9]">{name}</span>!</>
                                 ) : (
