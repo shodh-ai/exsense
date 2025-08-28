@@ -2,6 +2,7 @@
 
 import { FileIcon, LinkIcon, UploadIcon, XIcon } from "lucide-react";
 import React, { JSX, useState, useRef, ChangeEvent } from "react";
+import { toast } from "sonner";
 
 import {
   Card,
@@ -82,7 +83,7 @@ function UploadResources(): JSX.Element {
     });
     if (invalidFileNames.length > 0) {
       const allowedExtensions = getExtensionList(allowedMimes);
-      alert(`Invalid file type(s) for: ${invalidFileNames.join(', ')}. Supported types: ${allowedExtensions}.`);
+      toast.error(`Invalid file type(s): ${invalidFileNames.join(', ')}. Supported: ${allowedExtensions}.`);
     }
     if (newFiles.length > 0) {
       setUploadedFiles((prevFiles) => [...prevFiles, ...newFiles]);

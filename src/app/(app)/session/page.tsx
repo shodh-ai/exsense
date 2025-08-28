@@ -142,7 +142,11 @@ export default function Session() {
         agentIdentity,
         transcriptionMessages,
         statusMessages
-    } = useLiveKitSession(shouldInitializeLiveKit ? roomName : '', shouldInitializeLiveKit ? userName : '');
+    } = useLiveKitSession(
+        shouldInitializeLiveKit ? roomName : '',
+        shouldInitializeLiveKit ? userName : '',
+        courseId || undefined
+    );
     
     // Get URLs from environment variables
     const vncUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:6901';

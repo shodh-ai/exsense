@@ -197,6 +197,24 @@ export default function Session() {
     const courseTitle = searchParams.get('title');
     
     if (SESSION_DEBUG) console.log('Session page - Course details:', { courseId, courseTitle });
+
+    // Guard: require a courseId in the URL. Prevents accidental fallback to a hardcoded curriculum.
+    if (!courseId) {
+        return (
+            <div className="w-full h-full flex items-center justify-center text-white">
+                <div className="text-center max-w-md">
+                    <h2 className="text-xl mb-3">Missing courseId</h2>
+                    <p className="mb-4 opacity-80">Please open this page with a valid course identifier, e.g. /teacher?courseId=your_course_id</p>
+                    <button
+                        onClick={() => router.push('/')}
+                        className="bg-[#566FE9] text-white px-6 py-2 rounded-full hover:bg-[#566FE9]/95 transition"
+                    >
+                        Go Home
+                    </button>
+                </div>
+            </div>
+        );
+    }
     
     // Add debugging for authentication state
     useEffect(() => {
@@ -291,7 +309,7 @@ export default function Session() {
     const [isShowMeRecording, setIsShowMeRecording] = useState<boolean>(false);
     const showMeQuestionRef = useRef<string | null>(null);
 
-    const curriculumId = courseId || 'pandas_expert_test_01';
+    const curriculumId = courseId as string;
 
     // --- New Imprinting Phase Handlers ---
     const handleSeedSubmit = async (content: string) => {

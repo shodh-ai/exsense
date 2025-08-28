@@ -36,9 +36,9 @@ export default function Login() {
             const userRole = (user.publicMetadata?.role as string) || 'learner';
             console.log("User already signed in with role:", userRole);
             if (userRole === 'expert') {
-                router.push("/dashboard");
+                router.push("/teacher-dash");
             } else {
-                router.push("/session");
+                router.push("/my-course");
             }
         }
     }, [isSignedIn, user, router]);
@@ -62,7 +62,12 @@ export default function Login() {
         try {
             if (isSignedIn) {
                 // This case is handled by the useEffect above, but is a good safeguard
-                router.push("/session");
+                const userRole = (user?.publicMetadata?.role as string) || 'learner';
+                if (userRole === 'expert') {
+                    router.push("/teacher-dash");
+                } else {
+                    router.push("/my-course");
+                }
                 return;
             }
             
@@ -83,9 +88,9 @@ export default function Login() {
                     const userRole = (session?.user.publicMetadata?.role as string) || 'learner';
                     console.log("Login successful, redirecting based on role:", userRole);
                     if (userRole === 'expert') {
-                        router.push("/dashboard");
+                        router.push("/teacher-dash");
                     } else {
-                        router.push("/session");
+                        router.push("/my-course");
                     }
                 }, 500); // 500ms delay for state synchronization
                 return;
@@ -96,7 +101,12 @@ export default function Login() {
             }
         } catch (err: any) {
              if (err.message?.includes("You're already signed in")) {
-                router.push("/session");
+                const userRole = (user?.publicMetadata?.role as string) || 'learner';
+                if (userRole === 'expert') {
+                    router.push("/teacher-dash");
+                } else {
+                    router.push("/my-course");
+                }
                 return;
             } else if (err.message?.includes("Invalid authentication credentials")) {
                 setError("Invalid email or password. Please try again.");

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { JSX, useState, useEffect, useMemo } from "react";
-import { useAuth } from "@clerk/nextjs"; // Import Clerk's auth hook
-import { useRouter } from "next/navigation"; // Import Next.js router for navigation
-import { createApiClient } from "@/lib/apiclient"; // Import our new API client
+import React, { JSX, useMemo } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { useCourses, useMyEnrollments, useEnrollInCourse } from "@/hooks/useApi";
 
 // Import your components
 import { Plus_Jakarta_Sans } from "next/font/google";
@@ -18,66 +19,37 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 export default function CoursesPage(): JSX.Element {
-  // --- STATE MANAGEMENT ---
-  const [allCourses, setAllCourses] = useState<Course[]>([]);
-  const [myEnrollments, setMyEnrollments] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // --- AUTHENTICATION ---
+  const { isSignedIn } = useAuth();
+  const router = useRouter();
 
-  // --- AUTHENTICATION & API CLIENT ---
-  const { getToken, isSignedIn } = useAuth();
-  const router = useRouter(); // For navigation to session page
-  // Memoize the apiClient so it's not recreated on every render
-  const apiClient = useMemo(() => createApiClient({ getToken }), [getToken]);
+  // --- DATA VIA REACT QUERY ---
+  const { data: coursesData = [], isLoading: coursesLoading, error: coursesError } = useCourses();
+  const { data: myEnrollments = [], isLoading: enrollmentsLoading } = useMyEnrollments({ enabled: isSignedIn });
+  const enrollMutation = useEnrollInCourse();
 
-  // --- DATA FETCHING ---
-  useEffect(() => {
-    // We only fetch data if the user is signed in.
-    if (!isSignedIn) {
-      setIsLoading(false);
-      return;
-    }
-
-    const fetchCourseData = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        // Fetch both sets of data in parallel for performance
-        const [coursesResponse, enrollmentsResponse] = await Promise.all([
-          apiClient.get('/api/courses'),             // Fetches all available courses
-          apiClient.get('/api/enrollments/student/me') // Fetches courses the user is enrolled in
-        ]);
-
-        setAllCourses(coursesResponse || []);
-        setMyEnrollments(enrollmentsResponse.enrollments || []);
-
-      } catch (err: any) {
-        setError(err.message);
-        console.error("Failed to fetch course data:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchCourseData();
-  }, [isSignedIn, apiClient]); // Re-run this effect if isSignedIn or the apiClient changes
+  // Normalize backend courses into CourseCard.Course shape
+  const allCourses: Course[] = useMemo(() => {
+    return (coursesData || []).map((c: any) => ({
+      id: c.id,
+      title: c.title,
+      description: c.description || "",
+      instructor: c?.teacher?.name || c?.teacher?.email || "Unknown Instructor",
+      rating: "4.8",
+      reviews: String(c?.enrollmentCount ?? 0),
+      level: "Beginner",
+      duration: c?.lessonCount ? `${c.lessonCount} lessons` : "Self-paced",
+      image: "/1.png",
+    }));
+  }, [coursesData]);
 
   // --- EVENT HANDLERS ---
   const handleEnroll = async (courseId: string | number) => {
     try {
-      console.log(`Enrolling in course: ${courseId}`);
-      // Send the enrollment request to the backend
-      const newEnrollment = await apiClient.post('/api/enrollments', { courseId });
-
-      // Update our local state to immediately reflect the change without a page refresh
-      setMyEnrollments(prevEnrollments => [...prevEnrollments, { courseId }]); // Simple update
-
-      alert("Successfully enrolled!");
-
+      await enrollMutation.mutateAsync(String(courseId));
+      toast.success("Successfully enrolled!");
     } catch (err: any) {
-      setError(`Enrollment failed: ${err.message}`);
-      alert(`Enrollment failed: ${err.message}`);
+      toast.error(`Enrollment failed: ${err.message}`);
     }
   };
 
@@ -97,22 +69,23 @@ export default function CoursesPage(): JSX.Element {
       router.push(`/session?courseId=${courseId}&title=${encodeURIComponent(selectedCourse.title)}`);
       
     } catch (err: any) {
-      setError(`Failed to start session: ${err.message}`);
-      alert(`Failed to start session: ${err.message}`);
+      toast.error(`Failed to start session: ${err.message}`);
     }
   };
 
   // --- RENDER LOGIC ---
+  const isLoading = coursesLoading || (isSignedIn && enrollmentsLoading) || enrollMutation.isPending;
   if (isLoading) {
     return <div>Loading courses...</div>; // Or your fancy loading component
   }
 
-  if (error) {
-    return <div className="text-red-500">Error: {error}</div>;
+  if (coursesError) {
+    const msg = (coursesError as any)?.message || 'Failed to load courses';
+    return <div className="text-red-500">Error: {msg}</div>;
   }
 
   // Create a set of enrolled course IDs for quick lookups
-  const enrolledCourseIds = new Set(myEnrollments.map(e => e.courseId));
+  const enrolledCourseIds = new Set((myEnrollments || []).map((e: any) => e.courseId));
 
   return (
     <>

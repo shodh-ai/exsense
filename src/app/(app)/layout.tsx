@@ -1,3 +1,5 @@
+import ToasterClient from "@/components/ToasterClient";
+
 export default function AppLayout({
   children,
 }: Readonly<{
@@ -15,6 +17,7 @@ export default function AppLayout({
         <div className="w-[97%] h-[87%] flex items-start justify-start mt-4 rounded-2xl overflow-x-hidden overflow-y-hidden">
           {children}
         </div>
+        <ToasterClient />
       </div>
     </div>
   );
