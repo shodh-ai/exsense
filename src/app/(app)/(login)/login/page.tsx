@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useSignIn, useUser, useSession } from "@clerk/nextjs"; // Import useSession
+import { useSignIn, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useState, FormEvent, useEffect } from "react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
@@ -19,7 +19,6 @@ export default function Login() {
     const router = useRouter();
     const { isSignedIn, user } = useUser();
     const { signIn, isLoaded, setActive } = useSignIn();
-    const { session } = useSession(); // Get the active session
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
@@ -77,25 +76,9 @@ export default function Login() {
             });
 
             if (result.status === "complete") {
-                // --- MODIFICATION: Set session active and redirect based on role ---
+                // Set session active and let the top useEffect handle the redirect
                 await setActive({ session: result.createdSessionId });
-
-                // After setting active, the `user` object from the `useUser` hook
-                // will update with the new session's user data, including metadata.
-                // We will add a small delay to allow Clerk state to sync before checking role.
-                setTimeout(() => {
-                    // Re-check the user object from the hook after state propagation
-                    const userRole = (session?.user.publicMetadata?.role as string) || 'learner';
-                    console.log("Login successful, redirecting based on role:", userRole);
-                    if (userRole === 'expert') {
-                        router.push("/teacher-dash");
-                    } else {
-                        router.push("/my-course");
-                    }
-                }, 500); // 500ms delay for state synchronization
                 return;
-                // --- END MODIFICATION ---
-
             } else {
                 setError("Login failed. Please check your credentials.");
             }

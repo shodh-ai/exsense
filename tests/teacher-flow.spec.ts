@@ -17,8 +17,8 @@ test.describe('Teacher Course Creation Flow', () => {
     await expect(page.getByRole('heading', { name: 'Classroom Overview' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'My Courses & Insights' })).toBeVisible();
 
-    // 3) New Course
-    await page.getByRole('button', { name: 'New Course' }).click();
+    // 3) New Course (now a link rendered via Button asChild)
+    await page.getByRole('link', { name: 'New Course' }).click();
 
     // 4) Create Course page
     await expect(page).toHaveURL('/teacher/create-course');

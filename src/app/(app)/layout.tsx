@@ -1,4 +1,5 @@
 import ToasterClient from "@/components/ToasterClient";
+import QueryProvider from "@/components/QueryProvider";
 
 export default function AppLayout({
   children,
@@ -15,7 +16,9 @@ export default function AppLayout({
       </div>
       <div className="absolute top-0 left-0 h-screen w-screen z-[1] flex flex-col items-center justify-start">
         <div className="w-[97%] h-[87%] flex items-start justify-start mt-4 rounded-2xl overflow-x-hidden overflow-y-hidden">
-          {children}
+          <QueryProvider>
+            {children}
+          </QueryProvider>
         </div>
         <ToasterClient />
       </div>

@@ -85,20 +85,18 @@ return (
           <h2 className="font-bold text-[18px] leading-[22px] text-[#394169]">
             My Courses &amp; Insights
           </h2>
-          <Link href="/teacher/create-course" passHref>
-            <Button
-              asChild
-              variant="ghost"
-              className="bg-[#566fe91a] rounded-[40px] text-[#566fe9] hover:bg-[#566fe930] h-[32px] px-4 py-2 flex items-center gap-1"
-            >
-              <a>
-                <PlusIcon className="w-4 h-4" />
-                <span className="font-semibold text-[12px] leading-[16px]">
-                  New Course
-                </span>
-              </a>
-            </Button>
-          </Link>
+          <Button
+            asChild
+            variant="ghost"
+            className="bg-[#566fe91a] rounded-[40px] text-[#566fe9] hover:bg-[#566fe930] h-[32px] px-4 py-2 flex items-center gap-1"
+          >
+            <Link href="/teacher/create-course">
+              <PlusIcon className="w-4 h-4" />
+              <span className="font-semibold text-[12px] leading-[16px]">
+                New Course
+              </span>
+            </Link>
+          </Button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
           {isLoading && <p>Loading your courses...</p>}
