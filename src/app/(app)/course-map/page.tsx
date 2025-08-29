@@ -6,8 +6,16 @@ import { Card, CardContent } from "@/components/card";
 import Sphere from "@/components/Sphere";
 import Footer from "@/components/Footer";
 
+// Types
+type CourseNode = {
+  id: string;
+  label: string;
+  children?: CourseNode[];
+  isAction?: boolean;
+};
+
 // Data for the hierarchical course list in the sidebar
-const courseData = [
+const courseData: CourseNode[] = [
   {
     id: "english-learning-sessions",
     label: "English Learning Sessions",
@@ -51,7 +59,21 @@ const courseData = [
 ];
 
 // A recursive component to render each item in the course list
-const CourseItem = ({ item, level = 0, openItems, toggleItem, activeItem, setActiveItem }) => {
+const CourseItem = ({
+  item,
+  level = 0,
+  openItems,
+  toggleItem,
+  activeItem,
+  setActiveItem,
+}: {
+  item: CourseNode;
+  level?: number;
+  openItems: string[];
+  toggleItem: (id: string) => void;
+  activeItem: string;
+  setActiveItem: (id: string) => void;
+}) => {
   const isOpen = openItems.includes(item.id);
   const hasChildren = item.children && item.children.length > 0;
 
@@ -96,7 +118,7 @@ const CourseItem = ({ item, level = 0, openItems, toggleItem, activeItem, setAct
       </div>
       {isOpen && hasChildren && (
         <div>
-          {item.children.map((child) => (
+          {(item.children ?? []).map((child: CourseNode) => (
             <CourseItem
               key={child.id}
               item={child}
@@ -113,13 +135,13 @@ const CourseItem = ({ item, level = 0, openItems, toggleItem, activeItem, setAct
   );
 };
 
-export const CourseMap = (): JSX.Element => {
+export default function CourseMap(): JSX.Element {
   // State for the new sidebar
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [openItems, setOpenItems] = useState(['english-learning-sessions', 'beginner-stage', 'control-systems', 'types-of-loop-systems']);
   const [activeItem, setActiveItem] = useState('microcontrollers');
 
-  const toggleItem = (id) => {
+  const toggleItem = (id: string) => {
     setOpenItems((prev) =>
       prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id]
     );
@@ -225,6 +247,4 @@ export const CourseMap = (): JSX.Element => {
       <Footer />
     </div>
   );
-};
-
-export default CourseMap;
+}

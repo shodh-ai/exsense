@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Footer from '@/components/Footer';
 
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import { useSessionStore } from '@/lib/store';
 import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
 import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
@@ -57,10 +58,11 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, c
                             onClick={() => setActiveView(key)}
                             className={`w-[32.5%] h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
                         >
-                            <img
+                            <Image
                                 src={activeView === key ? activeImagePath : inactiveImagePath}
                                 alt={label}
-                                className="w-[20px] h-[20px]"
+                                width={20}
+                                height={20}
                             />
                             {label}
                         </button>
@@ -198,23 +200,7 @@ export default function Session() {
     
     if (SESSION_DEBUG) console.log('Session page - Course details:', { courseId, courseTitle });
 
-    // Guard: require a courseId in the URL. Prevents accidental fallback to a hardcoded curriculum.
-    if (!courseId) {
-        return (
-            <div className="w-full h-full flex items-center justify-center text-white">
-                <div className="text-center max-w-md">
-                    <h2 className="text-xl mb-3">Missing courseId</h2>
-                    <p className="mb-4 opacity-80">Please open this page with a valid course identifier, e.g. /teacher?courseId=your_course_id</p>
-                    <button
-                        onClick={() => router.push('/')}
-                        className="bg-[#566FE9] text-white px-6 py-2 rounded-full hover:bg-[#566FE9]/95 transition"
-                    >
-                        Go Home
-                    </button>
-                </div>
-            </div>
-        );
-    }
+    // NOTE: Do not early-return here to avoid conditional hook calls. We will render a fallback later.
     
     // Add debugging for authentication state
     useEffect(() => {
@@ -293,7 +279,11 @@ export default function Session() {
     const [statusMessage, setStatusMessage] = useState<string>('Session started. Waiting for initial prompt.');
     const [submitMessage, setSubmitMessage] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
-    const packetsRef = useRef<any[]>([]);
+    // Narrowed types to reduce any-usage
+    type VNCActionResponse = { action?: string } & Record<string, unknown>;
+    type RecordedPacket = { interaction_type?: string } & Record<string, unknown>;
+
+    const packetsRef = useRef<RecordedPacket[]>([]);
     const [packetsCount, setPacketsCount] = useState(0);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<BlobPart[]>([]);
@@ -357,11 +347,12 @@ export default function Session() {
             setSubmitError('Please paste setup actions JSON into the textbox.');
             return;
         }
-        let actions: any[];
+        type BrowserAction = Record<string, unknown>;
+        let actions: BrowserAction[];
         try {
             const parsed = JSON.parse(raw);
             if (!Array.isArray(parsed)) throw new Error('JSON must be an array of action objects');
-            actions = parsed;
+            actions = parsed as BrowserAction[];
         } catch (e: any) {
             setSubmitError(`Invalid JSON: ${e?.message || e}`);
             return;
@@ -432,12 +423,12 @@ export default function Session() {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     // --- Lightweight response awaiter infrastructure ---
-    type PendingResolver = { id: string; expectAction: string; resolve: (resp: any) => void; reject: (err: any) => void; timeoutId: any };
+    type PendingResolver = { id: string; expectAction: string; resolve: (resp: VNCActionResponse) => void; reject: (err: any) => void; timeoutId: any };
     const pendingResolversRef = useRef<PendingResolver[]>([]);
 
     useEffect(() => {
         // Route incoming VNC responses to awaiting callers
-        setOnVNCResponse((resp: any) => {
+        setOnVNCResponse((resp: VNCActionResponse) => {
             try {
                 console.log('[TeacherPage] VNC response received:', resp);
                 // Match by action
@@ -453,7 +444,12 @@ export default function Session() {
         });
     }, [setOnVNCResponse]);
 
-    const sendAndAwait = async (tool_name: string, parameters: any, expectedAction?: string, timeoutMs = 15000): Promise<any> => {
+    const sendAndAwait = async (
+        tool_name: string,
+        parameters: Record<string, unknown>,
+        expectedAction?: string,
+        timeoutMs = 15000
+    ): Promise<VNCActionResponse> => {
         const expectAction = expectedAction || tool_name;
         return new Promise(async (resolve, reject) => {
             const id = `${expectAction}-${Date.now()}`;
@@ -532,7 +528,7 @@ export default function Session() {
 
             // 2) Start local microphone recording
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' } as any);
+            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             audioChunksRef.current = [];
             recorder.ondataavailable = (e) => {
                 if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
@@ -681,10 +677,11 @@ export default function Session() {
         }
         // 2) Tell backend to stop recording and save actions.json
         try {
-            const stopResp = await sendAndAwait('stop_recording', {}, 'stop_recording');
+            type StopRecordingResp = VNCActionResponse & { count?: number };
+            const stopResp = (await sendAndAwait('stop_recording', {}, 'stop_recording')) as StopRecordingResp;
             console.log('[SessionPage] Backend acknowledged stop_recording:', stopResp);
-            if (stopResp?.count != null) setPacketsCount(stopResp.count);
-            setStatusMessage(`Recording stopped. Server captured ${stopResp?.count || 0} actions.`);
+            if (typeof stopResp?.count === 'number') setPacketsCount(stopResp.count);
+            setStatusMessage(`Recording stopped. Server captured ${typeof stopResp?.count === 'number' ? stopResp.count : 0} actions.`);
         } catch (err: any) {
             console.error('Failed to stop backend recording:', err);
             setStatusMessage(`Error: ${err?.message || 'Failed to stop recording'}`);
@@ -735,7 +732,7 @@ export default function Session() {
             // Fetch recorded actions (including periodic screenshots)
             setStatusMessage('Fetching recorded actions from server...');
             const actionsResp = await sendAndAwait('get_recorded_actions', { session_id: roomName }, 'get_recorded_actions');
-            const packets: any[] = Array.isArray(actionsResp?.packets) ? actionsResp.packets : [];
+            const packets: RecordedPacket[] = Array.isArray((actionsResp as any)?.packets) ? (actionsResp as any).packets : [];
             const periodicCount = packets.filter(p => p?.interaction_type === 'periodic_screenshot').length;
             console.log('[EpisodeControls] Recorded actions ready:', { total: packets.length, periodic_screenshots: periodicCount, source: actionsResp?.source });
             setStatusMessage(`Submitting episode... (${packets.length} actions, ${periodicCount} periodic screenshots)`);
@@ -875,6 +872,24 @@ export default function Session() {
     
     if (isIntroActive) {
         return <IntroPage onAnimationComplete={handleIntroComplete} />;
+    }
+
+    // Guard: require a courseId in the URL. Prevents accidental fallback to a hardcoded curriculum.
+    if (!courseId) {
+        return (
+            <div className="w-full h-full flex items-center justify-center text-white">
+                <div className="text-center max-w-md">
+                    <h2 className="text-xl mb-3">Missing courseId</h2>
+                    <p className="mb-4 opacity-80">Please open this page with a valid course identifier, e.g. /teacher?courseId=your_course_id</p>
+                    <button
+                        onClick={() => router.push('/')}
+                        className="bg-[#566FE9] text-white px-6 py-2 rounded-full hover:bg-[#566FE9]/95 transition"
+                    >
+                        Go Home
+                    </button>
+                </div>
+            </div>
+        );
     }
 
 // ...

@@ -316,3 +316,53 @@ export const useHealthCheck = () => {
     refetchInterval: 60 * 1000, // Check every minute
   });
 };
+
+// ===== ADMIN HOOKS =====
+export const useAdminAnalytics = () => {
+  const apiService = useApiService();
+  return useQuery({
+    queryKey: queryKeys.adminAnalytics,
+    queryFn: () => apiService.getAdminAnalyticsOverview(),
+    staleTime: 60 * 1000,
+    retry: 2,
+  });
+};
+
+export const useAdminUsers = () => {
+  const apiService = useApiService();
+  return useQuery({
+    queryKey: queryKeys.adminUsers,
+    queryFn: () => apiService.getAdminUsers(),
+    staleTime: 60 * 1000,
+  });
+};
+
+export const useToggleUserDisabled = () => {
+  const apiService = useApiService();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, isDisabled }: { userId: string; isDisabled: boolean }) => {
+      // Toggle the state: if currently disabled, enable; otherwise disable
+      if (isDisabled) {
+        return apiService.enableUser(userId);
+      }
+      return apiService.disableUser(userId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers });
+      toast.success('User status updated');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update user: ${error.message}`);
+    },
+  });
+};
+
+export const useAdminCourses = () => {
+  const apiService = useApiService();
+  return useQuery({
+    queryKey: queryKeys.adminCourses,
+    queryFn: () => apiService.getAdminCourses(),
+    staleTime: 60 * 1000,
+  });
+};
