@@ -9,6 +9,14 @@ export interface Course {
   description: string;
   createdAt: string;
   updatedAt: string;
+  // Optional fields returned by backend list endpoints
+  enrollmentCount?: number;
+  lessonCount?: number;
+  // Optional teacher reference for UI labeling
+  teacher?: {
+    name?: string;
+    email?: string;
+  };
 }
 
 export interface Enrollment {
@@ -57,6 +65,10 @@ export class ApiService {
     return this.client.post('/api/courses', course);
   }
 
+  async getMyCourses(): Promise<Course[]> {
+    return this.client.get('/api/courses/teacher/me');
+  }
+
   // Enrollments API
   async getEnrollments(): Promise<Enrollment[]> {
     return this.client.get('/api/enrollments');
@@ -66,26 +78,50 @@ export class ApiService {
     return this.client.post('/api/enrollments', { courseId });
   }
 
+  async getMyEnrollments(): Promise<Enrollment[] | { enrollments: Enrollment[] }> {
+    return this.client.get('/api/enrollments/student/me');
+  }
+
   async getUserEnrollments(userId: string): Promise<Enrollment[]> {
     return this.client.get(`/api/enrollments/user/${userId}`);
   }
 
   // Lessons API
   async getLessons(courseId: string): Promise<Lesson[]> {
-    return this.client.get(`/api/lessons/course/${courseId}`);
+    return this.client.get(`/api/courses/${courseId}/lessons`);
   }
 
   async getLesson(id: string): Promise<Lesson> {
     return this.client.get(`/api/lessons/${id}`);
   }
 
+  async createLesson(courseId: string, data: { title: string }): Promise<Lesson> {
+    return this.client.post(`/api/courses/${courseId}/lessons`, data);
+  }
+
+  async deleteLesson(lessonId: string): Promise<{ success?: boolean }> {
+    return this.client.delete(`/api/lessons/${lessonId}`);
+  }
+
+  async reorderLessons(courseId: string, orderedLessonIds: string[]): Promise<void> {
+    return this.client.patch(`/api/courses/${courseId}/lessons/reorder`, { orderedLessonIds } as any);
+  }
+
   // Lesson Contents API
   async getLessonContents(lessonId: string): Promise<LessonContent[]> {
-    return this.client.get(`/api/lesson-contents/lesson/${lessonId}`);
+    return this.client.get(`/api/lessons/${lessonId}/contents`);
   }
 
   async getLessonContent(id: string): Promise<LessonContent> {
     return this.client.get(`/api/lesson-contents/${id}`);
+  }
+
+  async addLessonContent(lessonId: string, data: any): Promise<LessonContent> {
+    return this.client.post(`/api/lessons/${lessonId}/contents`, data);
+  }
+
+  async deleteLessonContent(contentId: string): Promise<void> {
+    return this.client.delete(`/api/lesson-contents/${contentId}`);
   }
 
   // BRUM API (AI/Memory system)
@@ -109,6 +145,27 @@ export class ApiService {
   // Health Check
   async healthCheck(): Promise<{ status: string; timestamp: string; service: string }> {
     return this.client.get('/health');
+  }
+
+  // Admin API
+  async getAdminUsers(): Promise<any[]> {
+    return this.client.get('/api/admin/users');
+  }
+
+  async enableUser(userId: string): Promise<{ id: string; isDisabled: boolean }> {
+    return this.client.patch(`/api/admin/users/${userId}/enable`, {} as any);
+  }
+
+  async disableUser(userId: string): Promise<{ id: string; isDisabled: boolean }> {
+    return this.client.patch(`/api/admin/users/${userId}/disable`, {} as any);
+  }
+
+  async getAdminCourses(): Promise<any[]> {
+    return this.client.get('/api/admin/courses');
+  }
+
+  async getAdminAnalyticsOverview(): Promise<{ users: number; courses: number; enrollments: number; lessons: number }> {
+    return this.client.get('/api/admin/analytics/overview');
   }
 }
 

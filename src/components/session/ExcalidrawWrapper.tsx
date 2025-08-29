@@ -1,7 +1,13 @@
 "use client";
 
+// Dynamically import Excalidraw to ensure no SSR issues
+const Excalidraw = dynamic(async () => (await import("@excalidraw/excalidraw")).Excalidraw, {
+  ssr: false,
+  loading: () => <div style={{ height: "100%", width: "100%" }}>Loading whiteboard…</div>,
+});
+
 import React, { useCallback, useEffect, useRef } from "react";
-import { Excalidraw } from "@excalidraw/excalidraw";
+import dynamic from "next/dynamic";
 import "@excalidraw/excalidraw/index.css";
 import { useSessionStore } from "@/lib/store";
 import { useExcalidrawIntegration } from "@/hooks/useExcalidrawIntegration";

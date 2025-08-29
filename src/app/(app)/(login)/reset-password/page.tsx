@@ -5,6 +5,7 @@ import Button from "@/components/button2";
 import { Card, CardContent } from "@/components/card";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
 import { Input } from "@/components/input";
+import { toast } from "sonner";
 import Sphere from "@/components/Sphere";
 
 export default function PasswordReset(): JSX.Element {
@@ -81,7 +82,7 @@ export default function PasswordReset(): JSX.Element {
 
         // 4. If all checks pass, proceed with your logic
         console.log("Password is valid and passwords match! Saving new password...");
-        alert("Password has been successfully updated!");
+        toast.success("Password has been successfully updated!");
 
         setNewPassword("");
         setConfirmPassword("");

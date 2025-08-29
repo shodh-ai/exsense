@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useSignIn, useUser, useSession } from "@clerk/nextjs"; // Import useSession
+import { useSignIn, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useState, FormEvent, useEffect } from "react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
@@ -19,7 +19,6 @@ export default function Login() {
     const router = useRouter();
     const { isSignedIn, user } = useUser();
     const { signIn, isLoaded, setActive } = useSignIn();
-    const { session } = useSession(); // Get the active session
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
@@ -33,12 +32,12 @@ export default function Login() {
     // --- MODIFICATION: Redirect based on role if already signed in ---
     useEffect(() => {
         if (isSignedIn && user) {
-            const userRole = (user.publicMetadata?.role as string) || 'learner';
+            const userRole = ((user.publicMetadata as any)?.role as string) || ((user.unsafeMetadata as any)?.role as string) || 'learner';
             console.log("User already signed in with role:", userRole);
             if (userRole === 'expert') {
-                router.push("/dashboard");
+                router.push("/teacher-dash");
             } else {
-                router.push("/session");
+                router.push("/my-course");
             }
         }
     }, [isSignedIn, user, router]);
@@ -62,7 +61,12 @@ export default function Login() {
         try {
             if (isSignedIn) {
                 // This case is handled by the useEffect above, but is a good safeguard
-                router.push("/session");
+                const userRole = ((user?.publicMetadata as any)?.role as string) || ((user?.unsafeMetadata as any)?.role as string) || 'learner';
+                if (userRole === 'expert') {
+                    router.push("/teacher-dash");
+                } else {
+                    router.push("/my-course");
+                }
                 return;
             }
             
@@ -72,31 +76,20 @@ export default function Login() {
             });
 
             if (result.status === "complete") {
-                // --- MODIFICATION: Set session active and redirect based on role ---
+                // Set session active and let the top useEffect handle the redirect
                 await setActive({ session: result.createdSessionId });
-
-                // After setting active, the `user` object from the `useUser` hook
-                // will update with the new session's user data, including metadata.
-                // We will add a small delay to allow Clerk state to sync before checking role.
-                setTimeout(() => {
-                    // Re-check the user object from the hook after state propagation
-                    const userRole = (session?.user.publicMetadata?.role as string) || 'learner';
-                    console.log("Login successful, redirecting based on role:", userRole);
-                    if (userRole === 'expert') {
-                        router.push("/dashboard");
-                    } else {
-                        router.push("/session");
-                    }
-                }, 500); // 500ms delay for state synchronization
                 return;
-                // --- END MODIFICATION ---
-
             } else {
                 setError("Login failed. Please check your credentials.");
             }
         } catch (err: any) {
              if (err.message?.includes("You're already signed in")) {
-                router.push("/session");
+                const userRole = ((user?.publicMetadata as any)?.role as string) || ((user?.unsafeMetadata as any)?.role as string) || 'learner';
+                if (userRole === 'expert') {
+                    router.push("/teacher-dash");
+                } else {
+                    router.push("/my-course");
+                }
                 return;
             } else if (err.message?.includes("Invalid authentication credentials")) {
                 setError("Invalid email or password. Please try again.");
@@ -114,6 +107,7 @@ export default function Login() {
     const handleGoogleSignIn = async () => {
         if (!isLoaded) return;
         try {
+            try { window.localStorage.setItem('pendingRole', activeUserType); } catch {}
             await signIn.authenticateWithRedirect({
                 strategy: "oauth_google",
                 redirectUrl: "/session",
@@ -127,6 +121,7 @@ export default function Login() {
     const handleFacebookSignIn = async () => {
         if (!isLoaded) return;
         try {
+            try { window.localStorage.setItem('pendingRole', activeUserType); } catch {}
             await signIn.authenticateWithRedirect({
                 strategy: "oauth_facebook",
                 redirectUrl: "/session",

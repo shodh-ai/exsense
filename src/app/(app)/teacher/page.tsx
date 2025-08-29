@@ -9,6 +9,7 @@ import { MessageButton } from '@/components/MessageButton';
 import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send } from 'lucide-react';
 // Keep other existing imports
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import { useSessionStore } from '@/lib/store';
 import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
 import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
@@ -131,10 +132,12 @@ function SessionContent({
                             onClick={button.onClick}
                             className={`w-[49%] h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${imprintingMode === button.key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
                         >
+
                             <img
                                 src={imprintingMode === button.key ? button.activeImagePath : button.inactiveImagePath}
                                 alt={button.label}
                                 className="w-[20px] h-[20px]"
+
                             />
                             {button.label}
                         </button>
@@ -462,8 +465,17 @@ export default function Session() {
     const courseId = searchParams.get('courseId');
     const courseTitle = searchParams.get('title');
 
+
     // --- MODIFICATION: Add state for the finish confirmation modal ---
     const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
+
+
+    
+    if (SESSION_DEBUG) console.log('Session page - Course details:', { courseId, courseTitle });
+
+    // NOTE: Do not early-return here to avoid conditional hook calls. We will render a fallback later.
+    
+    // Add debugging for authentication state
 
     useEffect(() => {
         if (SESSION_DEBUG) console.log('Session page auth state:', { isLoaded, isSignedIn, userId: user?.id });
@@ -519,7 +531,11 @@ export default function Session() {
     const [statusMessage, setStatusMessage] = useState<string>('Session started. Waiting for initial prompt.');
     const [submitMessage, setSubmitMessage] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
-    const packetsRef = useRef<any[]>([]);
+    // Narrowed types to reduce any-usage
+    type VNCActionResponse = { action?: string } & Record<string, unknown>;
+    type RecordedPacket = { interaction_type?: string } & Record<string, unknown>;
+
+    const packetsRef = useRef<RecordedPacket[]>([]);
     const [packetsCount, setPacketsCount] = useState(0);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<BlobPart[]>([]);
@@ -534,7 +550,7 @@ export default function Session() {
     const [recordingDuration, setRecordingDuration] = useState(0);
     const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    const curriculumId = courseId || 'pandas_expert_test_01';
+    const curriculumId = courseId as string;
 
     const handleSeedSubmit = async (content: string) => {
         setImprintingPhase('SEED_PROCESSING');
@@ -575,11 +591,12 @@ export default function Session() {
             setSubmitError('Please paste setup actions JSON into the textbox.');
             return;
         }
-        let actions: any[];
+        type BrowserAction = Record<string, unknown>;
+        let actions: BrowserAction[];
         try {
             const parsed = JSON.parse(raw);
             if (!Array.isArray(parsed)) throw new Error('JSON must be an array of action objects');
-            actions = parsed;
+            actions = parsed as BrowserAction[];
         } catch (e: any) {
             setSubmitError(`Invalid JSON: ${e?.message || e}`);
             return;
@@ -633,11 +650,16 @@ export default function Session() {
     const topicInputRef = useRef<HTMLInputElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-    type PendingResolver = { id: string; expectAction: string; resolve: (resp: any) => void; reject: (err: any) => void; timeoutId: any };
+
+
+    // --- Lightweight response awaiter infrastructure ---
+    type PendingResolver = { id: string; expectAction: string; resolve: (resp: VNCActionResponse) => void; reject: (err: any) => void; timeoutId: any };
     const pendingResolversRef = useRef<PendingResolver[]>([]);
 
     useEffect(() => {
-        setOnVNCResponse((resp: any) => {
+        // Route incoming VNC responses to awaiting callers
+        setOnVNCResponse((resp: VNCActionResponse) => {
+
             try {
                 const idx = pendingResolversRef.current.findIndex(p => p.expectAction === resp?.action);
                 if (idx >= 0) {
@@ -649,7 +671,12 @@ export default function Session() {
         });
     }, [setOnVNCResponse]);
 
-    const sendAndAwait = async (tool_name: string, parameters: any, expectedAction?: string, timeoutMs = 15000): Promise<any> => {
+    const sendAndAwait = async (
+        tool_name: string,
+        parameters: Record<string, unknown>,
+        expectedAction?: string,
+        timeoutMs = 15000
+    ): Promise<VNCActionResponse> => {
         const expectAction = expectedAction || tool_name;
         return new Promise(async (resolve, reject) => {
             const id = `${expectAction}-${Date.now()}`;
@@ -707,7 +734,7 @@ export default function Session() {
             setTimeToNextScreenshot(screenshotIntervalSec);
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' } as any);
+            const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             audioChunksRef.current = [];
             recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data); };
             recorder.onstop = () => { audioBlobRef.current = new Blob(audioChunksRef.current, { type: 'audio/webm' }); };
@@ -805,9 +832,13 @@ export default function Session() {
             }
         } catch (err) { console.warn('Stop recording warning:', err); }
         try {
-            const stopResp = await sendAndAwait('stop_recording', {}, 'stop_recording');
-            if (stopResp?.count != null) setPacketsCount(stopResp.count);
-            setStatusMessage(`Recording stopped. Server captured ${stopResp?.count || 0} actions.`);
+
+            type StopRecordingResp = VNCActionResponse & { count?: number };
+            const stopResp = (await sendAndAwait('stop_recording', {}, 'stop_recording')) as StopRecordingResp;
+            console.log('[SessionPage] Backend acknowledged stop_recording:', stopResp);
+            if (typeof stopResp?.count === 'number') setPacketsCount(stopResp.count);
+            setStatusMessage(`Recording stopped. Server captured ${typeof stopResp?.count === 'number' ? stopResp.count : 0} actions.`);
+
         } catch (err: any) {
             setStatusMessage(`Error: ${err?.message || 'Failed to stop recording'}`);
         } finally {
@@ -879,37 +910,41 @@ export default function Session() {
                 setStatusMessage(`AI has a question for you (Mocked).`);
                 setTimeout(() => topicInputRef.current?.focus(), 0);
             }
-            setIsSubmitting(false);
-        } else {
-            try {
-                if (isRecording) await handleStopRecording();
-                const audioBlob = audioBlobRef.current || (audioChunksRef.current.length > 0 ? new Blob(audioChunksRef.current, { type: 'audio/webm' }) : null);
-                if (!audioBlob) throw new Error('No audio captured.');
-                const audio_b64 = await convertBlobToWavDataURL(audioBlob);
-                const actionsResp = await sendAndAwait('get_recorded_actions', { session_id: roomName }, 'get_recorded_actions');
-                const packets = Array.isArray(actionsResp?.packets) ? actionsResp.packets : [];
-                const response = await submitImprintingEpisode({
-                    expert_id: user?.id || 'unknown_expert',
-                    session_id: roomName,
-                    curriculum_id: String(curriculumId),
-                    narration: 'Expert narration.',
-                    audio_b64,
-                    expert_actions: packets,
-                    staged_assets: stagedAssets,
-                    current_lo: currentLO,
-                    in_response_to_question: isShowMeRecording ? showMeQuestionRef.current : undefined,
-                });
-                setSubmitMessage(`Submitted. Processed ${packets.length} actions.`);
-                if (response?.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
-                    const aiText = response.text || '';
-                    let hypothesis = 'I understood:';
-                    let question = aiText;
-                    const lastSentenceEnd = Math.max(aiText.lastIndexOf('. '), aiText.lastIndexOf('! '), aiText.lastIndexOf('? '));
-                    if (lastSentenceEnd > -1 && lastSentenceEnd < aiText.length - 2) {
-                         hypothesis = aiText.substring(0, lastSentenceEnd + 1);
-                         question = aiText.substring(lastSentenceEnd + 2).trim();
-                    }
-                    setCurrentDebrief({ hypothesis, text: question });
+
+
+            // Convert recorded audio (webm/ogg) to WAV Data URL
+            const audio_b64: string = await convertBlobToWavDataURL(audioBlob);
+
+            // Fetch recorded actions (including periodic screenshots)
+            setStatusMessage('Fetching recorded actions from server...');
+            const actionsResp = await sendAndAwait('get_recorded_actions', { session_id: roomName }, 'get_recorded_actions');
+            const packets: RecordedPacket[] = Array.isArray((actionsResp as any)?.packets) ? (actionsResp as any).packets : [];
+            const periodicCount = packets.filter(p => p?.interaction_type === 'periodic_screenshot').length;
+            console.log('[EpisodeControls] Recorded actions ready:', { total: packets.length, periodic_screenshots: periodicCount, source: actionsResp?.source });
+            setStatusMessage(`Submitting episode... (${packets.length} actions, ${periodicCount} periodic screenshots)`);
+
+            const response = await submitImprintingEpisode({
+                expert_id: user?.id || 'unknown_expert',
+                session_id: roomName,
+                curriculum_id: String(curriculumId),
+                narration: 'Expert narration from episode.',
+                audio_b64,
+                expert_actions: packets,
+                staged_assets: stagedAssets,
+                current_lo: currentLO || undefined,
+                in_response_to_question: isShowMeRecording && showMeQuestionRef.current ? showMeQuestionRef.current : undefined,
+            });
+
+            console.log('[EpisodeControls] Submit success', response);
+            setSubmitMessage(`Submitted. Processed ${packets.length} actions.`);
+            setStatusMessage('Episode submitted. AI is analyzing...');
+
+            if (response?.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
+                const aiText = response.text || '';
+                const hasQuestion = !!aiText && /\?/.test(aiText);
+                if (hasQuestion) {
+                    // Move to conceptual mode to answer, and disable Start until resolved
+
                     setImprintingMode('DEBRIEF_CONCEPTUAL');
                     setActiveView('excalidraw');
                     setIsConceptualStarted(true);
@@ -987,8 +1022,30 @@ export default function Session() {
         setScreenshotIntervalSec(prev => prev + 5);
     };
 
+
     if (!isLoaded) return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
     if (isIntroActive) return <IntroPage onAnimationComplete={handleIntroComplete} />;
+
+    // Guard: require a courseId in the URL. Prevents accidental fallback to a hardcoded curriculum.
+    if (!courseId) {
+        return (
+            <div className="w-full h-full flex items-center justify-center text-white">
+                <div className="text-center max-w-md">
+                    <h2 className="text-xl mb-3">Missing courseId</h2>
+                    <p className="mb-4 opacity-80">Please open this page with a valid course identifier, e.g. /teacher?courseId=your_course_id</p>
+                    <button
+                        onClick={() => router.push('/')}
+                        className="bg-[#566FE9] text-white px-6 py-2 rounded-full hover:bg-[#566FE9]/95 transition"
+                    >
+                        Go Home
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+// ...
+
 
     return (
         <>

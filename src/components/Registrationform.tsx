@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/button";
 import { Card, CardContent } from "@/components/card";
 import { Input } from "@/components/input";
+import { toast } from "sonner";
 
 
 
@@ -314,7 +315,7 @@ export const RegistrationForm = () => {
     }, [recordedBlob]);
 
     useEffect(() => {
-        if (recorderError) alert(recorderError);
+        if (recorderError) toast.error(recorderError);
     }, [recorderError]);
 
     useEffect(() => {
@@ -351,7 +352,7 @@ export const RegistrationForm = () => {
             submissionPayload.analysis = "test";
             const token = localStorage.getItem("authToken");
             if (!token) {
-                alert("Authentication error: You are not logged in.");
+                toast.error("Authentication error: You are not logged in.");
                 setIsSubmitting(false);
                 return;
             }
@@ -363,7 +364,7 @@ export const RegistrationForm = () => {
             const result = await response.json();
             const userId = result.user.id;
             if (!userId) {
-                alert("Could not find user ID for AI backend submission.");
+                toast.error("Could not find user ID for AI backend submission.");
             } else {
                 const langgraphPayload = { ...submissionPayload, user_id: userId };
                 try {
@@ -371,20 +372,20 @@ export const RegistrationForm = () => {
                     if (!langgraphResponse.ok) {
                         const errorData = await langgraphResponse.json().catch(() => ({ message: "Failed to submit to AI backend." }));
                         console.error("AI Backend submission failed:", errorData.message);
-                        alert("Registration details submitted, but failed to update AI profile. Some features may be limited.");
+                        toast.error("Registration details submitted, but failed to update AI profile. Some features may be limited.");
                     } else {
                         await langgraphResponse.json();
-                        alert("Registration successful! Your profile has been updated for the AI tutor.");
+                        toast.success("Registration successful! Your profile has been updated for the AI tutor.");
                     }
                 } catch (aiError) {
                     console.error("Error submitting to AI backend:", aiError);
-                    alert("Could not connect to the AI backend. Some features may be limited.");
+                    toast.error("Could not connect to the AI backend. Some features may be limited.");
                 }
             }
             router.push("/dash_rox");
         } catch (error) {
             console.error("Error submitting form:", error);
-            alert(`Submission failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+            toast.error(`Submission failed: ${error instanceof Error ? error.message : "Unknown error"}`);
         } finally {
             setIsSubmitting(false);
         }
@@ -464,7 +465,7 @@ export const RegistrationForm = () => {
             recognitionRef.current = recognition;
             try { recognition.start(); setIsListening(true); } catch (error) { console.error("Error starting speech recognition:", error); }
         } else {
-            alert("Speech recognition is not supported in this browser. Try Chrome or Edge.");
+            toast.info("Speech recognition is not supported in this browser. Try Chrome or Edge.");
         }
     };
 

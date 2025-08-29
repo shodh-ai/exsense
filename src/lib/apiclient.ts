@@ -4,21 +4,21 @@
 // It will be configured to automatically include the auth token.
 
 type ApiClientOptions = {
-    getToken: () => Promise<string | null>;
+    // getToken is optional. If not provided or returns null, requests will be sent without Authorization header.
+    getToken?: () => Promise<string | null>;
 };
 
 // We will initialize this client in our hook or component where we have access to Clerk's getToken.
 export const createApiClient = ({ getToken }: ApiClientOptions) => {
-    const request = async (method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, body?: object) => {
-        const token = await getToken();
-        if (!token) {
-            throw new Error("User is not authenticated.");
-        }
+    const request = async (method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: object) => {
+        const token = getToken ? await getToken() : null;
 
         const headers = new Headers({
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
         });
+        if (token) {
+            headers.set('Authorization', `Bearer ${token}`);
+        }
 
         const fullUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}${path}`;
         console.log('🔧 API Request Debug:', {
@@ -44,12 +44,19 @@ export const createApiClient = ({ getToken }: ApiClientOptions) => {
             return null;
         }
 
+        // For 204 No Content responses
+        if (response.status === 204) {
+            return null;
+        }
+
         return response.json();
     };
 
     return {
         get: (path: string) => request('GET', path),
         post: (path: string, body: object) => request('POST', path, body),
-        // You can add put and delete methods here as needed
+        put: (path: string, body: object) => request('PUT', path, body),
+        patch: (path: string, body: object) => request('PATCH', path, body),
+        delete: (path: string) => request('DELETE', path),
     };
 };

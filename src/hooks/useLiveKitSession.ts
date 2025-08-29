@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -74,7 +75,7 @@ const roomInstance = new Room({
 });
 
 // Main hook
-export function useLiveKitSession(roomName: string, userName: string) {
+export function useLiveKitSession(roomName: string, userName: string, courseId?: string) {
   // --- CLERK AUTHENTICATION ---
   const { getToken, isSignedIn } = useAuth();
   // VNC WebSocket URL for browser automation
@@ -114,8 +115,10 @@ export function useLiveKitSession(roomName: string, userName: string) {
     let mounted = true;
     const connectToRoom = async () => {
         if (LIVEKIT_DEBUG) console.log('useLiveKitSession - connectToRoom called:', { roomName, userName });
-        if (!roomName || !userName) {
-            if (LIVEKIT_DEBUG) console.log('Missing roomName or userName, skipping connection');
+        if (!roomName || !userName || !courseId) {
+            if (LIVEKIT_DEBUG) console.log('Missing roomName, userName, or courseId, skipping connection');
+            setIsLoading(false);
+            if (!courseId) setConnectionError('Missing courseId. Please provide a valid courseId in the URL.');
             return;
         }
         if (roomInstance.state === ConnectionState.Connected || roomInstance.state === ConnectionState.Connecting) {
@@ -149,7 +152,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
                     'Authorization': `Bearer ${clerkToken}`,
                 },
                 body: JSON.stringify({
-                    curriculum_id: 'demo_user_59', // Mock curriculum ID for testing
+                    curriculum_id: courseId,
                 }),
             });
             
@@ -187,7 +190,7 @@ export function useLiveKitSession(roomName: string, userName: string) {
     connectToRoom();
 
     return () => { mounted = false; };
-  }, [roomName, userName, getToken, isSignedIn]);
+  }, [roomName, userName, courseId, getToken, isSignedIn]);
 
 
   // --- EVENT & RPC HANDLER LOGIC ---

@@ -161,6 +161,7 @@ export default function Register() {
     const handleGoogleSignUp = async () => {
         if (!isLoaded) return;
         try {
+            try { window.localStorage.setItem('pendingRole', activeUserType); } catch {}
             await signUp.authenticateWithRedirect({
                 strategy: "oauth_google",
                 redirectUrl: "/confirm-register",
@@ -174,6 +175,7 @@ export default function Register() {
     const handleFacebookSignUp = async () => {
         if (!isLoaded) return;
         try {
+            try { window.localStorage.setItem('pendingRole', activeUserType); } catch {}
             await signUp.authenticateWithRedirect({
                 strategy: "oauth_facebook",
                 redirectUrl: "/confirm-register",

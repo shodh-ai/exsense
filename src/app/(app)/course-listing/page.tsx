@@ -1,13 +1,15 @@
 "use client";
 // src/pages/CoursesPage.tsx
 import { ChevronDownIcon, SearchIcon, XIcon } from "lucide-react";
-import React, { JSX, useState } from "react";
+import React, { JSX, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
 import CourseCard, { Course } from "@/components/CourseCard";
 import Sphere from "@/components/Sphere";
 import Footer from "@/components/Footer";
+import { useCourses } from "@/hooks/useApi";
 
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -17,73 +19,32 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 
 
 const CoursesPage = (): JSX.Element => {
- const courses: Course[] = [
- {
- id: 1,
- title: "Creative Writing for Beginners",
- instructor: "Prof. Akash Jain",
- description:
- "Discover your writing voice and explore storytelling, dialogue, and narrative structure.",
- rating: "4.5",
- reviews: "1203",
- level: "Beginner",
- duration: "2 Months",
- image: "/teacher2.svg",
- },
- {
- id: 2,
- title: "Advanced Graphic Design Techniques",
- instructor: "Jane Smith",
- description:
- "Master the principles of design, color theory, and advanced software tools to elevate your projects.",
- rating: "4.8",
- reviews: "895",
- level: "Intermediate",
- duration: "3 Months",
- image: "/teacher3.svg",
- },
- {
- id: 3,
- title: "Introduction to UX/UI Design",
- instructor: "Michael Chen",
- description:
- "Learn user-centered design principles, prototyping, and usability testing to create intuitive interfaces.",
- rating: "4.7",
- reviews: "1530",
- level: "Beginner",
- duration: "3 Months",
- image: "/teacher2.svg",
- },
- {
- id: 4,
- title: "Introduction to UX/UI Design",
- instructor: "Michael Chen",
- description:
- "Learn user-centered design principles, prototyping, and usability testing to create intuitive interfaces.",
- rating: "4.7",
- reviews: "1530",
- level: "Beginner",
- duration: "3 Months",
- image: "/teacher2.svg",
- },
- {
- id: 5,
- title: "Introduction to UX/UI Design",
- instructor: "Michael Chen",
- description:
- "Learn user-centered design principles, prototyping, and usability testing to create intuitive interfaces.",
- rating: "4.7",
- reviews: "1530",
- level: "Beginner",
- duration: "3 Months",
- image: "/teacher3.svg",
- },
- ];
+ // Dynamic courses state
+ const { data, isLoading, error } = useCourses();
+ const router = useRouter();
+ 
 
 
- const [activeCourseId, setActiveCourseId] = useState<number | string | null>(
- courses.length > 0 ? courses[0].id : null
- );
+ const [activeCourseId, setActiveCourseId] = useState<number | string | null>(null);
+
+ const courses: Course[] = useMemo(() => {
+   const fetched = data || [];
+   const mapped = fetched.map((c: any) => ({
+     id: c.id,
+     title: c.title,
+     description: c.description || "",
+     instructor: c?.teacher?.name || c?.teacher?.email || "Unknown Instructor",
+     rating: "4.8",
+     reviews: String(c?.enrollmentCount ?? 0),
+     level: "Beginner",
+     duration: c?.lessonCount ? `${c.lessonCount} lessons` : "Self-paced",
+     image: "/1.png",
+   })) as Course[];
+   if (mapped.length && activeCourseId === null) {
+     setActiveCourseId(mapped[0].id);
+   }
+   return mapped;
+ }, [data, activeCourseId]);
 
 
  const [searchQuery, setSearchQuery] = useState("");
@@ -142,18 +103,19 @@ const CoursesPage = (): JSX.Element => {
  {/* SCROLLABLE COURSE LIST */}
  <div className="overflow-y-auto h-full mt-8 custom-scrollbar pr-4">
  <div className="grid gap-6 auto-rows-fr">
- {courses.map((course) => (
+ {isLoading && <p>Loading courses...</p>}
+ {error && <p className="text-red-500">Error: {(error as any)?.message || 'Failed to load courses'}</p>}
+ {!isLoading && !error && courses.map((course) => (
  <div
  key={course.id}
- onClick={() => setActiveCourseId(course.id)}
+ onClick={() => { setActiveCourseId(course.id); router.push(`/course/${course.id}`); }}
  className="cursor-pointer"
  >
  <CourseCard
- 
  course={course}
  isActive={activeCourseId === course.id}
  isEnrolled={false}
- onEnroll={() => {}}
+ onEnroll={() => router.push(`/course/${course.id}`)}
  />
  </div>
  ))}

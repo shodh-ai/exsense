@@ -6,8 +6,10 @@ import { toast } from 'sonner'; // Assuming you're using Sonner for notification
 // Query Keys for React Query
 export const queryKeys = {
   courses: ['courses'] as const,
+  teacherCourses: ['courses', 'teacher', 'me'] as const,
   course: (id: string) => ['courses', id] as const,
   enrollments: ['enrollments'] as const,
+  myEnrollments: ['enrollments', 'me'] as const,
   userEnrollments: (userId: string) => ['enrollments', 'user', userId] as const,
   lessons: (courseId: string) => ['lessons', 'course', courseId] as const,
   lesson: (id: string) => ['lessons', id] as const,
@@ -16,6 +18,9 @@ export const queryKeys = {
   brumData: ['brum'] as const,
   reports: ['reports'] as const,
   userProgress: (userId: string) => ['reports', 'progress', userId] as const,
+  adminUsers: ['admin', 'users'] as const,
+  adminCourses: ['admin', 'courses'] as const,
+  adminAnalytics: ['admin', 'analytics', 'overview'] as const,
 };
 
 // ===== COURSES HOOKS =====
@@ -28,6 +33,17 @@ export const useCourses = () => {
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 3,
     retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  });
+};
+
+export const useTeacherCourses = () => {
+  const apiService = useApiService();
+
+  return useQuery({
+    queryKey: queryKeys.teacherCourses,
+    queryFn: () => apiService.getMyCourses(),
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
   });
 };
 
@@ -51,6 +67,7 @@ export const useCreateCourse = () => {
     onSuccess: (newCourse: Course) => {
       // Invalidate and refetch courses list
       queryClient.invalidateQueries({ queryKey: queryKeys.courses });
+      queryClient.invalidateQueries({ queryKey: queryKeys.teacherCourses });
       toast.success('Course created successfully!');
     },
     onError: (error: Error) => {
@@ -90,6 +107,7 @@ export const useEnrollInCourse = () => {
     onSuccess: (enrollment: Enrollment) => {
       // Invalidate enrollments queries
       queryClient.invalidateQueries({ queryKey: queryKeys.enrollments });
+      queryClient.invalidateQueries({ queryKey: queryKeys.myEnrollments });
       queryClient.invalidateQueries({ 
         queryKey: queryKeys.userEnrollments(enrollment.userId) 
       });
@@ -98,6 +116,21 @@ export const useEnrollInCourse = () => {
     onError: (error: Error) => {
       toast.error(`Failed to enroll: ${error.message}`);
     },
+  });
+};
+
+// Current user's enrollments (normalized)
+export const useMyEnrollments = (options?: { enabled?: boolean }) => {
+  const apiService = useApiService();
+  return useQuery({
+    queryKey: queryKeys.myEnrollments,
+    queryFn: async () => {
+      const res: any = await apiService.getMyEnrollments();
+      // Backend may return an array or { enrollments: [] }
+      return Array.isArray(res) ? res : (res?.enrollments ?? []);
+    },
+    staleTime: 2 * 60 * 1000,
+    enabled: options?.enabled ?? true,
   });
 };
 
@@ -110,6 +143,51 @@ export const useLessons = (courseId: string) => {
     queryFn: () => apiService.getLessons(courseId),
     enabled: !!courseId,
     staleTime: 10 * 60 * 1000, // 10 minutes
+  });
+};
+
+export const useCreateLesson = (courseId: string) => {
+  const apiService = useApiService();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { title: string }) => apiService.createLesson(courseId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessons(courseId) });
+      toast.success('Lesson created');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to create lesson: ${error.message}`);
+    },
+  });
+};
+
+export const useDeleteLesson = (courseId: string) => {
+  const apiService = useApiService();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lessonId: string) => apiService.deleteLesson(lessonId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessons(courseId) });
+      toast.success('Lesson deleted');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete lesson: ${error.message}`);
+    },
+  });
+};
+
+export const useReorderLessons = (courseId: string) => {
+  const apiService = useApiService();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (orderedLessonIds: string[]) => apiService.reorderLessons(courseId, orderedLessonIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessons(courseId) });
+      toast.success('Lessons reordered');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to reorder lessons: ${error.message}`);
+    },
   });
 };
 
@@ -133,6 +211,36 @@ export const useLessonContents = (lessonId: string) => {
     queryFn: () => apiService.getLessonContents(lessonId),
     enabled: !!lessonId,
     staleTime: 15 * 60 * 1000, // 15 minutes
+  });
+};
+
+export const useAddLessonContent = (lessonId: string) => {
+  const apiService = useApiService();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => apiService.addLessonContent(lessonId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessonContents(lessonId) });
+      toast.success('Content added');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to add content: ${error.message}`);
+    }
+  });
+};
+
+export const useDeleteLessonContent = (lessonId: string) => {
+  const apiService = useApiService();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (contentId: string) => apiService.deleteLessonContent(contentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.lessonContents(lessonId) });
+      toast.success('Content deleted');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete content: ${error.message}`);
+    }
   });
 };
 
@@ -206,5 +314,55 @@ export const useHealthCheck = () => {
     staleTime: 30 * 1000, // 30 seconds
     retry: 1,
     refetchInterval: 60 * 1000, // Check every minute
+  });
+};
+
+// ===== ADMIN HOOKS =====
+export const useAdminAnalytics = () => {
+  const apiService = useApiService();
+  return useQuery({
+    queryKey: queryKeys.adminAnalytics,
+    queryFn: () => apiService.getAdminAnalyticsOverview(),
+    staleTime: 60 * 1000,
+    retry: 2,
+  });
+};
+
+export const useAdminUsers = () => {
+  const apiService = useApiService();
+  return useQuery({
+    queryKey: queryKeys.adminUsers,
+    queryFn: () => apiService.getAdminUsers(),
+    staleTime: 60 * 1000,
+  });
+};
+
+export const useToggleUserDisabled = () => {
+  const apiService = useApiService();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, isDisabled }: { userId: string; isDisabled: boolean }) => {
+      // Toggle the state: if currently disabled, enable; otherwise disable
+      if (isDisabled) {
+        return apiService.enableUser(userId);
+      }
+      return apiService.disableUser(userId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers });
+      toast.success('User status updated');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update user: ${error.message}`);
+    },
+  });
+};
+
+export const useAdminCourses = () => {
+  const apiService = useApiService();
+  return useQuery({
+    queryKey: queryKeys.adminCourses,
+    queryFn: () => apiService.getAdminCourses(),
+    staleTime: 60 * 1000,
   });
 };

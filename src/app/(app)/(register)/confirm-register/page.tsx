@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
 import Sphere from "@/components/Sphere";
+import { useUser } from "@clerk/nextjs";
 
 export default function ConfirmRegister() {
 
@@ -11,6 +12,29 @@ export default function ConfirmRegister() {
 
 
     const router = useRouter();
+    const { user, isSignedIn, isLoaded } = useUser();
+
+    // Promote role to publicMetadata if needed (after email or OAuth sign-up)
+    useEffect(() => {
+        if (!isLoaded || !isSignedIn || !user) return;
+        const currentPublicRole = ((user.publicMetadata as any)?.role as string) || undefined;
+        const unsafeRole = ((user.unsafeMetadata as any)?.role as string) || undefined;
+        let pendingRole: string | undefined;
+        try { pendingRole = window.localStorage.getItem('pendingRole') || undefined; } catch {}
+        const desired = pendingRole || currentPublicRole || unsafeRole;
+        if (!desired || currentPublicRole === desired) {
+            try { window.localStorage.removeItem('pendingRole'); } catch {}
+            return;
+        }
+        // Use server-side API to promote to publicMetadata
+        fetch('/api/promote-role', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ role: desired })
+        })
+            .then(() => { try { window.localStorage.removeItem('pendingRole'); } catch {} })
+            .catch(() => {});
+    }, [isLoaded, isSignedIn, user]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
