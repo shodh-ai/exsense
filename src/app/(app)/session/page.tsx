@@ -107,7 +107,28 @@ export default function Session() {
     useEffect(() => {
         if (SESSION_DEBUG) console.log('Session page auth state:', { isLoaded, isSignedIn, userId: user?.id });
     }, [isLoaded, isSignedIn, user?.id]);
-    
+
+    // Promote role to publicMetadata after OAuth/login if needed
+    useEffect(() => {
+        if (!isLoaded || !isSignedIn || !user) return;
+        const currentPublicRole = ((user.publicMetadata as any)?.role as string) || undefined;
+        const unsafeRole = ((user.unsafeMetadata as any)?.role as string) || undefined;
+        let pendingRole: string | undefined;
+        try { pendingRole = window.localStorage.getItem('pendingRole') || undefined; } catch {}
+        const desired = pendingRole || currentPublicRole || unsafeRole;
+        if (!desired || currentPublicRole === desired) {
+            try { window.localStorage.removeItem('pendingRole'); } catch {}
+            return;
+        }
+        fetch('/api/promote-role', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ role: desired })
+        })
+            .then(() => { try { window.localStorage.removeItem('pendingRole'); } catch {} })
+            .catch(() => {});
+    }, [isLoaded, isSignedIn, user]);
+
     // Redirect to login if not authenticated (after Clerk has loaded)
     useEffect(() => {
         if (isLoaded && !isSignedIn) {

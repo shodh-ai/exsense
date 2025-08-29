@@ -7,12 +7,15 @@ import { useAuth } from "@clerk/nextjs";
 import { createApiClient } from "@/lib/apiclient";
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/hooks/useApi";
 
 export default function TeacherCourseManagePage() {
   const { courseId } = useParams<{ courseId: string }>();
   const router = useRouter();
   const { getToken } = useAuth();
   const api = useMemo(() => createApiClient({ getToken }), [getToken]);
+  const queryClient = useQueryClient();
 
   const [course, setCourse] = useState<any | null>(null);
   const [title, setTitle] = useState("");
@@ -46,7 +49,13 @@ export default function TeacherCourseManagePage() {
       setSaving(true);
       setError(null);
       await api.put(`/api/courses/${courseId}`, { title, description });
-      router.refresh?.();
+      // Invalidate relevant caches so lists reflect latest data
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.teacherCourses }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.courses }),
+      ]);
+      // After successful save, redirect back to the Teacher Dashboard
+      router.push("/teacher-dash");
     } catch (e: any) {
       setError(e.message || "Failed to save");
     } finally {

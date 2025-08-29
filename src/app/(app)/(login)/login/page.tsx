@@ -32,7 +32,7 @@ export default function Login() {
     // --- MODIFICATION: Redirect based on role if already signed in ---
     useEffect(() => {
         if (isSignedIn && user) {
-            const userRole = (user.publicMetadata?.role as string) || 'learner';
+            const userRole = ((user.publicMetadata as any)?.role as string) || ((user.unsafeMetadata as any)?.role as string) || 'learner';
             console.log("User already signed in with role:", userRole);
             if (userRole === 'expert') {
                 router.push("/teacher-dash");
@@ -61,7 +61,7 @@ export default function Login() {
         try {
             if (isSignedIn) {
                 // This case is handled by the useEffect above, but is a good safeguard
-                const userRole = (user?.publicMetadata?.role as string) || 'learner';
+                const userRole = ((user?.publicMetadata as any)?.role as string) || ((user?.unsafeMetadata as any)?.role as string) || 'learner';
                 if (userRole === 'expert') {
                     router.push("/teacher-dash");
                 } else {
@@ -84,7 +84,7 @@ export default function Login() {
             }
         } catch (err: any) {
              if (err.message?.includes("You're already signed in")) {
-                const userRole = (user?.publicMetadata?.role as string) || 'learner';
+                const userRole = ((user?.publicMetadata as any)?.role as string) || ((user?.unsafeMetadata as any)?.role as string) || 'learner';
                 if (userRole === 'expert') {
                     router.push("/teacher-dash");
                 } else {
@@ -107,6 +107,7 @@ export default function Login() {
     const handleGoogleSignIn = async () => {
         if (!isLoaded) return;
         try {
+            try { window.localStorage.setItem('pendingRole', activeUserType); } catch {}
             await signIn.authenticateWithRedirect({
                 strategy: "oauth_google",
                 redirectUrl: "/session",
@@ -120,6 +121,7 @@ export default function Login() {
     const handleFacebookSignIn = async () => {
         if (!isLoaded) return;
         try {
+            try { window.localStorage.setItem('pendingRole', activeUserType); } catch {}
             await signIn.authenticateWithRedirect({
                 strategy: "oauth_facebook",
                 redirectUrl: "/session",
