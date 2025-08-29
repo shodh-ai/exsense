@@ -8,6 +8,21 @@ type ApiClientOptions = {
     getToken?: () => Promise<string | null>;
 };
 
+// Provide richer error details so callers (React Query) can implement
+// smarter retry/backoff based on HTTP status and Retry-After header.
+export class ApiError extends Error {
+    status: number;
+    retryAfter?: number; // seconds, if provided by server
+    data?: any;
+    constructor(message: string, status: number, retryAfter?: number, data?: any) {
+        super(message);
+        this.name = 'ApiError';
+        this.status = status;
+        this.retryAfter = retryAfter;
+        this.data = data;
+    }
+}
+
 // We will initialize this client in our hook or component where we have access to Clerk's getToken.
 export const createApiClient = ({ getToken }: ApiClientOptions) => {
     const request = async (method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: object) => {
@@ -36,7 +51,10 @@ export const createApiClient = ({ getToken }: ApiClientOptions) => {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ message: "An unknown API error occurred." }));
-            throw new Error(errorData.message || `API request failed with status ${response.status}`);
+            const retryAfterHeader = response.headers.get('Retry-After');
+            const retryAfter = retryAfterHeader ? Number(retryAfterHeader) : undefined;
+            const message = errorData.message || `API request failed with status ${response.status}`;
+            throw new ApiError(message, response.status, Number.isFinite(retryAfter) ? retryAfter : undefined, errorData);
         }
 
         // For POST requests that return 201 Created with no body

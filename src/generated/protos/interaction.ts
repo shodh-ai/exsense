@@ -121,6 +121,8 @@ export enum ClientUIActionType {
   /** UPLOAD_FILE_TO_JUPYTER - Upload a file to Jupyter notebook environment */
   UPLOAD_FILE_TO_JUPYTER = 62,
   HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION = 63,
+  /** SUGGESTED_RESPONSES - Suggested responses (quick replies) list */
+  SUGGESTED_RESPONSES = 65,
   UNRECOGNIZED = -1,
 }
 
@@ -303,6 +305,9 @@ export function clientUIActionTypeFromJSON(object: any): ClientUIActionType {
     case 63:
     case "HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION":
       return ClientUIActionType.HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION;
+    case 65:
+    case "SUGGESTED_RESPONSES":
+      return ClientUIActionType.SUGGESTED_RESPONSES;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -430,6 +435,8 @@ export function clientUIActionTypeToJSON(object: ClientUIActionType): string {
       return "UPLOAD_FILE_TO_JUPYTER";
     case ClientUIActionType.HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION:
       return "HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION";
+    case ClientUIActionType.SUGGESTED_RESPONSES:
+      return "SUGGESTED_RESPONSES";
     case ClientUIActionType.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -698,6 +705,23 @@ export interface RemarkProto {
   type?: string | undefined;
 }
 
+/** Suggested responses (quick replies) payloads */
+export interface SuggestedResponseProto {
+  /** Unique identifier for the suggestion */
+  id: string;
+  /** Text to show as a quick reply */
+  text: string;
+  /** Optional: brief reason or label */
+  reason?: string | undefined;
+}
+
+export interface SuggestedResponsesPayloadProto {
+  /** List of suggestions */
+  suggestions: SuggestedResponseProto[];
+  /** Optional title/header to display above suggestions */
+  title?: string | undefined;
+}
+
 /** Payload for updating text content */
 export interface UpdateTextContentPayloadProto {
   /** The text content to update */
@@ -764,7 +788,11 @@ export interface AgentToClientUIActionRequest {
     | UpdateTextContentPayloadProto
     | undefined;
   /** Payload for REPLACE_TEXT_RANGE */
-  replaceTextRangePayload?: ReplaceTextRangePayloadProto | undefined;
+  replaceTextRangePayload?:
+    | ReplaceTextRangePayloadProto
+    | undefined;
+  /** Payload for SUGGESTED_RESPONSES */
+  suggestedResponsesPayload?: SuggestedResponsesPayloadProto | undefined;
 }
 
 export interface AgentToClientUIActionRequest_ParametersEntry {
@@ -2787,6 +2815,176 @@ export const RemarkProto: MessageFns<RemarkProto> = {
   },
 };
 
+function createBaseSuggestedResponseProto(): SuggestedResponseProto {
+  return { id: "", text: "", reason: undefined };
+}
+
+export const SuggestedResponseProto: MessageFns<SuggestedResponseProto> = {
+  encode(message: SuggestedResponseProto, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.text !== "") {
+      writer.uint32(18).string(message.text);
+    }
+    if (message.reason !== undefined) {
+      writer.uint32(26).string(message.reason);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SuggestedResponseProto {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSuggestedResponseProto();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.id = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.text = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.reason = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SuggestedResponseProto {
+    return {
+      id: isSet(object.id) ? globalThis.String(object.id) : "",
+      text: isSet(object.text) ? globalThis.String(object.text) : "",
+      reason: isSet(object.reason) ? globalThis.String(object.reason) : undefined,
+    };
+  },
+
+  toJSON(message: SuggestedResponseProto): unknown {
+    const obj: any = {};
+    if (message.id !== "") {
+      obj.id = message.id;
+    }
+    if (message.text !== "") {
+      obj.text = message.text;
+    }
+    if (message.reason !== undefined) {
+      obj.reason = message.reason;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SuggestedResponseProto>): SuggestedResponseProto {
+    return SuggestedResponseProto.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SuggestedResponseProto>): SuggestedResponseProto {
+    const message = createBaseSuggestedResponseProto();
+    message.id = object.id ?? "";
+    message.text = object.text ?? "";
+    message.reason = object.reason ?? undefined;
+    return message;
+  },
+};
+
+function createBaseSuggestedResponsesPayloadProto(): SuggestedResponsesPayloadProto {
+  return { suggestions: [], title: undefined };
+}
+
+export const SuggestedResponsesPayloadProto: MessageFns<SuggestedResponsesPayloadProto> = {
+  encode(message: SuggestedResponsesPayloadProto, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.suggestions) {
+      SuggestedResponseProto.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.title !== undefined) {
+      writer.uint32(18).string(message.title);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SuggestedResponsesPayloadProto {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSuggestedResponsesPayloadProto();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.suggestions.push(SuggestedResponseProto.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.title = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SuggestedResponsesPayloadProto {
+    return {
+      suggestions: globalThis.Array.isArray(object?.suggestions)
+        ? object.suggestions.map((e: any) => SuggestedResponseProto.fromJSON(e))
+        : [],
+      title: isSet(object.title) ? globalThis.String(object.title) : undefined,
+    };
+  },
+
+  toJSON(message: SuggestedResponsesPayloadProto): unknown {
+    const obj: any = {};
+    if (message.suggestions?.length) {
+      obj.suggestions = message.suggestions.map((e) => SuggestedResponseProto.toJSON(e));
+    }
+    if (message.title !== undefined) {
+      obj.title = message.title;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<SuggestedResponsesPayloadProto>): SuggestedResponsesPayloadProto {
+    return SuggestedResponsesPayloadProto.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<SuggestedResponsesPayloadProto>): SuggestedResponsesPayloadProto {
+    const message = createBaseSuggestedResponsesPayloadProto();
+    message.suggestions = object.suggestions?.map((e) => SuggestedResponseProto.fromPartial(e)) || [];
+    message.title = object.title ?? undefined;
+    return message;
+  },
+};
+
 function createBaseUpdateTextContentPayloadProto(): UpdateTextContentPayloadProto {
   return { text: "" };
 }
@@ -2955,6 +3153,7 @@ function createBaseAgentToClientUIActionRequest(): AgentToClientUIActionRequest 
     displayRemarksListPayload: undefined,
     updateTextContentPayload: undefined,
     replaceTextRangePayload: undefined,
+    suggestedResponsesPayload: undefined,
   };
 }
 
@@ -3011,6 +3210,9 @@ export const AgentToClientUIActionRequest: MessageFns<AgentToClientUIActionReque
     }
     if (message.replaceTextRangePayload !== undefined) {
       ReplaceTextRangePayloadProto.encode(message.replaceTextRangePayload, writer.uint32(130).fork()).join();
+    }
+    if (message.suggestedResponsesPayload !== undefined) {
+      SuggestedResponsesPayloadProto.encode(message.suggestedResponsesPayload, writer.uint32(138).fork()).join();
     }
     return writer;
   },
@@ -3159,6 +3361,14 @@ export const AgentToClientUIActionRequest: MessageFns<AgentToClientUIActionReque
           message.replaceTextRangePayload = ReplaceTextRangePayloadProto.decode(reader, reader.uint32());
           continue;
         }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.suggestedResponsesPayload = SuggestedResponsesPayloadProto.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3214,6 +3424,9 @@ export const AgentToClientUIActionRequest: MessageFns<AgentToClientUIActionReque
         : undefined,
       replaceTextRangePayload: isSet(object.replaceTextRangePayload)
         ? ReplaceTextRangePayloadProto.fromJSON(object.replaceTextRangePayload)
+        : undefined,
+      suggestedResponsesPayload: isSet(object.suggestedResponsesPayload)
+        ? SuggestedResponsesPayloadProto.fromJSON(object.suggestedResponsesPayload)
         : undefined,
     };
   },
@@ -3277,6 +3490,9 @@ export const AgentToClientUIActionRequest: MessageFns<AgentToClientUIActionReque
     }
     if (message.replaceTextRangePayload !== undefined) {
       obj.replaceTextRangePayload = ReplaceTextRangePayloadProto.toJSON(message.replaceTextRangePayload);
+    }
+    if (message.suggestedResponsesPayload !== undefined) {
+      obj.suggestedResponsesPayload = SuggestedResponsesPayloadProto.toJSON(message.suggestedResponsesPayload);
     }
     return obj;
   },
@@ -3342,6 +3558,10 @@ export const AgentToClientUIActionRequest: MessageFns<AgentToClientUIActionReque
     message.replaceTextRangePayload =
       (object.replaceTextRangePayload !== undefined && object.replaceTextRangePayload !== null)
         ? ReplaceTextRangePayloadProto.fromPartial(object.replaceTextRangePayload)
+        : undefined;
+    message.suggestedResponsesPayload =
+      (object.suggestedResponsesPayload !== undefined && object.suggestedResponsesPayload !== null)
+        ? SuggestedResponsesPayloadProto.fromPartial(object.suggestedResponsesPayload)
         : undefined;
     return message;
   },

@@ -30,9 +30,14 @@ interface CurriculumSectionProps {
 
 export const CurriculumSection = ({ section, onUpdate, onDelete }: CurriculumSectionProps): JSX.Element => {
   const [newModuleTitle, setNewModuleTitle] = useState("");
+  const inputRef = React.useRef<HTMLInputElement>(null);
 
   const handleAddModule = () => {
-    if (newModuleTitle.trim() === "") return;
+    if (newModuleTitle.trim() === "") {
+      // Focus the input to guide the user instead of doing nothing
+      inputRef.current?.focus();
+      return;
+    }
     const newModule: Module = { id: uuidv4(), title: newModuleTitle.trim() };
     const updatedModules = [...section.modules, newModule];
     onUpdate(section.id, { modules: updatedModules });
@@ -100,9 +105,16 @@ export const CurriculumSection = ({ section, onUpdate, onDelete }: CurriculumSec
               value={newModuleTitle}
               onChange={(e) => setNewModuleTitle(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleAddModule(); }}
+              ref={inputRef}
               className="flex-grow border-0 p-0 h-auto bg-transparent focus:outline-none"
             />
-            <Button onClick={handleAddModule} size="icon" className="bg-[#E9EBFD] hover:bg-[#4a5fd1] w-8 h-8 flex-shrink-0 rounded-[600px]">
+            <Button onClick={() => {
+              if (newModuleTitle.trim() === "") {
+                inputRef.current?.focus();
+              } else {
+                handleAddModule();
+              }
+            }} size="icon" className="bg-[#E9EBFD] hover:bg-[#4a5fd1] w-8 h-8 flex-shrink-0 rounded-[600px]">
               <PlusIcon className="w-5 h-5 text-[#566FE9]" />
             </Button>
           </div>

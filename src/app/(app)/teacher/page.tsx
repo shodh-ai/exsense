@@ -41,7 +41,7 @@ interface ConceptualDebriefViewProps {
   userInput: string;
   onUserInput: (value: string) => void;
   onSubmit: () => void;
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: React.RefObject<HTMLTextAreaElement | null>;
 }
 
 const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef }: ConceptualDebriefViewProps) => {
@@ -66,7 +66,7 @@ const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inpu
       <div className="w-full max-w-[850px] h-[86px] flex-shrink-0">
           <div className="flex items-center justify-between w-full h-full bg-transparent border border-[#C7CCF8] rounded-xl pl-4 pr-[6px] pt-[6px] pb-1">
             <textarea
-              ref={inputRef as any}
+              ref={inputRef as React.RefObject<HTMLTextAreaElement>}
               value={userInput}
               onChange={(e) => onUserInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSubmit(); } }}
@@ -104,7 +104,7 @@ interface SessionContentProps {
     topicInput: string;
     setTopicInput: (value: string) => void;
     handleSendConceptual: () => void;
-    topicInputRef: React.RefObject<HTMLInputElement>;
+    topicInputRef: React.RefObject<HTMLTextAreaElement | null>;
 }
 
 function SessionContent({
@@ -387,7 +387,7 @@ const TeacherFooter = ({
                         className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${isShowMeDisabled ? 'bg-[#E9EBFD] cursor-not-allowed' : 'bg-[#566FE91A] hover:bg-[#566FE9]/20'}`}
                     >
                         <img
-                            src="./demonstrate.svg"
+                            src="/demonstrate.svg"
                             alt="Start Demonstration"
                             className={`w-6 h-6 ${isShowMeDisabled ? 'filter grayscale' : ''}`}
                         />
@@ -399,7 +399,7 @@ const TeacherFooter = ({
                         className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${isFinalizeDisabled ? 'bg-[#E9EBFD] cursor-not-allowed' : 'bg-[#566FE91A] hover:bg-[#566FE9]/20'}`}
                     >
                         <img
-                            src="./Correct.svg"
+                            src="/Correct.svg"
                             alt="Finalize Topic"
                             className={`w-6 h-6 ${isFinalizeDisabled ? 'filter grayscale' : ''}`}
                         />
@@ -420,8 +420,10 @@ const TeacherFooter = ({
 interface ConceptualFooterProps {
     onFinishClick?: () => void;
     isFinishDisabled?: boolean;
+    onShowMeClick?: () => void;
+    isShowMeDisabled?: boolean;
 }
-const ConceptualFooter = ({ onFinishClick, isFinishDisabled }: ConceptualFooterProps) => {
+const ConceptualFooter = ({ onFinishClick, isFinishDisabled, onShowMeClick, isShowMeDisabled }: ConceptualFooterProps) => {
     return (
         <footer className="absolute bottom-[32px] w-full h-[60px] p-4 z-10">
             <div className="relative w-full h-full">
@@ -436,6 +438,18 @@ const ConceptualFooter = ({ onFinishClick, isFinishDisabled }: ConceptualFooterP
                     style={{ marginLeft: '150px', transform: 'translateY(-50%)' }}
                 >
                     <MessageButton />
+                    <button
+                        onClick={onShowMeClick}
+                        disabled={isShowMeDisabled}
+                        title={isShowMeDisabled ? 'Answer first, then click Show Me' : 'Switch to browser to demonstrate'}
+                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${isShowMeDisabled ? 'bg-[#E9EBFD] cursor-not-allowed' : 'bg-[#566FE91A] hover:bg-[#566FE9]/20'}`}
+                    >
+                        <img
+                            src="./demonstrate.svg"
+                            alt="Start Demonstration"
+                            className={`w-6 h-6 ${isShowMeDisabled ? 'filter grayscale' : ''}`}
+                        />
+                    </button>
                     <button
                         onClick={onFinishClick}
                         disabled={isFinishDisabled}
@@ -647,7 +661,7 @@ export default function Session() {
     const [isConceptualStarted, setIsConceptualStarted] = useState<boolean>(false);
     const [topicInput, setTopicInput] = useState<string>('');
     const [seedText, setSeedText] = useState<string>('');
-    const topicInputRef = useRef<HTMLInputElement | null>(null);
+    const topicInputRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
 
@@ -719,18 +733,19 @@ export default function Session() {
             setStagedAssets([]);
             setIsPaused(false);
 
-            if (!isVNCConnected) {
-                setStatusMessage('Connecting to VNC backend...');
-                try {
-                    await awaitVNCOpen(15000);
-                } catch (connErr: any) {
-                    setSubmitError(connErr?.message || 'Failed to connect to VNC backend');
-                    setIsRecording(false);
-                    return;
+            if (!MOCK_BACKEND) {
+                if (!isVNCConnected) {
+                    setStatusMessage('Connecting to VNC backend...');
+                    try {
+                        await awaitVNCOpen(15000);
+                    } catch (connErr: any) {
+                        setSubmitError(connErr?.message || 'Failed to connect to VNC backend');
+                        setIsRecording(false);
+                        return;
+                    }
                 }
+                await sendAndAwait('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec }, 'start_recording', 45000);
             }
-
-            await sendAndAwait('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec }, 'start_recording', 45000);
             setTimeToNextScreenshot(screenshotIntervalSec);
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -832,12 +847,15 @@ export default function Session() {
             }
         } catch (err) { console.warn('Stop recording warning:', err); }
         try {
-
-            type StopRecordingResp = VNCActionResponse & { count?: number };
-            const stopResp = (await sendAndAwait('stop_recording', {}, 'stop_recording')) as StopRecordingResp;
-            console.log('[SessionPage] Backend acknowledged stop_recording:', stopResp);
-            if (typeof stopResp?.count === 'number') setPacketsCount(stopResp.count);
-            setStatusMessage(`Recording stopped. Server captured ${typeof stopResp?.count === 'number' ? stopResp.count : 0} actions.`);
+            if (!MOCK_BACKEND) {
+                type StopRecordingResp = VNCActionResponse & { count?: number };
+                const stopResp = (await sendAndAwait('stop_recording', {}, 'stop_recording')) as StopRecordingResp;
+                console.log('[SessionPage] Backend acknowledged stop_recording:', stopResp);
+                if (typeof stopResp?.count === 'number') setPacketsCount(stopResp.count);
+                setStatusMessage(`Recording stopped. Server captured ${typeof stopResp?.count === 'number' ? stopResp.count : 0} actions.`);
+            } else {
+                setStatusMessage('Recording stopped (Mock).');
+            }
 
         } catch (err: any) {
             setStatusMessage(`Error: ${err?.message || 'Failed to stop recording'}`);
@@ -882,45 +900,56 @@ export default function Session() {
         setSubmitError(null);
         setIsSubmitting(true);
         setIsStartAllowed(false);
-        if (MOCK_BACKEND) {
-            setStatusMessage('Stopping recording and preparing data (Mocked)...');
-            await new Promise(r => setTimeout(r, 1000));
-            setStatusMessage('Submitting episode (Mocked)...');
-            await new Promise(r => setTimeout(r, 2000));
-            const fakeResponse = {
-                action: 'SPEAK_AND_INITIATE_DEBRIEF',
-                text: "Great question! On the real axis, the root locus exists between an odd number of poles and zeros. Count the total number of poles and zeros to the right of any point on the real axis. If it's odd, that section is part of the root locus."
-            };
-            setSubmitMessage(`Submitted. Processed 123 fake actions.`);
-            setStatusMessage('Episode submitted. AI is analyzing (Mocked)...');
-            if (fakeResponse.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
-                const aiText = fakeResponse.text || '';
-                let hypothesis = "Great question!";
-                let question = aiText.replace("Great question! ", "");
-                const lastSentenceEnd = Math.max(aiText.lastIndexOf('. '), aiText.lastIndexOf('! '), aiText.lastIndexOf('? '));
-                if (lastSentenceEnd > -1 && lastSentenceEnd < aiText.length - 2) {
-                     hypothesis = aiText.substring(0, lastSentenceEnd + 1);
-                     question = aiText.substring(lastSentenceEnd + 2).trim();
+        // Ensure we stop recording to finalize audio and actions
+        if (isRecording) {
+            await handleStopRecording();
+            // Give MediaRecorder.onstop a moment to populate the blob
+            await new Promise((r) => setTimeout(r, 150));
+        }
+
+        try {
+            if (MOCK_BACKEND) {
+                setStatusMessage('Stopping recording and preparing data (Mocked)...');
+                await new Promise(r => setTimeout(r, 1000));
+                setStatusMessage('Submitting episode (Mocked)...');
+                await new Promise(r => setTimeout(r, 2000));
+                const fakeResponse = {
+                    action: 'SPEAK_AND_INITIATE_DEBRIEF',
+                    text: "Great question! On the real axis, the root locus exists between an odd number of poles and zeros. Count the total number of poles and zeros to the right of any point on the real axis. If it's odd, that section is part of the root locus."
+                };
+                setSubmitMessage(`Submitted. Processed 123 fake actions.`);
+                setStatusMessage('Episode submitted. AI is analyzing (Mocked)...');
+                if (fakeResponse.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
+                    const aiText = fakeResponse.text || '';
+                    let hypothesis = 'Great question!';
+                    let question = aiText.replace('Great question! ', '');
+                    const lastSentenceEnd = Math.max(aiText.lastIndexOf('. '), aiText.lastIndexOf('! '), aiText.lastIndexOf('? '));
+                    if (lastSentenceEnd > -1 && lastSentenceEnd < aiText.length - 2) {
+                        hypothesis = aiText.substring(0, lastSentenceEnd + 1);
+                        question = aiText.substring(lastSentenceEnd + 2).trim();
+                    }
+                    setCurrentDebrief({ hypothesis, text: question });
+                    setImprintingMode('DEBRIEF_CONCEPTUAL');
+                    setActiveView('excalidraw');
+                    setIsConceptualStarted(true);
+                    setIsStartAllowed(false);
+                    setStatusMessage('AI has a question for you (Mocked).');
+                    setTimeout(() => topicInputRef.current?.focus(), 0);
                 }
-                setCurrentDebrief({ hypothesis, text: question });
-                setImprintingMode('DEBRIEF_CONCEPTUAL');
-                setActiveView('excalidraw');
-                setIsConceptualStarted(true);
-                setIsStartAllowed(false);
-                setStatusMessage(`AI has a question for you (Mocked).`);
-                setTimeout(() => topicInputRef.current?.focus(), 0);
+                return; // Do not hit real backend in mock mode
             }
 
-
+            // Real backend flow
             // Convert recorded audio (webm/ogg) to WAV Data URL
-            const audio_b64: string = await convertBlobToWavDataURL(audioBlob);
+            const blob = audioBlobRef.current;
+            const audio_b64: string = blob ? await convertBlobToWavDataURL(blob) : '';
 
             // Fetch recorded actions (including periodic screenshots)
             setStatusMessage('Fetching recorded actions from server...');
             const actionsResp = await sendAndAwait('get_recorded_actions', { session_id: roomName }, 'get_recorded_actions');
             const packets: RecordedPacket[] = Array.isArray((actionsResp as any)?.packets) ? (actionsResp as any).packets : [];
             const periodicCount = packets.filter(p => p?.interaction_type === 'periodic_screenshot').length;
-            console.log('[EpisodeControls] Recorded actions ready:', { total: packets.length, periodic_screenshots: periodicCount, source: actionsResp?.source });
+            console.log('[EpisodeControls] Recorded actions ready:', { total: packets.length, periodic_screenshots: periodicCount, source: (actionsResp as any)?.source });
             setStatusMessage(`Submitting episode... (${packets.length} actions, ${periodicCount} periodic screenshots)`);
 
             const response = await submitImprintingEpisode({
@@ -940,11 +969,9 @@ export default function Session() {
             setStatusMessage('Episode submitted. AI is analyzing...');
 
             if (response?.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
-                const aiText = response.text || '';
+                const aiText = (response as any).text || '';
                 const hasQuestion = !!aiText && /\?/.test(aiText);
                 if (hasQuestion) {
-                    // Move to conceptual mode to answer, and disable Start until resolved
-
                     setImprintingMode('DEBRIEF_CONCEPTUAL');
                     setActiveView('excalidraw');
                     setIsConceptualStarted(true);
@@ -953,18 +980,20 @@ export default function Session() {
                     setImprintingMode('WORKFLOW');
                     setIsStartAllowed(true);
                 }
-                packetsRef.current = [];
-                setPacketsCount(0);
-                audioChunksRef.current = [];
-                audioBlobRef.current = null;
-                setStagedAssets([]);
-                setIsShowMeRecording(false);
-                showMeQuestionRef.current = null;
-            } catch (err: any) {
-                setSubmitError(err?.message || 'Failed to submit');
-            } finally {
-                setIsSubmitting(false);
             }
+
+            // Reset buffers/state after submit
+            packetsRef.current = [];
+            setPacketsCount(0);
+            audioChunksRef.current = [];
+            audioBlobRef.current = null;
+            setStagedAssets([]);
+            setIsShowMeRecording(false);
+            showMeQuestionRef.current = null;
+        } catch (err: any) {
+            setSubmitError(err?.message || 'Failed to submit');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -1076,7 +1105,7 @@ export default function Session() {
                                         topicInputRef={topicInputRef}
                                     />
                                     {imprinting_mode === 'WORKFLOW' && (
-                                      <div className={`fixed bottom-0 left-0 right-0 z-50 ${isFinishModalOpen ? 'hidden' : ''}`}>
+                                      <div className={`fixed bottom-0=100 left-0 right-0 z-50 ${isFinishModalOpen ? 'hidden' : ''}`}>
                                         <div className="mx-auto w-full md:w-[90%] lg:w-[70%] px-3 pb-3">
                                             <div className="bg-[#0F1226]/90 border border-[#2A2F4A] backdrop-blur-md rounded-t-xl p-3 text-white">
                                                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -1116,7 +1145,7 @@ export default function Session() {
                                     onTogglePauseResume={handleTogglePauseResume}
                                     onSubmitEpisode={handleSubmitEpisode}
                                     onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={imprinting_mode !== 'DEBRIEF_CONCEPTUAL' || !isConceptualStarted || isRecording}
+                                    isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !isConceptualStarted || isRecording}
                                     onFinalizeTopicClick={handleFinalizeTopic}
                                     isFinalizeDisabled={!currentLO || isFinalizingLO}
                                     onFinishClick={handleFinishClick}
@@ -1126,6 +1155,8 @@ export default function Session() {
                                 <ConceptualFooter
                                     onFinishClick={handleFinishClick}
                                     isFinishDisabled={isSubmitting}
+                                    onShowMeClick={handleShowMe}
+                                    isShowMeDisabled={!isConceptualStarted || isRecording}
                                 />
                                 )}
                             </>

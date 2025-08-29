@@ -75,7 +75,19 @@ const roomInstance = new Room({
 });
 
 // Main hook
-export function useLiveKitSession(roomName: string, userName: string, courseId?: string) {
+export interface UseLiveKitSessionReturn {
+  isConnected: boolean;
+  isLoading: boolean;
+  connectionError: string | null;
+  startTask: (taskName: string, payload: object) => Promise<void>;
+  room: Room;
+  agentIdentity: string | null;
+  transcriptionMessages: string[];
+  statusMessages: string[];
+  selectSuggestedResponse: (suggestion: { id: string; text: string; reason?: string }) => Promise<void>;
+}
+
+export function useLiveKitSession(roomName: string, userName: string, courseId?: string): UseLiveKitSessionReturn {
   // --- CLERK AUTHENTICATION ---
   const { getToken, isSignedIn } = useAuth();
   // VNC WebSocket URL for browser automation
@@ -90,6 +102,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     setAgentStatusText,
     setIsAgentSpeaking,
     setIsMicEnabled, // Our new action for mic control
+    // Suggested Responses actions
+    setSuggestedResponses,
+    clearSuggestedResponses,
   } = useSessionStore();
 
   // --- HOOK'S INTERNAL STATE ---
@@ -715,6 +730,19 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, []);
 
+  // Convenience method for Suggested Responses selection
+  const selectSuggestedResponse = useCallback(async (suggestion: { id: string; text: string; reason?: string }) => {
+    try {
+      await startTask('select_suggested_response', {
+        id: suggestion.id,
+        text: suggestion.text,
+        reason: suggestion.reason ?? null,
+      });
+    } finally {
+      try { clearSuggestedResponses(); } catch {}
+    }
+  }, [startTask, clearSuggestedResponses]);
+
   return { 
     isConnected, 
     isLoading, 
@@ -723,6 +751,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     room: roomInstance, 
     agentIdentity,
     transcriptionMessages,
-    statusMessages
+    statusMessages,
+    selectSuggestedResponse,
   };
 }

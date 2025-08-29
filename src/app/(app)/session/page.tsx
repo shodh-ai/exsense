@@ -13,6 +13,7 @@ import { useMermaidVisualization } from '@/hooks/useMermaidVisualization';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
+import SuggestedResponses from '@/components/session/SuggestedResponses';
 
 // File: exsense/src/app/session/page.tsx
 
@@ -162,7 +163,8 @@ export default function Session() {
         startTask,
         agentIdentity,
         transcriptionMessages,
-        statusMessages
+        statusMessages,
+        selectSuggestedResponse,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? roomName : '',
         shouldInitializeLiveKit ? userName : '',
@@ -174,8 +176,8 @@ export default function Session() {
     const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
 
     // Initialize browser automation hooks
-    const { disconnectVNC, executeBrowserAction } = useBrowserActionExecutor(room, sessionBubbleUrl);
-    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room);
+    const { disconnectVNC, executeBrowserAction } = useBrowserActionExecutor(room || null, sessionBubbleUrl);
+    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room || null);
     
     // Initialize Mermaid visualization hook
     const { 
@@ -275,6 +277,7 @@ export default function Session() {
                         onDiagramUpdate={updateDiagram}
                         handleVncInteraction={handleVncInteraction}
                     />
+                    <SuggestedResponses onSelect={selectSuggestedResponse} />
                     <Footer room={room} agentIdentity={agentIdentity || undefined} />
                 </div>
                 

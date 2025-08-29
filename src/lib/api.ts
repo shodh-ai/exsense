@@ -31,17 +31,22 @@ export interface Lesson {
   id: string;
   courseId: string;
   title: string;
-  description: string;
-  order: number;
+  description?: string | null;
+  content?: string | null;
+  order?: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface LessonContent {
   id: string;
   lessonId: string;
-  type: 'VIDEO' | 'TEXT' | 'QUIZ' | 'ASSIGNMENT';
-  content: any;
-  order: number;
+  type: 'VIDEO' | 'TEXT' | 'QUIZ' | 'LINK' | 'FILE' | 'OTHER' | 'ASSIGNMENT';
+  title?: string | null;
+  text?: string | null;
+  url?: string | null;
+  data?: any;
+  order?: number;
 }
 
 // Main API service class
@@ -63,6 +68,10 @@ export class ApiService {
 
   async createCourse(course: Partial<Course>): Promise<Course> {
     return this.client.post('/api/courses', course);
+  }
+
+  async updateCourse(id: string, course: Partial<Course>): Promise<Course> {
+    return this.client.put(`/api/courses/${id}`, course as any);
   }
 
   async getMyCourses(): Promise<Course[]> {
@@ -95,7 +104,10 @@ export class ApiService {
     return this.client.get(`/api/lessons/${id}`);
   }
 
-  async createLesson(courseId: string, data: { title: string }): Promise<Lesson> {
+  async createLesson(
+    courseId: string,
+    data: { title: string; description?: string | null; content?: string | null; order?: number }
+  ): Promise<Lesson> {
     return this.client.post(`/api/courses/${courseId}/lessons`, data);
   }
 

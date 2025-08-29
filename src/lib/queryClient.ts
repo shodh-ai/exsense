@@ -14,13 +14,19 @@ export const queryClient = new QueryClient({
         if (error?.status === 401 || error?.status === 403) {
           return false;
         }
+        // Don't retry on 429 (rate limited) globally
+        if (error?.status === 429) {
+          return false;
+        }
         // Retry up to 3 times for other errors
         return failureCount < 3;
       },
       // Retry delay with exponential backoff
-      retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
-      // Refetch on window focus in production
-      refetchOnWindowFocus: process.env.NODE_ENV === 'production',
+      retryDelay: (attemptIndex: number) => {
+        return Math.min(1000 * 2 ** attemptIndex, 30000);
+      },
+      // Disable refetch on window focus to reduce bursts
+      refetchOnWindowFocus: false,
       // Don't refetch on reconnect immediately
       refetchOnReconnect: false,
     },

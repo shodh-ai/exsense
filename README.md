@@ -22,6 +22,29 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 - See `docs/environment.md` for a full description of each variable, defaults, and where used.
 - Restart the dev server after changing environment variables.
 
+## Documentation
+- Getting Started: `docs/getting-started.md`
+- Architecture Overview: `docs/architecture.md`
+- Auth, Roles & Scope: `docs/auth-roles.md`
+- Frontend API Usage (ApiService + hooks): `docs/api-usage.md`
+- Conventions (code style, naming, API access): `docs/conventions.md`
+- Development Guide (adding APIs/pages): `docs/development.md`
+- Environment Variables: `docs/environment.md`
+- Troubleshooting: `docs/troubleshooting.md`
+
+### Quick contributor checklist
+- Copy envs: `cp env.example .env.local` and fill required keys
+- Install deps: `npm ci`
+- Run dev: `npm run dev` then open http://localhost:3000
+- Sign in with Clerk; role-based redirect will guide you (learner → `/my-course`, teacher → `/teacher-dash`)
+- Ensure backend is reachable at `${NEXT_PUBLIC_API_BASE_URL}` (health: `/health`)
+
+### Scripts
+- `npm run dev` – start Next.js dev server
+- `npm run build` – production build
+- `npm run lint` – lint
+- `npm run generate-protos` – regenerate protobuf outputs (if configured)
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

@@ -43,7 +43,21 @@ export const useTeacherCourses = () => {
     queryKey: queryKeys.teacherCourses,
     queryFn: () => apiService.getMyCourses(),
     staleTime: 5 * 60 * 1000,
-    retry: 2,
+    gcTime: 10 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: (failureCount, error: any) => {
+      const status = error?.status as number | undefined;
+      if (status === 401 || status === 403) return false; // don't retry auth/forbidden
+      if (status === 429) return false; // never retry rate-limited endpoint
+      return failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => {
+      const base = Math.min(1000 * 2 ** attemptIndex, 15000);
+      const jitter = Math.random() * 250;
+      return base + jitter;
+    },
   });
 };
 

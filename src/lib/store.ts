@@ -36,6 +36,9 @@ interface SessionState {
     isMusicButtonPlaying: boolean;
     isMicActivatingPending: boolean;
     visualizationData: any[] | null; // <-- NEW: For store-based visualization communication
+    // --- Suggested Responses State ---
+    suggestedResponses: { id: string; text: string; reason?: string }[];
+    suggestedTitle?: string;
 
     // --- Imprinting / Session Controller State ---
     imprinting_mode: string; // e.g., 'DEBRIEF_CONCEPTUAL' | 'WORKFLOW' | 'DEBRIEF_PRACTICAL'
@@ -56,6 +59,9 @@ interface SessionState {
     setIsMusicButtonPlaying: (isPlaying: boolean) => void;
     setIsMicActivatingPending: (isPending: boolean) => void;
     setVisualizationData: (data: any[] | null) => void; // <-- NEW: Set visualization data for canvas rendering
+    // --- Suggested Responses Actions ---
+    setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
+    clearSuggestedResponses: () => void;
 
     // --- Imprinting Actions ---
     setImprintingMode: (mode: string) => void;
@@ -80,6 +86,9 @@ export const useSessionStore = create<SessionState>()(
             isMusicButtonPlaying: false,
             isMicActivatingPending: false,
             visualizationData: null, // <-- No visualization data initially
+            // --- Suggested Responses defaults ---
+            suggestedResponses: [],
+            suggestedTitle: undefined,
 
             // --- Imprinting defaults ---
             imprinting_mode: 'DEBRIEF_CONCEPTUAL',
@@ -100,6 +109,9 @@ export const useSessionStore = create<SessionState>()(
             setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
             setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }),
             setVisualizationData: (data) => set({ visualizationData: data }), // <-- NEW ACTION IMPLEMENTATION
+            // --- Suggested Responses Actions ---
+            setSuggestedResponses: (suggestions, title) => set({ suggestedResponses: suggestions, suggestedTitle: title }),
+            clearSuggestedResponses: () => set({ suggestedResponses: [], suggestedTitle: undefined }),
 
             // --- Imprinting Actions ---
             setImprintingMode: (mode) => set({ imprinting_mode: mode }),
