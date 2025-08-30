@@ -85,7 +85,7 @@ export default function ForgotPassword(): JSX.Element {
                                 {formData.instruction}
                             </p>
                             <Input
-                                className="h-12 px-5 py-3.5 bg-white rounded-2xl border border-solid border-[#00000033] text-[#717171] font-paragraph-large font-[number:var(--paragraph-large-font-weight)] text-[14px] tracking-[var(--paragraph-large-letter-spacing)] leading-[var(--paragraph-large-line-height)]"
+                                className="h-12 px-5 py-3.5 bg-white rounded-[100px] border border-solid border-[#00000033] text-[#717171] font-paragraph-large font-[number:var(--paragraph-large-font-weight)] text-[14px] tracking-[var(--paragraph-large-letter-spacing)] leading-[var(--paragraph-large-line-height)]"
                                 placeholder={formData.inputPlaceholder}
                                 value={emailOrPhone}
                                 onChange={(e) => setEmailOrPhone(e.target.value)}
@@ -103,7 +103,7 @@ export default function ForgotPassword(): JSX.Element {
                             </Button>
                             <button
                                 onClick={() => router.push("/login")}
-                                className="font-paragraph-large font-[number:var(--paragraph-large-font-weight)] text-black text-[14px] text-center tracking-[var(--paragraph-large-letter-spacing)] leading-[var(--paragraph-large-line-height)] hover:underline"
+                                className="font-paragraph-large font-[number:var(--paragraph-large-font-weight)] text-[#566fe9] text-[14px] text-center tracking-[var(--paragraph-large-letter-spacing)] leading-[var(--paragraph-large-line-height)] hover:underline"
                             >
                                 {formData.backText}
                             </button>

@@ -114,14 +114,14 @@ export default function PasswordReset(): JSX.Element {
                             placeholder="new password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
-                            className="h-12 w-full px-5 py-3.5 rounded-2xl border border-solid border-[#00000033] bg-white text-[#717171] font-paragraph-large"
+                            className="h-12 w-full px-5 py-3.5 rounded-[100px] border border-solid border-[#00000033] bg-white text-[#717171] font-paragraph-large"
                         />
                         <Input
                             type="password"
                             placeholder="confirm new password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
-                            className="h-12 w-full px-5 py-3.5 rounded-2xl border border-solid border-[#00000033] bg-white text-[#717171] font-paragraph-large"
+                            className="h-12 w-full px-5 py-3.5 rounded-[100px] border border-solid border-[#00000033] bg-white text-[#717171] font-paragraph-large"
                         />
                         {/* Error Message Display */}
                         {error && (
@@ -132,7 +132,7 @@ export default function PasswordReset(): JSX.Element {
                     {/* Element 4: Button */}
                     <Button
                         onClick={handleSavePassword}
-                        className="h-12 w-full px-[81px] py-3 bg-[#566fe9] rounded-[50px] text-white font-label-extra-large font-[number:var(--label-extra-large-font-weight)] text-[length:var(--label-extra-large-font-size)] tracking-[var(--label-extra-large-letter-spacing)] leading-[var(--label-extra-large-line-height)] [font-style:var(--label-extra-large-font-style)]"
+                        className="h-[50px] w-full px-[81px] py-3 bg-[#566fe9] rounded-[50px] text-white font-label-extra-large font-[number:var(--label-extra-large-font-weight)] text-[length:var(--label-extra-large-font-size)] tracking-[var(--label-extra-large-letter-spacing)] leading-[var(--label-extra-large-line-height)] [font-style:var(--label-extra-large-font-style)]"
                     >
                         Save Password
                     </Button>

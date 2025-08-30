@@ -166,9 +166,9 @@ export default function Login() {
                 {/* --- LOGIN FORM --- */}
                 <form className="flex flex-col mt-6 md:mt-8 w-full" onSubmit={handleSubmit}>
                     <div className="flex flex-col gap-5 w-full pl-2 pr-2">
-                        <input type="email" placeholder="email" className="h-12 border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm" value={email} onChange={(e) => setEmail(e.target.value)} required />
+                        <input type="email" placeholder="email" className="h-12 border border-[rgba(0,0,0,0.2)] rounded-[100px] px-4 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm" value={email} onChange={(e) => setEmail(e.target.value)} required />
                         <div className="relative w-full">
-                             <input type={showPassword ? "text" : "password"} placeholder="password" className="w-full h-12 border border-[rgba(0,0,0,0.2)] rounded-2xl px-4 pr-16 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                             <input type={showPassword ? "text" : "password"} placeholder="password" className="w-full h-12 border border-[rgba(0,0,0,0.2)] rounded-[100px] px-4 pr-16 focus:outline-none focus:ring-2 focus:ring-blue-500 transition placeholder:[color:#717171] text-sm" value={password} onChange={(e) => setPassword(e.target.value)} required />
                             <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-4 text-sm font-semibold text-[#566FE9] leading-normal">
                                 {showPassword ? "Hide" : "Show"}
                             </button>

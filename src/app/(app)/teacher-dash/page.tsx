@@ -52,7 +52,7 @@ return (
             >
               <CardContent className="p-4">
                 <div className="flex flex-col gap-[18px]">
-                  <p className="font-semibold text-[12px] leading-[16px] text-[#8187a0]">
+                  <p className="font-semibold text-[16px] leading-[16px] text-[#8187a0]">
                     {card.title}
                   </p>
                   <div className="flex flex-col gap-1">
