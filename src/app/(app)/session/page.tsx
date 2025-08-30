@@ -190,11 +190,12 @@ export default function Session() {
     }, []);
     
     // Get URLs from environment variables
-    const vncUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:6901';
+    const vncViewerUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || 'ws://localhost:6901';
+    const vncActionUrl = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:8765';
     const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
 
     // Initialize browser automation hooks
-    const { disconnectVNC, executeBrowserAction } = useBrowserActionExecutor(room || null, sessionBubbleUrl);
+    const { disconnectVNC, executeBrowserAction } = useBrowserActionExecutor(room || null, vncActionUrl);
     const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room || null);
     
     // Initialize Mermaid visualization hook
@@ -290,7 +291,7 @@ export default function Session() {
                         activeView={activeView} 
                         setActiveView={setActiveView} 
                         componentButtons={componentButtons} 
-                        vncUrl={vncUrl} 
+                        vncUrl={vncViewerUrl} 
                         diagramDefinition={diagramDefinition}
                         onDiagramUpdate={updateDiagram}
                         handleVncInteraction={handleVncInteraction}

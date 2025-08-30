@@ -120,13 +120,16 @@ export interface UseLiveKitSessionReturn {
 export function useLiveKitSession(roomName: string, userName: string, courseId?: string): UseLiveKitSessionReturn {
   // --- CLERK AUTHENTICATION ---
   const { getToken, isSignedIn } = useAuth();
-  // VNC WebSocket URL for browser automation
-  const vncUrl = process.env.NEXT_PUBLIC_VNC_URL;
-  if (!vncUrl) {
-    console.warn('[useLiveKitSession] NEXT_PUBLIC_VNC_URL is not set');
+  // VNC WebSocket URL for browser automation (action socket)
+  // Prefer NEXT_PUBLIC_VNC_URL; fall back to NEXT_PUBLIC_VNC_WEBSOCKET_URL; then localhost default (8765)
+  const vncUrlPrimary = process.env.NEXT_PUBLIC_VNC_URL;
+  const vncUrlFallback = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:8765';
+  const vncUrl = vncUrlPrimary || vncUrlFallback;
+  if (!vncUrlPrimary) {
+    console.warn('[useLiveKitSession] NEXT_PUBLIC_VNC_URL not set; using fallback:', vncUrl);
   }
   const visualizerBaseUrl = process.env.NEXT_PUBLIC_VISUALIZER_URL;
-  const { executeBrowserAction, disconnectVNC } = useBrowserActionExecutor(roomInstance, vncUrl || '');
+  const { executeBrowserAction, disconnectVNC } = useBrowserActionExecutor(roomInstance, vncUrl);
   
   // --- ZUSTAND STORE ACTIONS ---
   // Select only needed actions to avoid broad subscription re-renders
