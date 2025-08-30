@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useSessionStore } from "@/lib/store";
 
 export interface SuggestedResponseItem {
@@ -14,16 +14,27 @@ interface SuggestedResponsesProps {
 }
 
 export default function SuggestedResponses({ onSelect }: SuggestedResponsesProps) {
-  const { suggestedResponses, suggestedTitle, clearSuggestedResponses } = useSessionStore((s) => ({
-    suggestedResponses: s.suggestedResponses,
-    suggestedTitle: s.suggestedTitle,
-    clearSuggestedResponses: s.clearSuggestedResponses,
-  }));
+  const suggestedResponses = useSessionStore((s) => s.suggestedResponses);
+  const suggestedTitle = useSessionStore((s) => s.suggestedTitle);
+  const clearSuggestedResponses = useSessionStore((s) => s.clearSuggestedResponses);
+
+  // Debugging: log when suggestions change
+  useEffect(() => {
+    if (suggestedResponses && suggestedResponses.length > 0) {
+      console.log("[UI] SuggestedResponses visible:", {
+        count: suggestedResponses.length,
+        title: suggestedTitle,
+        items: suggestedResponses,
+      });
+    } else {
+      console.log("[UI] SuggestedResponses hidden (no items)");
+    }
+  }, [suggestedResponses, suggestedTitle]);
 
   if (!suggestedResponses || suggestedResponses.length === 0) return null;
 
   return (
-    <div className="pointer-events-auto fixed bottom-28 left-1/2 -translate-x-1/2 z-20 w-[92%] md:w-[720px]">
+    <div className="pointer-events-auto fixed bottom-36 md:bottom-28 left-1/2 -translate-x-1/2 z-20 w-[92%] md:w-[720px]">
       <div className="rounded-2xl border border-white/10 bg-[#0B1021]/80 backdrop-blur-md shadow-xl p-3 md:p-4">
         {suggestedTitle && (
           <div className="flex items-start justify-between mb-2 md:mb-3">
@@ -37,16 +48,23 @@ export default function SuggestedResponses({ onSelect }: SuggestedResponsesProps
           </div>
         )}
         <div className="flex flex-wrap gap-2 md:gap-3">
-          {suggestedResponses.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => onSelect(s)}
-              className="px-3 md:px-4 py-2 rounded-full bg-[#566FE9]/20 hover:bg-[#566FE9]/30 text-[#E7EAFF] text-xs md:text-sm font-medium border border-[#566FE9]/30 transition"
-              title={s.reason || s.text}
-            >
-              {s.text}
-            </button>
-          ))}
+          {suggestedResponses.map((s, idx) => {
+            const safeId = (s.id && s.id.trim().length > 0) ? s.id : `ui_${Date.now()}_${idx}`;
+            return (
+              <button
+                key={safeId}
+                onClick={() => {
+                  const payload = { ...s, id: safeId };
+                  console.log("[UI] SuggestedResponse clicked:", payload);
+                  onSelect(payload);
+                }}
+                className="px-3 md:px-4 py-2 rounded-full bg-[#566FE9]/20 hover:bg-[#566FE9]/30 text-[#E7EAFF] text-xs md:text-sm font-medium border border-[#566FE9]/30 transition"
+                title={s.reason || s.text}
+              >
+                {s.text}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

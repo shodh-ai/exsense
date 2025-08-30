@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Observable, firstValueFrom } from 'rxjs';
 import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment } from 'livekit-client';
 import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
 import { useSessionStore, SessionView } from '@/lib/store';
@@ -46,10 +47,14 @@ function base64ToUint8Array(base64: string): Uint8Array {
 
 interface Rpc {
   request(service: string, method: string, data: Uint8Array): Promise<Uint8Array>;
+  clientStreamingRequest(service: string, method: string, data: Observable<Uint8Array>): Promise<Uint8Array>;
+  serverStreamingRequest(service: string, method: string, data: Uint8Array): Observable<Uint8Array>;
+  bidirectionalStreamingRequest(service: string, method: string, data: Observable<Uint8Array>): Observable<Uint8Array>;
 }
 
 class LiveKitRpcAdapter implements Rpc {
   constructor(private localParticipant: LocalParticipant, private agentIdentity: string) {}
+
   async request(service: string, method: string, data: Uint8Array): Promise<Uint8Array> {
     const fullMethodName = `${service}/${method}`;
     const payloadString = uint8ArrayToBase64(data);
@@ -65,6 +70,31 @@ class LiveKitRpcAdapter implements Rpc {
       console.error(`F2B RPC request to ${fullMethodName} failed:`, error);
       throw error;
     }
+  }
+
+  // LiveKit RPC currently supports unary request/response. We emulate server-streaming
+  // by returning a single-emission Observable wrapping the unary result.
+  serverStreamingRequest(service: string, method: string, data: Uint8Array): Observable<Uint8Array> {
+    return new Observable<Uint8Array>((subscriber) => {
+      this.request(service, method, data)
+        .then((resp) => {
+          subscriber.next(resp);
+          subscriber.complete();
+        })
+        .catch((err) => subscriber.error(err));
+    });
+  }
+
+  // Not supported in current transport
+  clientStreamingRequest(): Promise<Uint8Array> {
+    return Promise.reject(new Error('clientStreamingRequest is not supported by LiveKitRpcAdapter'));
+  }
+
+  // Not supported in current transport
+  bidirectionalStreamingRequest(): Observable<Uint8Array> {
+    return new Observable<Uint8Array>((subscriber) => {
+      subscriber.error(new Error('bidirectionalStreamingRequest is not supported by LiveKitRpcAdapter'));
+    });
   }
 }
 
@@ -91,21 +121,21 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // --- CLERK AUTHENTICATION ---
   const { getToken, isSignedIn } = useAuth();
   // VNC WebSocket URL for browser automation
-  const vncUrl = process.env.NEXT_PUBLIC_VNC_URL || 'ws://localhost:6901';
-  const { executeBrowserAction, disconnectVNC } = useBrowserActionExecutor(roomInstance, vncUrl);
+  const vncUrl = process.env.NEXT_PUBLIC_VNC_URL;
+  if (!vncUrl) {
+    console.warn('[useLiveKitSession] NEXT_PUBLIC_VNC_URL is not set');
+  }
+  const visualizerBaseUrl = process.env.NEXT_PUBLIC_VISUALIZER_URL;
+  const { executeBrowserAction, disconnectVNC } = useBrowserActionExecutor(roomInstance, vncUrl || '');
   
   // --- ZUSTAND STORE ACTIONS ---
-  // Get all the actions we'll need to update the global UI state
-  const {
-    activeView,
-    setActiveView,
-    setAgentStatusText,
-    setIsAgentSpeaking,
-    setIsMicEnabled, // Our new action for mic control
-    // Suggested Responses actions
-    setSuggestedResponses,
-    clearSuggestedResponses,
-  } = useSessionStore();
+  // Select only needed actions to avoid broad subscription re-renders
+  const setActiveView = useSessionStore((s) => s.setActiveView);
+  const setAgentStatusText = useSessionStore((s) => s.setAgentStatusText);
+  const setIsAgentSpeaking = useSessionStore((s) => s.setIsAgentSpeaking);
+  const setIsMicEnabled = useSessionStore((s) => s.setIsMicEnabled); // mic control
+  const setSuggestedResponses = useSessionStore((s) => s.setSuggestedResponses);
+  const clearSuggestedResponses = useSessionStore((s) => s.clearSuggestedResponses);
 
   // --- HOOK'S INTERNAL STATE ---
   const [isConnected, setIsConnected] = useState(false);
@@ -155,9 +185,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 throw new Error('Failed to get authentication token from Clerk.');
             }
 
-            const tokenServiceUrl = process.env.NODE_ENV === 'development' 
-                ? 'http://localhost:3002' 
-                : process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL;
+            const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL;
+            if (!tokenServiceUrl) {
+                throw new Error('Missing NEXT_PUBLIC_WEBRTC_TOKEN_URL');
+            }
 
             console.log(`Fetching LiveKit token from ${tokenServiceUrl}...`);
             const response = await fetch(`${tokenServiceUrl}/api/generate-room`, {
@@ -278,7 +309,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       } else if (request.actionType === ClientUIActionType.SET_UI_STATE) {
         console.log('[SET_UI_STATE] ===== RECEIVED SET_UI_STATE ACTION =====');
         console.log('[SET_UI_STATE] Full request object:', request);
-        console.log('[SET_UI_STATE] Current activeView:', activeView);
+        console.log('[SET_UI_STATE] Current activeView:', useSessionStore.getState().activeView);
         
         // Note: Property name may need adjustment based on actual protobuf definition
         const params = (request as unknown as Record<string, unknown>).parameters;
@@ -325,7 +356,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                   return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ requestId: rpcData.requestId, success: false })).finish());
               }
               
-              console.log(`[SET_UI_STATE] Switching view from ${activeView} to ${targetView}`);
+              console.log(`[SET_UI_STATE] Switching view from ${useSessionStore.getState().activeView} to ${targetView}`);
               setActiveView(targetView);
               console.log('[SET_UI_STATE] setActiveView called successfully');
             } else {
@@ -338,6 +369,61 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           console.log('[SET_UI_STATE] No parameters found in request');
         }
         console.log('[SET_UI_STATE] ===== END SET_UI_STATE PROCESSING =====');
+      } else if (request.actionType === ClientUIActionType.SUGGESTED_RESPONSES) {
+        console.log('[B2F RPC] Handling SUGGESTED_RESPONSES');
+        const payload = request.suggestedResponsesPayload;
+        if (payload && Array.isArray(payload.suggestions)) {
+          const now = Date.now();
+          const suggestions = payload.suggestions.map((s: any, idx: number) => {
+            const idRaw = s?.id;
+            const id = typeof idRaw === 'string' && idRaw.trim().length > 0 ? idRaw : `s_${now}_${idx}`;
+            const textRaw = s?.text;
+            const text = typeof textRaw === 'string' ? textRaw : String(textRaw ?? '');
+            return { id, text, reason: s?.reason } as { id: string; text: string; reason?: string };
+          });
+          try {
+            setSuggestedResponses(suggestions, payload.title);
+            console.log(`[B2F RPC] Set ${suggestions.length} suggested responses${payload.title ? ` with title: ${payload.title}` : ''}`);
+          } catch (e) {
+            console.error('[B2F RPC] Failed to set suggested responses in store:', e);
+          }
+        } else {
+          // --- Fallback: some agents send suggestions via request.parameters ---
+          const params = (request as any).parameters || {};
+          const parseMaybeJson = (v: unknown) => {
+            if (typeof v === 'string') {
+              try { return JSON.parse(v); } catch { return v; }
+            }
+            return v;
+          };
+          const candidate = parseMaybeJson(params.suggestions ?? params.suggested_responses);
+          const titleParam = (params.title ?? params.suggested_title) as string | undefined;
+          if (candidate) {
+            let suggestions: { id: string; text: string; reason?: string }[] = [];
+            if (Array.isArray(candidate)) {
+              if (candidate.length > 0 && typeof candidate[0] === 'string') {
+                suggestions = (candidate as string[]).map((t, idx) => ({ id: `s_${Date.now()}_${idx}`, text: t }));
+              } else {
+                suggestions = (candidate as any[]).map((s: any, idx: number) => ({ id: s.id || `s_${Date.now()}_${idx}` , text: s.text || String(s), reason: s.reason }));
+              }
+            } else if (typeof candidate === 'string') {
+              // Single string -> one suggestion
+              suggestions = [{ id: `s_${Date.now()}_0`, text: candidate }];
+            }
+            if (suggestions.length > 0) {
+              try {
+                setSuggestedResponses(suggestions, titleParam);
+                console.log(`[B2F RPC] Set ${suggestions.length} suggested responses from parameters${titleParam ? ` with title: ${titleParam}` : ''}`);
+              } catch (e) {
+                console.error('[B2F RPC] Failed to set suggested responses (parameters) in store:', e);
+              }
+            } else {
+              console.warn('[B2F RPC] Parameters present but could not derive suggestions:', candidate);
+            }
+          } else {
+            console.warn('[B2F RPC] SUGGESTED_RESPONSES payload missing or invalid, and no parsable parameters found:', { payload, params });
+          }
+        }
       } else if ((request.actionType as number) === 64) { // EXCALIDRAW_CLEAR_CANVAS
         console.log('[B2F RPC] Handling EXCALIDRAW_CLEAR_CANVAS');
         // Clear canvas via debug functions if available
@@ -407,7 +493,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
 
             console.log('[B2F RPC] Attempting streaming Visualizer service...');
             try {
-              const streamingResp = await fetch('http://localhost:8002/generate-diagram-stream', {
+              if (!visualizerBaseUrl) {
+                throw new Error('NEXT_PUBLIC_VISUALIZER_URL is not set');
+              }
+              const streamingResp = await fetch(`${visualizerBaseUrl}/generate-diagram-stream`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
@@ -459,7 +548,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             } catch (streamErr) {
               console.warn('[B2F RPC] Streaming failed, falling back to non-streaming:', streamErr);
               try {
-                const resp = await fetch('http://localhost:8002/generate-diagram', {
+                if (!visualizerBaseUrl) {
+                  throw new Error('NEXT_PUBLIC_VISUALIZER_URL is not set');
+                }
+                const resp = await fetch(`${visualizerBaseUrl}/generate-diagram`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
@@ -641,19 +733,20 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         });
     };
 
-    const handleDataReceived = async (payload: Uint8Array, participant?: RemoteParticipant) => {
+    const handleDataReceived = async (payload: Uint8Array, participant?: RemoteParticipant, kind?: any, topic?: string) => {
         if (!participant) return;
         try {
             const data = JSON.parse(new TextDecoder().decode(payload));
+            console.log('[DataReceived] Packet from', participant.identity, { kind, topic, data });
             if (data.type === 'agent_ready' && roomInstance.localParticipant) {
-                if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Agent ready signal received from ${participant.identity}`);
+                console.log(`[useLiveKitSession] Agent ready signal received from ${participant.identity}`);
                 setAgentIdentity(participant.identity); // Store the agent identity
                 const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, participant.identity);
                 agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
                 
                 // Send confirmation RPC to agent to complete handshake
                 try {
-                    if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Sending confirmation RPC to agent...`);
+                    console.log(`[useLiveKitSession] Sending confirmation RPC to agent...`);
                     const confirmationResponse = await roomInstance.localParticipant.performRpc({
                         destinationIdentity: participant.identity,
                         method: 'rox.interaction.AgentInteraction/TestPing',
@@ -664,8 +757,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                             roomName: roomName
                         })))
                     });
-                    
-                    if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Agent confirmation response:`, confirmationResponse);
+                    console.log(`[useLiveKitSession] Agent confirmation response:`, confirmationResponse);
                     setIsConnected(true); // NOW we are fully connected and ready to interact
                     
                 } catch (rpcError) {
@@ -673,6 +765,60 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                     // Still set connected as the agent is ready, even if confirmation failed
                     setIsConnected(true);
                 }
+            }
+
+            // Detect suggested responses sent via generic data channel messages
+            try {
+                const deepFind = (obj: any): { items?: any; title?: string } | undefined => {
+                    if (!obj || typeof obj !== 'object') return undefined;
+                    // direct
+                    const meta = obj.metadata || obj.meta || obj;
+                    if (meta && (meta.suggested_responses || meta.suggestedResponses)) {
+                        return { items: meta.suggested_responses || meta.suggestedResponses, title: meta.title || meta.suggested_title };
+                    }
+                    // search children
+                    for (const key of Object.keys(obj)) {
+                        const child = obj[key];
+                        if (child && typeof child === 'object') {
+                            const found = deepFind(child);
+                            if (found) return found;
+                        } else if (typeof child === 'string') {
+                            const trimmed = child.trim();
+                            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                                try {
+                                    const parsed = JSON.parse(trimmed);
+                                    const found = deepFind(parsed);
+                                    if (found) return found;
+                                } catch {}
+                            }
+                        }
+                    }
+                    return undefined;
+                };
+
+                const found = deepFind(data);
+                if (found && found.items) {
+                    const candidate = found.items;
+                    const title = found.title || 'Suggestions';
+                    let suggestions: { id: string; text: string; reason?: string }[] = [];
+                    if (Array.isArray(candidate)) {
+                        if (candidate.length > 0 && typeof candidate[0] === 'string') {
+                            suggestions = (candidate as string[]).map((t, idx) => ({ id: `s_${Date.now()}_${idx}`, text: t }));
+                        } else {
+                            suggestions = (candidate as any[]).map((s: any, idx: number) => ({ id: s.id || `s_${Date.now()}_${idx}`, text: s.text || String(s), reason: s.reason }));
+                        }
+                    } else if (typeof candidate === 'string') {
+                        suggestions = [{ id: `s_${Date.now()}_0`, text: candidate }];
+                    }
+                    if (suggestions.length > 0) {
+                        console.log(`[DataReceived] Setting ${suggestions.length} suggested responses from data channel${title ? ` with title: ${title}` : ''}`);
+                        setSuggestedResponses(suggestions, title);
+                    }
+                } else {
+                    console.debug('[DataReceived] No suggested responses found in packet');
+                }
+            } catch (srErr) {
+                console.warn('[DataReceived] Failed to extract suggested responses from packet (non-fatal):', srErr);
             }
         } catch (error) {
             console.error("Failed to parse agent data packet:", error);
@@ -689,6 +835,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     if (roomInstance.localParticipant) {
       try {
         roomInstance.localParticipant.registerRpcMethod("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
+        console.log('[useLiveKitSession] Registered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
       } catch (e) {
         if (e instanceof RpcError && e.message.includes("already registered")) {
             console.warn("RPC method already registered. This is expected with React Strict Mode / HMR.");
@@ -706,7 +853,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       roomInstance.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
       roomInstance.off(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
     };
-  }, [roomName, setIsMicEnabled, setAgentStatusText, setIsAgentSpeaking, userName]); // Add all dependencies
+  }, [roomName, setIsMicEnabled, setAgentStatusText, setIsAgentSpeaking, setActiveView, setSuggestedResponses, userName]); // Add all dependencies
 
 
   // --- API EXPOSED TO THE COMPONENTS ---
@@ -723,7 +870,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         taskName: taskName,
         jsonPayload: JSON.stringify(payload),
       };
-      await agentServiceClientRef.current.InvokeAgentTask(request);
+      // InvokeAgentTask returns an Observable<AgentResponse> (server-streaming).
+      // Our transport currently yields a single response; await the first emission.
+      await firstValueFrom(agentServiceClientRef.current.InvokeAgentTask(request));
     } catch (e) {
       console.error("Failed to start agent task:", e);
       setConnectionError(`Failed to start task: ${e instanceof Error ? e.message : String(e)}`);

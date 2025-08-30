@@ -90,7 +90,8 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, d
 }
 
 export default function Session() {
-    const { activeView, setActiveView } = useSessionStore();
+    const activeView = useSessionStore((s) => s.activeView);
+    const setActiveView = useSessionStore((s) => s.setActiveView);
     const [isIntroActive, setIsIntroActive] = useState(true);
     const handleIntroComplete = () => setIsIntroActive(false);
     const { user, isSignedIn, isLoaded } = useUser();
@@ -170,6 +171,23 @@ export default function Session() {
         shouldInitializeLiveKit ? userName : '',
         courseId || undefined
     );
+    
+    // Only mount SuggestedResponses when there are suggestions
+    const hasSuggestions = useSessionStore((s) => s.suggestedResponses.length > 0);
+    useEffect(() => {
+        console.log('[SessionPage] hasSuggestions changed:', hasSuggestions);
+    }, [hasSuggestions]);
+    
+    // Expose Zustand store in the browser for manual testing (DevTools)
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            // Attach the store function itself; it has getState/setState on it
+            // Usage in DevTools:
+            //   window.__sessionStore.getState().setSuggestedResponses([{ id: '1', text: 'Hello' }], 'Quick reply')
+            (window as any).__sessionStore = useSessionStore;
+            console.log('[Dev] Exposed window.__sessionStore for manual testing');
+        }
+    }, []);
     
     // Get URLs from environment variables
     const vncUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:6901';
@@ -277,7 +295,9 @@ export default function Session() {
                         onDiagramUpdate={updateDiagram}
                         handleVncInteraction={handleVncInteraction}
                     />
-                    <SuggestedResponses onSelect={selectSuggestedResponse} />
+                    {hasSuggestions && (
+                        <SuggestedResponses onSelect={selectSuggestedResponse} />
+                    )}
                     <Footer room={room} agentIdentity={agentIdentity || undefined} />
                 </div>
                 
