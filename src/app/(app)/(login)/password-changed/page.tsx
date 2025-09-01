@@ -92,7 +92,7 @@ const PasswordChanged = (): JSX.Element => {
                   - This is more flexible and robust than forcing a line break at a specific point.
                 */}
                 <p className="max-w-xs text-center text-sm font-medium text-black">
-                  Your password has been reset. Use your new password to log in.
+                  Your password has been reset. <br /> Use your new password to log in.
                 </p>
               </div>
             </div>
@@ -108,7 +108,7 @@ const PasswordChanged = (): JSX.Element => {
               */}
               <Button
                 onClick={handleRedirectToLogin}
-                className="w-full min-w-[140px] cursor-pointer rounded-[50px] bg-[#566fe9] px-16 py-3 text-sm font-semibold text-white sm:px-[81px]"
+                className="w-full min-w-[400px] cursor-pointer rounded-[100px] bg-[#566fe9] px-16 py-3 text-sm font-semibold text-white sm:px-[81px]"
               >
                 Continue to Login
               </Button>

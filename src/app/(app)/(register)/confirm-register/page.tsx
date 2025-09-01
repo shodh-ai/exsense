@@ -39,7 +39,7 @@ export default function ConfirmRegister() {
     useEffect(() => {
         const timer = setTimeout(() => {
             router.push("/registration-test");
-        }, 5000);
+        }, 500000);
 
         return () => clearTimeout(timer);
     }, [router]);
@@ -58,7 +58,7 @@ export default function ConfirmRegister() {
                         Account Created!
                     </div>
                     <div className="text-sm sm:text-base text-gray-700">
-                        You will be redirected to your registration test in a few seconds.
+                        You will be redirected to your <br /> registration test in a few seconds.
                     </div>
                 </div>
                 <button

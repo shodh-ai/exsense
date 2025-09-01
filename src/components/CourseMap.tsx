@@ -46,7 +46,7 @@ const courseMapElements = {
 const CourseMap = () => {
   return (
     <section className="flex flex-col gap-6">
-      <h2 className="text-xl font-semibold text-black">Student Course Map Progress</h2>
+      <h2 className="text-xl font-semibold text-[#394169]">Student Course Map Progress</h2>
       <Card className="w-full bg-white rounded-xl border border-solid border-[#c7ccf8] p-6 relative overflow-x-auto">
 
         {/* --- MOBILE VIEW --- */}

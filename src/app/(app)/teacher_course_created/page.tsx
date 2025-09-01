@@ -48,6 +48,7 @@ const courseDetails: CourseDetail[] = [
   { icon: "/assignment.svg", label: "Assignments", value: "83" },
 ];
 
+// --- NEW DATA FROM CODE2 ---
 const courseAnalytics: CourseDetail[] = [
     { icon: "/Score.svg", label: "Average Test score", value: "78%" },
     { icon: "/time.svg", label: "Average Time Spent", value: "3h42m per student" },
@@ -56,6 +57,7 @@ const courseAnalytics: CourseDetail[] = [
     { icon: "/accuracy.svg", label: "Accuracy Rate", value: "82%" },
     { icon: "/satisfaction.svg", label: "Satisfaction level", value: "4.3/5.0(91 reviews)" },
 ];
+
 
 const skills: string[] = [
   "Data Preprocessing",
@@ -74,6 +76,40 @@ const learningOutcomes: string[] = [
   "Get hands-on experience with real-world projects by participating in Kaggle competitions.",
 ];
 
+const reviews: Review[] = [
+  {
+    name: "Peter Lewis",
+    avatar: "/learner1.svg",
+    rating: 5,
+    time: "3 months ago",
+    comment:
+      "This course truly transformed my understanding of machine learning. The AI explanations were not only clear but also engaging, making complex concepts like propagation easy to grasp. I found myself excited to learn more with each lesson!",
+  },
+  {
+    name: "Sarah Johnson",
+    avatar: "/learner2.svg",
+    rating: 5,
+    time: "1 month ago",
+    comment:
+      "The hands-on projects were a game changer for me. They allowed me to apply what I learned in a practical way, reinforcing the concepts and boosting my confidence in using machine learning techniques in real-world scenarios.",
+  },
+  {
+    name: "Michael Chen",
+    avatar: "/learner3.svg",
+    rating: 4.5,
+    time: "2 weeks ago",
+    comment:
+      "I really appreciated the focus on real-world applications throughout the course. The case studies were particularly helpful, as they provided valuable context for the theories we explored, making the learning experience much more relevant.",
+  },
+  {
+    name: "Emily Davis",
+    avatar: "/learner4.svg",
+    rating: 5,
+    time: "5 days ago",
+    comment:
+      "The community support was outstanding! I connected with fellow learners and gained insights from their experiences, which enriched my own learning journey. The collaborative environment made the course even more enjoyable.",
+  },
+];
 
 const faqs: FaqItem[] = [
   {
@@ -105,7 +141,7 @@ const StarRating = ({ rating }: { rating: number }) => {
   const totalStars = 5;
 
   return (
-    <div className="flex items-center">
+    <div className="flex items-center gap-[4px]">
       {Array.from({ length: totalStars }, (_, index) => {
         const starValue = index + 1;
         const fillPercentage =
@@ -116,8 +152,8 @@ const StarRating = ({ rating }: { rating: number }) => {
             : "0%";
 
         return (
-          <div key={index} className="relative h-5 w-5">
-            <Star className="absolute left-0 top-0 h-5 w-5 fill-gray-300 text-gray-300" />
+          <div key={index} className="relative h-5 w-5 ">
+            <Star className="absolute left-0 top-0 h-5 w-5  fill-gray-300 text-gray-300" />
             <div
               className="absolute left-0 top-0 h-full overflow-hidden"
               style={{ width: fillPercentage }}
@@ -133,7 +169,7 @@ const StarRating = ({ rating }: { rating: number }) => {
 
 const CourseHeader = () => (
   <div className="flex justify-between items-center">
-    <h2 className="text-base font-semibold text-black">Course Overview</h2>
+    <h2 className="text-base font-semibold text-[#394169]">Course Overview</h2>
   </div>
 );
 
@@ -154,17 +190,17 @@ const CourseIntroduction = ({ tags }: { tags: string[] }) => (
         <Badge
           key={tag}
           variant="outline"
-          className="rounded-[30px] bg-[#566fe91a] px-4 py-1.5 font-medium text-[#566fe9]"
+          className="rounded-[30px] h-[32px] bg-[#566fe91a] px-4 py-2font-medium text-[#566fe9] border-0"
         >
           {tag}
         </Badge>
       ))}
     </div>
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold leading-tight text-black md:text-[28px] md:leading-[33.6px]">
+      <h1 className="text-2xl font-bold leading-tight text-[#394169] md:text-[28px] md:leading-[33.6px]">
         AI Foundations with TensorFlow
       </h1>
-      <p className="text-base leading-6 text-black">
+      <p className="text-base text-[16px] font-semibold leading-6 text-[#394169]">
         This beginner-friendly course introduces AI through practical projects
         in image recognition, covering user flows, wire framing, and real-world
         case studies.chatbots, and smart predictions.
@@ -173,44 +209,12 @@ const CourseIntroduction = ({ tags }: { tags: string[] }) => (
   </section>
 );
 
-const CourseDetailsSection = ({ details }: { details: CourseDetail[] }) => (
-  <section className="flex flex-col gap-7">
-    <div className="flex flex-col gap-6">
-      <h2 className="text-xl font-semibold text-black">Course details</h2>
-      <div className="flex flex-col gap-6 md:grid md:grid-cols-3 md:gap-x-12 md:gap-y-8">
-        {details.map((detail) => (
-          <div
-            key={detail.label}
-            className="flex items-center gap-3"
-          >
-            <div className="p-3 bg-[#566fe91a] rounded-xl">
-              <div className="w-7 h-7 relative">
-                <img
-                  className="absolute inset-0 m-auto"
-                  alt={detail.label}
-                  src={detail.icon}
-                />
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="text-sm font-medium text-black opacity-60">
-                {detail.label}
-              </div>
-              <div className="text-base text-black">{detail.value}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-    
-  </section>
-);
-
+// --- NEW COMPONENT FROM CODE2 ---
 const CourseAnalyticsSection = ({ details }: { details: CourseDetail[] }) => (
     <section className="flex flex-col gap-7">
       <div className="flex flex-col gap-6">
-        <h2 className="text-xl font-semibold text-black">Course analytics</h2>
-        <div className="flex flex-col gap-6 md:grid md:grid-cols-3 md:gap-x-12 md:gap-y-8">
+        <h2 className=" font-bold font-[Plus Jakarta Sans] text-[20px] text-[#394169]">Course Analytics</h2>
+        <div className="flex flex-col gap-6 md:grid md:grid-cols-3 md:gap-x-[120px] md:gap-y-8">
           {details.map((detail) => (
             <div
               key={detail.label}
@@ -225,39 +229,66 @@ const CourseAnalyticsSection = ({ details }: { details: CourseDetail[] }) => (
                   />
                 </div>
               </div>
-              <div className="flex flex-col gap-2">
-                <div className="text-sm font-medium text-black opacity-60">
+              <div className="flex flex-col gap-[3px]">
+                <div className="text-sm font-medium text-[#8187a0] opacity-100">
                   {detail.label}
                 </div>
-                <div className="text-base text-black">{detail.value}</div>
+                <div className="text-base text-[#394169]">{detail.value}</div>
               </div>
             </div>
           ))}
         </div>
       </div>
       
-      {/* --- MODIFIED SECTION --- */}
-      {/* Main wrapper for all buttons with a 12px (gap-3) vertical gap */}
       <div className="flex flex-col gap-3">
-        {/* Wrapper for the first two buttons using CSS Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Button className="w-full rounded-[100px]  px-12 py-3 font-semibold text-[#566fe9] border border-[#566fe9] sm:px-20">
-            Start Your Journey
+          <Button className="w-full rounded-[100px] h-[50px] px-12 py-3 font-semibold text-[#566fe9] border border-[#566fe9] bg-white sm:px-20">
+            Update Course Detail
           </Button>
-          <Button className="w-full rounded-[100px]  px-12 py-3 font-semibold text-[#566fe9] border border-[#566fe9] sm:px-20">
-            Start Your Journey
+          <Button className="w-full rounded-[100px] h-[50px] px-12 py-3 font-semibold text-[#566fe9] border border-[#566fe9] bg-white sm:px-20">
+            View Enrolled Students
           </Button>
         </div>
 
-        {/* Third button */}
-        <Button className="w-full rounded-[100px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20">
-          Start Your Journey
+        <Button className="w-full rounded-[100px] h-[50px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20">
+          View 6 Unresolved Doubts
         </Button>
       </div>
-      {/* --- END OF MODIFIED SECTION --- */}
-
     </section>
   );
+
+const CourseDetailsSection = ({ details }: { details: CourseDetail[] }) => (
+  <section className="flex flex-col gap-7">
+    <div className="flex flex-col gap-6">
+      <h2 className="text-xl font-bold text-[#394169]">Course details</h2>
+      <div className="flex flex-col gap-6 md:grid md:grid-cols-3 md:gap-x-[120px] md:gap-y-8">
+        {details.map((detail) => (
+          <div
+            key={detail.label}
+            className="flex items-center gap-3"
+          >
+            <div className="p-3 bg-[#566fe91a] rounded-xl">
+              <div className="w-7 h-7 relative">
+                <img
+                  className="absolute inset-0 m-auto"
+                  alt={detail.label}
+                  src={detail.icon}
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-[3px]">
+              <div className="text-sm font-medium text-[#8187a0] opacity-100">
+                {detail.label}
+              </div>
+              <div className="text-base text-[#394169]">{detail.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+    {/* Button was removed from here to avoid duplication */}
+  </section>
+);
 
 const WhatYouWillLearnSection = ({
   skills,
@@ -267,14 +298,15 @@ const WhatYouWillLearnSection = ({
   outcomes: string[];
 }) => (
   <section className="flex flex-col gap-6">
-    <h2 className="text-xl font-semibold text-black">What you'll learn</h2>
+    <h2 className="text-xl font-bold text-[#394169]">What you'll learn</h2>
     <div className="flex flex-col gap-5">
       <div className="flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap">
         {skills.map((skill) => (
           <Badge
             key={skill}
-            className="flex h-10 w-64 items-center justify-center rounded-full bg-[#eef2ff] px-5 text-sm font-medium text-[#566fe9] sm:w-auto sm:justify-start"
+            className="flex h-[32px] w-64 items-center justify-center rounded-[30px] bg-[#f6f6fe] px-4 py-2 text-sm font-medium text-[#566fe9] sm:w-auto sm:justify-start shadow-none"
           >
+
             {skill}
           </Badge>
         ))}
@@ -289,7 +321,7 @@ const WhatYouWillLearnSection = ({
                 src="/ticked.svg"
               />
             </div>
-            <p className="text-base leading-6 text-black">{outcome}</p>
+            <p className="text-base text-[16px] font-semibold leading-6 text-[#394169]">{outcome}</p>
           </div>
         ))}
       </div>
@@ -299,7 +331,7 @@ const WhatYouWillLearnSection = ({
 
 const TeacherProfileSection = () => (
   <section className="flex flex-col gap-6">
-    <h2 className="text-xl font-semibold text-black">Meet your teacher</h2>
+    <h2 className="text-xl font-bold text-[#394169]">Meet your teacher</h2>
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-4">
         <Avatar className="h-14 w-14">
@@ -307,7 +339,7 @@ const TeacherProfileSection = () => (
         </Avatar>
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="text-base font-semibold text-black">
+            <span className="text-base font-semibold text-[#394169]">
               Arjun Mehta
             </span>
             <Badge
@@ -331,12 +363,12 @@ const TeacherProfileSection = () => (
               <span className="text-sm font-medium">Top Educator</span>
             </Badge>
           </div>
-          <span className="text-sm font-medium text-black opacity-60">
+          <span className="text-sm font-medium text-[#8187a0] opacity-100">
             AI Educator at DeepLearn Lab.
           </span>
         </div>
       </div>
-      <p className="text-base leading-6 text-black">
+      <p className="text-base text-[16px] font-semibold text-[#394169]">
         I'm a Digital Designer & teacher at BYOL international. Sharing is who I
         am, and teaching is where I am at my best, because I've been on both
         sides of that equation, and getting to deliver useful training is my
@@ -352,21 +384,20 @@ const TeacherProfileSection = () => (
 );
 
 
-
 const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
   <section className="flex flex-col gap-6">
-    <h2 className="text-xl font-semibold text-black">FAQs</h2>
+    <h2 className="text-xl font-bold text-[#394169]">FAQs</h2>
     <Accordion type="single" collapsible className="w-full">
       {faqs.map((faq, index) => (
         <AccordionItem
           key={index}
           value={`faq-${index}`}
-          className="border-b border-solid border-gray-200"
+          className="border-b border-solid border-gray-200 "
         >
-          <AccordionTrigger className="py-4 text-left text-base font-semibold text-black">
+          <AccordionTrigger className="py-4 text-left text-base font-semibold text-[#394169]">
             {faq.question}
           </AccordionTrigger>
-          <AccordionContent className="pb-4 text-base text-black">
+          <AccordionContent className="pb-4 text-base text-[#8187a0] opacity-100">
             {faq.answer}
           </AccordionContent>
         </AccordionItem>
@@ -391,23 +422,22 @@ export default function MyCoursesPage(): JSX.Element {
               </div>
 
               <CourseIntroduction tags={courseTags} />
+              {/* --- SECTION ADDED HERE --- */}
               <CourseAnalyticsSection details={courseAnalytics} />
               <CourseDetailsSection details={courseDetails} />
-              
               <WhatYouWillLearnSection
                 skills={skills}
                 outcomes={learningOutcomes}
               />
               <CourseMap />
               <TeacherProfileSection />
-            
               <FaqSection faqs={faqs} />
             </div>
           </div>
         </main>
         <div className="h-[60px] w-full flex-shrink-0">
-          <Footer />
-        </div>
+                  <Footer />
+                </div>
       </div>
     </>
   );

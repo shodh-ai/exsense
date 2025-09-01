@@ -182,18 +182,18 @@ const CirriculumEditor = ({
           </div>
 
           <div className="flex flex-col items-start gap-6 relative self-stretch w-full">
-            <div className="relative self-stretch mt-[-1.00px] font-updated-title-2">
+            <div className="relative self-stretch mt-[-1.00px] font-updated-title-2 font-[18px] font-bold">
               Curriculum Editor
             </div>
-            <div className="flex flex-wrap gap-4 w-full">
-               <Button variant="outline" className="flex-1 md:flex-initial md:w-auto px-7 py-4 h-auto rounded-[600px] border-[#566fe9] text-[#566fe9] hover:bg-[#566fe9] hover:text-white">
+            <div className="flex flex-wrap gap-[8px] w-full">
+               <Button variant="outline" className="flex-1 h-[50px] md:flex-initial md:w-auto px-7 py-4  rounded-[600px] border-[#566fe9] text-[#566fe9] hover:bg-[#566fe9] hover:text-white">
                   Course Map
                 </Button>
         
                 <div className="w-full order-last md:w-auto md:flex-1 md:order-none flex h-[50px] items-center pl-5 pr-0 py-1.5 relative bg-white rounded-[600px] border border-solid border-[#c7ccf8]">
                   <Input
                     placeholder="Search for specific module"
-                    className="border-0 bg-transparent p-0 h-auto flex-grow placeholder:text-[#8187a0] focus-visible:ring-0"
+                    className="border-0 bg-transparent p-0 h-auto flex-grow placeholder:text-[#8187a0] focus-outline-none "
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -210,7 +210,7 @@ const CirriculumEditor = ({
                     />
                   </Button>
                 </div>
-                <Button onClick={handleFinalize} disabled={submitting || createCourse.isPending} className="flex-1 md:flex-initial md:w-auto px-7 py-4 h-auto bg-[#566fe9] rounded-[600px] text-white hover:bg-[#4a5fd1]">
+                <Button onClick={handleFinalize} disabled={submitting || createCourse.isPending} className="flex-1 h-[50px] md:flex-initial md:w-auto px-7 py-4 h-auto bg-[#566fe9] rounded-[600px] text-white hover:bg-[#4a5fd1]">
                   {submitting || createCourse.isPending ? (onFinalize ? 'Saving…' : 'Finalizing…') : (finalizeLabel || (onFinalize ? 'Save' : 'Finalize'))}
                 </Button>
             </div>
