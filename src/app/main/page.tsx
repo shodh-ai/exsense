@@ -66,23 +66,18 @@ export default function ShodhAiWebsite(): JSX.Element {
         {/* Main content - responsive layout */}
         <section className="relative z-10 flex flex-col lg:flex-row items-center w-full mt-8 sm:mt-12 lg:mt-[105px] px-4 sm:px-8 lg:px-20 gap-8 md:gap-5 lg:gap-x-1">
 
-          {/* START: Video Replacement */}
+          {/* START: GIF Replacement */}
           <div className="order-2 lg:order-1 flex-shrink-0 lg:pl-[8%]">
-            {/* The <img> tag has been replaced with the <video> tag below. */}
-            <video
-              // The same responsive classes from the image are used here.
+            <img
+              // The same responsive classes are used for consistency.
               className="w-[350px] h-[690px] sm:w-[400px] sm:h-[500px] lg:w-[425px] lg:h-[530px] xl:w-[460px] xl:h-[575px] object-contain"
-              autoPlay    // Autoplays the video
-              loop        // Loops the video continuously
-              muted       // Mutes the video (required for autoplay in most browsers)
-              playsInline // Ensures video plays inline on mobile, not fullscreen
-            >
-              {/* IMPORTANT: Update the src to your video file's path */}
-              <source src="/animation77.mp4" type="video/mp4" />
-              Your browser does not support the video tag.
-            </video>
+              // IMPORTANT: Update the src to your GIF file's path.
+              src="/animation77.gif"
+              // Add a descriptive alt text for accessibility.
+              alt="Animated demonstration of the product"
+            />
           </div>
-          {/* END: Video Replacement */}
+          {/* END: GIF Replacement */}
 
           {/* Main heading - responsive typography */}
           <div className="order-1 lg:order-2 flex-1 lg:pr-[8%]">

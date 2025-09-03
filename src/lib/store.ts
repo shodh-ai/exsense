@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+
 type ExcalidrawAPIType = unknown;
 export type SessionView = 'excalidraw' | 'vnc' | 'video' | 'mic' | 'statusbar' | 'intro';
 
@@ -35,13 +36,13 @@ interface SessionState {
     isMicEnabled: boolean;
     isMusicButtonPlaying: boolean;
     isMicActivatingPending: boolean;
-    visualizationData: any[] | null; // <-- NEW: For store-based visualization communication
-    // --- Suggested Responses State ---
+    visualizationData: any[] | null;
     suggestedResponses: { id: string; text: string; reason?: string }[];
     suggestedTitle?: string;
+    isNavigating: boolean; // <-- State for our loader
 
     // --- Imprinting / Session Controller State ---
-    imprinting_mode: string; // e.g., 'DEBRIEF_CONCEPTUAL' | 'WORKFLOW' | 'DEBRIEF_PRACTICAL'
+    imprinting_mode: string;
     currentLO: string | null;
 
     // --- New Imprinting Flow State ---
@@ -58,10 +59,10 @@ interface SessionState {
     setIsMicEnabled: (isEnabled: boolean) => void;
     setIsMusicButtonPlaying: (isPlaying: boolean) => void;
     setIsMicActivatingPending: (isPending: boolean) => void;
-    setVisualizationData: (data: any[] | null) => void; // <-- NEW: Set visualization data for canvas rendering
-    // --- Suggested Responses Actions ---
+    setVisualizationData: (data: any[] | null) => void;
     setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
     clearSuggestedResponses: () => void;
+    setIsNavigating: (isNavigating: boolean) => void; // <-- Action for our loader
 
     // --- Imprinting Actions ---
     setImprintingMode: (mode: string) => void;
@@ -73,7 +74,7 @@ interface SessionState {
 }
 
 export const useSessionStore = create<SessionState>()(
-    devtools( // Wrap with devtools for easy debugging in the browser
+    devtools(
         (set) => ({
             // --- Initial State ---
             activeView: 'excalidraw',
@@ -85,10 +86,10 @@ export const useSessionStore = create<SessionState>()(
             isMicEnabled: false,
             isMusicButtonPlaying: false,
             isMicActivatingPending: false,
-            visualizationData: null, // <-- No visualization data initially
-            // --- Suggested Responses defaults ---
+            visualizationData: null,
             suggestedResponses: [],
             suggestedTitle: undefined,
+            isNavigating: false, // <-- Initial state is false
 
             // --- Imprinting defaults ---
             imprinting_mode: 'DEBRIEF_CONCEPTUAL',
@@ -108,10 +109,10 @@ export const useSessionStore = create<SessionState>()(
             setIsMicEnabled: (isEnabled) => set({ isMicEnabled: isEnabled }),
             setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
             setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }),
-            setVisualizationData: (data) => set({ visualizationData: data }), // <-- NEW ACTION IMPLEMENTATION
-            // --- Suggested Responses Actions ---
+            setVisualizationData: (data) => set({ visualizationData: data }),
             setSuggestedResponses: (suggestions, title) => set({ suggestedResponses: suggestions, suggestedTitle: title }),
             clearSuggestedResponses: () => set({ suggestedResponses: [], suggestedTitle: undefined }),
+            setIsNavigating: (isNavigating) => set({ isNavigating }), // <-- Action implementation
 
             // --- Imprinting Actions ---
             setImprintingMode: (mode) => set({ imprinting_mode: mode }),

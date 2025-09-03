@@ -26,11 +26,17 @@ export default function CoursesPage(): JSX.Element {
   const router = useRouter();
 
   // --- DATA VIA REACT QUERY ---
-  const { data: coursesData = [], isLoading: coursesLoading, error: coursesError } = useCourses();
-  const { data: myEnrollments = [], isLoading: enrollmentsLoading } = useMyEnrollments({ enabled: isSignedIn });
+  // CHANGE: We no longer need isLoading or error here. By simply accessing `data`,
+  // the component will automatically suspend if the data is not yet available,
+  // keeping your global `loading.tsx` visible.
+  const { data: coursesData = [] } = useCourses();
+  const { data: myEnrollments = [] } = useMyEnrollments({ enabled: isSignedIn });
+  
+  // The mutation hook is for user actions (like clicking enroll), not page loads.
+  // We'll use its state directly on the button.
   const enrollMutation = useEnrollInCourse();
 
-  // Normalize backend courses into CourseCard.Course shape
+  // This memoization logic remains the same.
   const allCourses: Course[] = useMemo(() => {
     return (coursesData || []).map((c: any) => ({
       id: c.id,
@@ -48,6 +54,8 @@ export default function CoursesPage(): JSX.Element {
   // --- EVENT HANDLERS ---
   const handleEnroll = async (courseId: string | number) => {
     try {
+      // The `isPending` state from the mutation is used to know if this specific action is loading.
+      if (enrollMutation.isPending) return;
       await enrollMutation.mutateAsync(String(courseId));
       toast.success("Successfully enrolled!");
     } catch (err: any) {
@@ -58,48 +66,29 @@ export default function CoursesPage(): JSX.Element {
   // --- SESSION HANDLER ---
   const handleStartSession = async (courseId: string | number) => {
     try {
-      console.log(`Starting session for course: ${courseId}`);
-      
-      // Find the course details for the session
       const selectedCourse = allCourses.find(course => course.id === courseId);
-      
       if (!selectedCourse) {
         throw new Error('Course not found');
       }
-
-      // Navigate to session page with course details
       router.push(`/session?courseId=${courseId}&title=${encodeURIComponent(selectedCourse.title)}`);
-      
     } catch (err: any) {
       toast.error(`Failed to start session: ${err.message}`);
     }
   };
 
   // --- RENDER LOGIC ---
-  const isLoading = coursesLoading || (isSignedIn && enrollmentsLoading) || enrollMutation.isPending;
-  if (isLoading) {
-    return <div>Loading courses...</div>; // Or your fancy loading component
-  }
+  // REMOVED: The manual `isLoading` and `if (isLoading)` blocks are no longer needed.
+  // REMOVED: The manual `if (coursesError)` block is also removed. Next.js will
+  // automatically catch the error and show the nearest `error.tsx` boundary.
 
-  if (coursesError) {
-    const msg = (coursesError as any)?.message || 'Failed to load courses';
-    return <div className="text-red-500">Error: {msg}</div>;
-  }
-
-  // Create a set of enrolled course IDs for quick lookups (normalize to string to avoid type mismatches)
   const enrolledCourseIds = new Set((myEnrollments || []).map((e: any) => String(e.courseId)));
-
-  // Only show courses the student is enrolled in
   const enrolledCourses = allCourses.filter((c) => enrolledCourseIds.has(String(c.id)));
 
   return (
     <>
       <Sphere />
       <div className={`h-[97%] w-full bg-transparent flex flex-col px-4 pt-4 pb-4 ${plusJakartaSans.className}`}>
-        {/* ... (Your existing header and background JSX) ... */}
-
         <main className="relative w-full max-w-4xl self-center overflow-y-auto rounded-3xl p-6 md:p-8 z-10 flex flex-col mt-0">
-          {/* ... (Your existing filter and search JSX) ... */}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-black">My Courses</h2>
             <Button asChild>
@@ -107,7 +96,6 @@ export default function CoursesPage(): JSX.Element {
             </Button>
           </div>
 
-          {/* Course cards list - show only enrolled courses */}
           <div className="flex flex-col gap-6 overflow-y-scroll pr-2 max-h-[480px] custom-scrollbar">
             {enrolledCourses.length > 0 ? (
               enrolledCourses.map((course, index) => (
@@ -116,6 +104,8 @@ export default function CoursesPage(): JSX.Element {
                   course={course}
                   isActive={index === 0}
                   isEnrolled={true}
+                  // We pass the mutation's pending state to the enroll handler if needed,
+                  // but in this view, only enrolled courses are shown, so the enroll button isn't visible.
                   onEnroll={handleEnroll}
                   onStartSession={handleStartSession}
                 />

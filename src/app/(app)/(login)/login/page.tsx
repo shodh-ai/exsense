@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "next/image"; // Already imported, which is great
 import Link from "next/link";
 import { useSignIn, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
@@ -29,7 +29,6 @@ export default function Login() {
         "learner"
     );
 
-    // --- MODIFICATION: Redirect based on role if already signed in ---
     useEffect(() => {
         if (isSignedIn && user) {
             const userRole = ((user.publicMetadata as any)?.role as string) || ((user.unsafeMetadata as any)?.role as string) || 'learner';
@@ -41,7 +40,6 @@ export default function Login() {
             }
         }
     }, [isSignedIn, user, router]);
-    // --- END MODIFICATION ---
 
     useEffect(() => {
         const loginMessage = sessionStorage.getItem('loginMessage');
@@ -60,7 +58,6 @@ export default function Login() {
 
         try {
             if (isSignedIn) {
-                // This case is handled by the useEffect above, but is a good safeguard
                 const userRole = ((user?.publicMetadata as any)?.role as string) || ((user?.unsafeMetadata as any)?.role as string) || 'learner';
                 if (userRole === 'expert') {
                     router.push("/teacher-dash");
@@ -76,7 +73,6 @@ export default function Login() {
             });
 
             if (result.status === "complete") {
-                // Set session active and let the top useEffect handle the redirect
                 await setActive({ session: result.createdSessionId });
                 return;
             } else {
@@ -145,7 +141,15 @@ export default function Login() {
                             onClick={() => setActiveUserType("learner")}
                             className={`flex h-10 items-center justify-center gap-2 px-10 py-3 relative flex-1 grow rounded-[40px] overflow-hidden transition-colors ${activeUserType === "learner" ? "bg-[#566fe9]" : "bg-transparent"}`}
                         >
-                            <img className="relative w-5 h-5" alt="Learner Icon" src={activeUserType === "learner" ? "/learneractive.svg" : "/learner.svg"} />
+                            {/* --- MODIFICATION START --- */}
+                            <Image 
+                                className="relative w-5 h-5" 
+                                alt="Learner Icon" 
+                                src={activeUserType === "learner" ? "/learneractive.svg" : "/learner.svg"} 
+                                width={20}
+                                height={20}
+                            />
+                            {/* --- MODIFICATION END --- */}
                             <span className={`relative font-semibold text-sm whitespace-nowrap ${activeUserType === "learner" ? "text-white" : "text-[#566fe9cc]"}`}>
                                 Learner
                             </span>
@@ -155,7 +159,15 @@ export default function Login() {
                             onClick={() => setActiveUserType("expert")}
                             className={`flex h-10 items-center justify-center gap-2 px-10 py-3 relative flex-1 grow rounded-[40px] overflow-hidden transition-colors ${activeUserType === "expert" ? "bg-[#566fe9]" : "bg-transparent"}`}
                         >
-                            <img className="relative w-5 h-5" alt="Expert Icon" src={activeUserType === "expert" ? "/expertactive.svg" : "/expert.svg"} />
+                            {/* --- MODIFICATION START --- */}
+                            <Image 
+                                className="relative w-5 h-5" 
+                                alt="Expert Icon" 
+                                src={activeUserType === "expert" ? "/expertactive.svg" : "/expert.svg"} 
+                                width={20}
+                                height={20}
+                            />
+                            {/* --- MODIFICATION END --- */}
                             <span className={`relative font-semibold text-sm whitespace-nowrap ${activeUserType === "expert" ? "text-white" : "text-[#566fe9cc]"}`}>
                                 Expert
                             </span>

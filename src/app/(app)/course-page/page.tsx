@@ -10,11 +10,13 @@ import {
 import { Avatar, AvatarImage } from "@/components/avatar";
 import { Badge } from "@/components/badge";
 import { Button } from "@/components/button";
-// import { Card, CardContent } from "@/components/card";
 import CourseMap from "@/components/CourseMap";
 import { Separator } from "@/components/separator";
 import Sphere from "@/components/Sphere";
 import Footer from "@/components/Footer";
+import { useParams, useRouter } from "next/navigation";
+import { useAuth } from "@clerk/nextjs";
+import { useCourse, useLessons, useEnrollInCourse } from "@/hooks/useApi";
 
 // --- TYPE DEFINITIONS ---
 type CourseDetail = {
@@ -36,17 +38,8 @@ type FaqItem = {
   answer: string;
 };
 
-// --- DATA CONSTANTS ---
+// --- DATA CONSTANTS (STATIC DATA) ---
 const courseTags: string[] = ["Top Rated", "AI-Powered", "Beginner Friendly"];
-
-const courseDetails: CourseDetail[] = [
-  { icon: "/difficulty.svg", label: "Difficulty", value: "Intermediate" },
-  { icon: "/star.svg", label: "Rating", value: "4.7 (320 reviews)" },
-  { icon: "/duration.svg", label: "Duration", value: "8 hrs 21 mins" },
-  { icon: "/usercount.svg", label: "User Count", value: "4,200+ enrolled" },
-  { icon: "/language.svg", label: "Language", value: "English Only" },
-  { icon: "/assignment.svg", label: "Assignments", value: "83" },
-];
 
 const skills: string[] = [
   "Data Preprocessing",
@@ -66,7 +59,7 @@ const learningOutcomes: string[] = [
 ];
 
 const reviews: Review[] = [
-  {
+    {
     name: "Peter Lewis",
     avatar: "/learner1.svg",
     rating: 5,
@@ -124,6 +117,7 @@ const faqs: FaqItem[] = [
   },
 ];
 
+
 // --- SUB-COMPONENTS ---
 
 const StarRating = ({ rating }: { rating: number }) => {
@@ -172,7 +166,7 @@ const CourseBanner = () => (
   </div>
 );
 
-const CourseIntroduction = ({ tags }: { tags: string[] }) => (
+const CourseIntroduction = ({ tags, title, description }: { tags: string[], title: string, description: string }) => (
   <section className="flex flex-col gap-3">
     <div className="flex flex-wrap gap-2">
       {tags.map((tag) => (
@@ -187,18 +181,16 @@ const CourseIntroduction = ({ tags }: { tags: string[] }) => (
     </div>
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-bold leading-tight text-[#394169] md:text-[28px] md:leading-[33.6px]">
-        AI Foundations with TensorFlow
+        {title}
       </h1>
       <p className="text-base text-[16px] font-semibold leading-6 text-[#394169]">
-        This beginner-friendly course introduces AI through practical projects
-        in image recognition, covering user flows, wire framing, and real-world
-        case studies.chatbots, and smart predictions.
+        {description}
       </p>
     </div>
   </section>
 );
 
-const CourseDetailsSection = ({ details }: { details: CourseDetail[] }) => (
+const CourseDetailsSection = ({ details, onEnroll, isEnrolling }: { details: CourseDetail[], onEnroll: () => void, isEnrolling: boolean }) => (
   <section className="flex flex-col gap-7">
     <div className="flex flex-col gap-6">
       <h2 className="text-xl font-bold text-[#394169]">Course details</h2>
@@ -227,8 +219,12 @@ const CourseDetailsSection = ({ details }: { details: CourseDetail[] }) => (
         ))}
       </div>
     </div>
-    <Button className="w-full rounded-[100px] h-[50px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20">
-      Start Your Journey
+    <Button
+      className="w-full rounded-[100px] h-[50px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20"
+      onClick={onEnroll}
+      disabled={isEnrolling}
+    >
+      {isEnrolling ? "Enrolling..." : "Start Your Journey"}
     </Button>
   </section>
 );
@@ -272,18 +268,18 @@ const WhatYouWillLearnSection = ({
   </section>
 );
 
-const TeacherProfileSection = () => (
+const TeacherProfileSection = ({ teacherName, teacherTitle, teacherBio }: { teacherName: string, teacherTitle: string, teacherBio: string }) => (
   <section className="flex flex-col gap-6">
     <h2 className="text-xl font-bold text-[#394169]">Meet your teacher</h2>
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-4">
         <Avatar className="h-14 w-14">
-          <AvatarImage src="/teacher1.svg" alt="Arjun Mehta" />
+          <AvatarImage src="/teacher1.svg" alt={teacherName} />
         </Avatar>
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2.5">
             <span className="text-base font-semibold text-[#394169]">
-              Arjun Mehta
+              {teacherName}
             </span>
             <Badge
               variant="outline"
@@ -307,20 +303,12 @@ const TeacherProfileSection = () => (
             </Badge>
           </div>
           <span className="text-sm font-medium text-[#8187a0] opacity-100">
-            AI Educator at DeepLearn Lab.
+            {teacherTitle}
           </span>
         </div>
       </div>
-      <p className="text-base text-[16px] font-semibold text-[#394169]">
-        I'm a Digital Designer & teacher at BYOL international. Sharing is who I
-        am, and teaching is where I am at my best, because I've been on both
-        sides of that equation, and getting to deliver useful training is my
-        meaningful way to be a part of the creative community.
-        <br />
-        <br />
-        I've spent a long time watching others learn, and teach, to refine how I
-        work with you to be efficient, useful and, most importantly, memorable.
-        I want you to carry what I've shown you into a bright future.
+      <p className="text-base text-[16px] font-semibold leading-6 text-[#394169]">
+        {teacherBio}
       </p>
     </div>
   </section>
@@ -389,27 +377,73 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
 
 // --- MAIN PAGE COMPONENT ---
 export default function MyCoursesPage(): JSX.Element {
+  const { courseId } = useParams<{ courseId: string }>();
+  const router = useRouter();
+  const { isSignedIn } = useAuth();
+  const { data: course, isLoading: courseLoading, error: courseError } = useCourse(String(courseId));
+  const { data: lessons = [], isLoading: lessonsLoading, refetch: refetchLessons } = useLessons(String(courseId));
+  const enrollMutation = useEnrollInCourse();
+
+  const enroll = async () => {
+    if (!isSignedIn) {
+      router.push("/login");
+      return;
+    }
+    try {
+      await enrollMutation.mutateAsync(String(courseId));
+      await refetchLessons();
+    } catch (_) {
+      // Errors are handled via mutation toast
+    }
+  };
+
+  if (courseLoading) return <div className="p-6">Loading course...</div>;
+  if (courseError) return <div className="p-6 text-red-500">{(courseError as any)?.message || "Failed to load course"}</div>;
+  if (!course) return <div className="p-6">Course not found</div>;
+
+  const courseDetails: CourseDetail[] = [
+    { icon: "/difficulty.svg", label: "Difficulty", value: "Intermediate" },
+    { icon: "/star.svg", label: "Rating", value: "4.7 (320 reviews)" },
+    { icon: "/duration.svg", label: "Duration", value: "8 hrs 21 mins" },
+    { icon: "/usercount.svg", label: "User Count", value: `${course?.enrollmentCount ?? 0}+ enrolled` },
+    { icon: "/language.svg", label: "Language", value: "English Only" },
+    { icon: "/assignment.svg", label: "Assignments", value: `${course?.lessonCount ?? 0}` },
+  ];
+
+  const teacherBio = `I'm a Digital Designer & teacher at BYOL international. Sharing is who I
+        am, and teaching is where I am at my best, because I've been on both
+        sides of that equation, and getting to deliver useful training is my
+        meaningful way to be a part of the creative community.
+        <br />
+        <br />
+        I've spent a long time watching others learn, and teach, to refine how I
+        work with you to be efficient, useful and, most importantly, memorable.
+        I want you to carry what I've shown you into a bright future.`;
+
   return (
     <>
       <Sphere />
       <div className="flex h-full w-full flex-col font-sans text-gray-900">
         <main className="flex-grow overflow-y-auto">
           <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
-            {/* Central Content Container */}
             <div className="mx-auto flex w-full max-w-[80%] flex-col gap-10 md:gap-12">
               <div className="flex flex-col gap-6">
                 <CourseHeader />
                 <CourseBanner />
               </div>
 
-              <CourseIntroduction tags={courseTags} />
-              <CourseDetailsSection details={courseDetails} />
+              <CourseIntroduction tags={courseTags} title={course.title} description={course.description} />
+              <CourseDetailsSection details={courseDetails} onEnroll={enroll} isEnrolling={enrollMutation.isPending} />
               <WhatYouWillLearnSection
                 skills={skills}
                 outcomes={learningOutcomes}
               />
               <CourseMap />
-              <TeacherProfileSection />
+              <TeacherProfileSection 
+                teacherName={course?.teacher?.name || "Arjun Mehta"}
+                teacherTitle={course?.teacher?.email || "AI Educator at DeepLearn Lab."}
+                teacherBio={teacherBio}
+              />
               <ReviewsSection reviews={reviews} />
               <FaqSection faqs={faqs} />
             </div>

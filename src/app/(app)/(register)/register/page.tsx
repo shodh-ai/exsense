@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import Image from "next/image"; 
 import Link from "next/link";
 import { useSignUp, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
@@ -32,7 +32,6 @@ export default function Register() {
         "learner"
     );
 
-    // ... (Your useEffect hooks are correct and do not need to change)
     useEffect(() => {
         if (isSignedIn) {
             router.push("/session");
@@ -50,7 +49,6 @@ export default function Register() {
         }
     }, [isLoaded, signUp]);
 
-
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
         if (!isLoaded) return;
@@ -64,17 +62,12 @@ export default function Register() {
                 return;
             }
             
-            // --- THIS IS THE CRITICAL FIX ---
-            // During signUp.create, we must use `unsafeMetadata`.
-            // Clerk will automatically transfer this to `publicMetadata`
-            // after the user is successfully created and verified.
             const result = await signUp.create({
                 emailAddress: email,
                 password,
                 username,
-                unsafeMetadata: { role: activeUserType }, // <-- RENAMED FROM publicMetadata
+                unsafeMetadata: { role: activeUserType },
             });
-            // --- END OF FIX ---
             
             if (result.status === "missing_requirements") {
                 if (result.unverifiedFields?.includes('email_address')) {
@@ -116,10 +109,6 @@ export default function Register() {
             setLoading(false);
         }
     };
-
-    // --- NO OTHER CHANGES ARE NEEDED ---
-    // The handleVerification, social sign-up functions, and all the JSX
-    // are correct and do not need to be modified.
     
     const handleVerification = async (e: FormEvent) => {
         e.preventDefault();
@@ -200,7 +189,15 @@ export default function Register() {
                                 onClick={() => setActiveUserType("learner")}
                                 className={`flex h-10 items-center justify-center gap-2 px-10 py-3 relative flex-1 grow rounded-[40px] overflow-hidden transition-colors ${activeUserType === "learner" ? "bg-[#566fe9]" : "bg-transparent"}`}
                             >
-                                <img className="relative w-5 h-5" alt="Learner Icon" src={activeUserType === "learner" ? "/learneractive.svg" : "/learner.svg"} />
+                                {/* --- MODIFICATION START --- */}
+                                <Image 
+                                    className="relative w-5 h-5" 
+                                    alt="Learner Icon" 
+                                    src={activeUserType === "learner" ? "/learneractive.svg" : "/learner.svg"} 
+                                    width={20}
+                                    height={20}
+                                />
+                                {/* --- MODIFICATION END --- */}
                                 <span className={`relative font-semibold text-sm whitespace-nowrap ${activeUserType === "learner" ? "text-white" : "text-[#566fe9cc]"}`}>
                                     Learner
                                 </span>
@@ -210,7 +207,15 @@ export default function Register() {
                                 onClick={() => setActiveUserType("expert")}
                                 className={`flex h-10 items-center justify-center gap-2 px-10 py-3 relative flex-1 grow rounded-[40px] overflow-hidden transition-colors ${activeUserType === "expert" ? "bg-[#566fe9]" : "bg-transparent"}`}
                             >
-                                <img className="relative w-5 h-5" alt="Expert Icon" src={activeUserType === "expert" ? "/expertactive.svg" : "/expert.svg"} />
+                                {/* --- MODIFICATION START --- */}
+                                <Image 
+                                    className="relative w-5 h-5" 
+                                    alt="Expert Icon" 
+                                    src={activeUserType === "expert" ? "/expertactive.svg" : "/expert.svg"} 
+                                    width={20}
+                                    height={20}
+                                />
+                                {/* --- MODIFICATION END --- */}
                                 <span className={`relative font-semibold text-sm whitespace-nowrap ${activeUserType === "expert" ? "text-white" : "text-[#566fe9cc]"}`}>
                                     Expert
                                 </span>
@@ -247,7 +252,6 @@ export default function Register() {
                                         <Image src="/Google.svg" alt="Google" height={20} width={20} className="h-5 w-5" />
                                         <span className="font-semibold">Google</span>
                                     </button>
-
                                     <button type="button" onClick={handleFacebookSignUp} className="flex flex-1 items-center justify-center gap-2 bg-white rounded-full border border-[rgba(86,111,233,0.3)] cursor-pointer text-sm p-3 hover:bg-gray-50 transition-colors" disabled={!isLoaded}>
                                         <Image src="/Meta.svg" alt="Meta" height={20} width={20} className="h-5 w-5" />
                                         <span className="font-semibold">Meta</span>
