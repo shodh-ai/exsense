@@ -20,8 +20,9 @@ import { submitImprintingEpisode, stageAsset, conversationalTurn, submitSeed, pr
 import SeedInput from '@/components/imprinting/SeedInput';
 import CurriculumEditor from '@/components/imprinting/CurriculumEditor';
 import LoSelector from '@/components/imprinting/LoSelector';
-// --- MODIFICATION: Import the new modal component ---
 import { SendModal } from '@/components/SendModal';
+// --- MODIFICATION: Import the new StatusPill component ---
+import { StatusPill } from '@/components/StatusPill';
 
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
@@ -478,18 +479,28 @@ export default function Session() {
     const DEV_BYPASS = true;
     const courseId = searchParams.get('courseId');
     const courseTitle = searchParams.get('title');
-
-
-    // --- MODIFICATION: Add state for the finish confirmation modal ---
     const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
+    
+    // --- NEW STATE MANAGEMENT FOR STATUS PILL ---
+    const [pillMessage, setPillMessage] = useState<string>('Waiting for your input...');
+    const [pillType, setPillType] = useState<'ai' | 'notification'>('ai');
+    const pillTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-
+    // --- HELPER FUNCTION FOR TEMPORARY NOTIFICATIONS ---
+    const showNotification = (message: string, duration: number = 3000) => {
+        if (pillTimeoutRef.current) {
+            clearTimeout(pillTimeoutRef.current);
+        }
+        setPillMessage(message);
+        setPillType('notification');
+        pillTimeoutRef.current = setTimeout(() => {
+            setPillMessage('Waiting for your input...');
+            setPillType('ai');
+            pillTimeoutRef.current = null;
+        }, duration);
+    };
     
     if (SESSION_DEBUG) console.log('Session page - Course details:', { courseId, courseTitle });
-
-    // NOTE: Do not early-return here to avoid conditional hook calls. We will render a fallback later.
-    
-    // Add debugging for authentication state
 
     useEffect(() => {
         if (SESSION_DEBUG) console.log('Session page auth state:', { isLoaded, isSignedIn, userId: user?.id });
@@ -542,10 +553,9 @@ export default function Session() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingSetup, setIsSavingSetup] = useState(false);
     const [isFinalizingLO, setIsFinalizingLO] = useState(false);
-    const [statusMessage, setStatusMessage] = useState<string>('Session started. Waiting for initial prompt.');
     const [submitMessage, setSubmitMessage] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
-    // Narrowed types to reduce any-usage
+    
     type VNCActionResponse = { action?: string } & Record<string, unknown>;
     type RecordedPacket = { interaction_type?: string } & Record<string, unknown>;
 
@@ -581,15 +591,16 @@ export default function Session() {
     const handleCaptureScreenshot = async () => {
         try {
             if (!isRecording) {
-                setStatusMessage('Start recording to capture and persist screenshots.');
+                showNotification('Start recording to capture screenshots.');
                 return;
             }
-            setStatusMessage('Capturing screenshot...');
+            setPillMessage('Capturing screenshot...');
             await sendAndAwait('browser_screenshot', {}, 'screenshot');
-            setStatusMessage('Manual screenshot captured.');
+            showNotification('Screenshot sent');
             setTimeToNextScreenshot(screenshotIntervalSec);
         } catch (e: any) {
-            setStatusMessage(`Screenshot failed: ${e?.message || e}`);
+             setSubmitError(`Screenshot failed: ${e?.message || e}`);
+             setPillMessage('Waiting for your input...');
         }
     };
 
@@ -620,12 +631,13 @@ export default function Session() {
         setSubmitMessage(null);
         setSubmitError(null);
         try {
-            setStatusMessage('Saving setup script...');
+            setPillMessage('Saving script...');
             const resp = await saveSetupScript({ curriculum_id: String(curriculumId), lo_name: currentLO, actions });
+            showNotification('Setup script saved.');
             setSubmitMessage(resp?.message || `Setup script saved for ${currentLO}.`);
-            setStatusMessage('Setup script saved.');
         } catch (err: any) {
             setSubmitError(err?.message || 'Failed to save setup script');
+             setPillMessage('Waiting for your input...');
         } finally {
             setIsSavingSetup(false);
         }
@@ -642,13 +654,14 @@ export default function Session() {
         setSubmitMessage(null);
         setSubmitError(null);
         try {
-            setStatusMessage(`Finalizing "${currentLO}"...`);
+            setPillMessage(`Finalizing "${currentLO}"...`);
             const resp = await finalizeLO({ curriculum_id: String(curriculumId), lo_name: currentLO });
+            showNotification(`Topic "${currentLO}" finalized.`);
             setSubmitMessage(resp?.message || `Topic "${currentLO}" finalized.`);
-            setStatusMessage('Topic finalized.');
             setIsStartAllowed(true);
         } catch (err: any) {
             setSubmitError(err?.message || 'Failed to finalize topic');
+            setPillMessage('Waiting for your input...');
         } finally {
             setIsFinalizingLO(false);
         }
@@ -664,16 +677,11 @@ export default function Session() {
     const topicInputRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-
-
-    // --- Lightweight response awaiter infrastructure ---
     type PendingResolver = { id: string; expectAction: string; resolve: (resp: VNCActionResponse) => void; reject: (err: any) => void; timeoutId: any };
     const pendingResolversRef = useRef<PendingResolver[]>([]);
 
     useEffect(() => {
-        // Route incoming VNC responses to awaiting callers
         setOnVNCResponse((resp: VNCActionResponse) => {
-
             try {
                 const idx = pendingResolversRef.current.findIndex(p => p.expectAction === resp?.action);
                 if (idx >= 0) {
@@ -714,11 +722,11 @@ export default function Session() {
     const handleSubmitSeed = async () => {
         if (!user?.id || !seedText.trim()) return;
         try {
-            setStatusMessage('Submitting seed...');
+            setPillMessage('Submitting seed...');
             await submitSeed({ expert_id: user.id, session_id: roomName, curriculum_id: String(curriculumId), content: seedText });
-            setStatusMessage('Seed submitted.');
+            showNotification('Seed submitted.');
             setSeedText('');
-        } catch (e: any) { setStatusMessage(`Seed submit failed: ${e?.message || e}`); }
+        } catch (e: any) { setSubmitError(`Seed submit failed: ${e?.message || e}`); }
     };
 
     const handleStartRecording = async () => {
@@ -728,14 +736,14 @@ export default function Session() {
             setSubmitError(null);
             setImprintingMode('WORKFLOW');
             setActiveView('vnc');
-            setStatusMessage('Initializing recording on server...');
+            setPillMessage('Initializing...');
             setPacketsCount(0);
             setStagedAssets([]);
             setIsPaused(false);
 
             if (!MOCK_BACKEND) {
                 if (!isVNCConnected) {
-                    setStatusMessage('Connecting to VNC backend...');
+                     setPillMessage('Connecting to backend...');
                     try {
                         await awaitVNCOpen(15000);
                     } catch (connErr: any) {
@@ -757,7 +765,7 @@ export default function Session() {
             mediaRecorderRef.current = recorder;
 
             setIsRecording(true);
-            setStatusMessage('Recording...');
+            showNotification('Demonstration started');
             
             setRecordingDuration(0);
             if(recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
@@ -767,6 +775,7 @@ export default function Session() {
         } catch (err: any) {
             setSubmitError(err?.message || 'Failed to start recording');
             setIsRecording(false);
+            setPillMessage('Waiting for your input...');
         }
     };
 
@@ -781,10 +790,10 @@ export default function Session() {
         if (!msg) return;
 
         setTopicInput('');
-        setStatusMessage('Sending response...');
+        setPillMessage('AI is thinking...');
 
         if (MOCK_BACKEND) {
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 1500));
             const fakeResponses = [
                 "That's an interesting point. How does that relate to the stability of the system?",
                 "Understood. What would be the primary disadvantage of using that approach?",
@@ -796,7 +805,7 @@ export default function Session() {
                 text: nextResponse !== currentQuestion ? nextResponse : "Can you elaborate on that further?"
             };
             setCurrentDebrief(newDebrief);
-            setStatusMessage('AI replied (Mocked).');
+            setPillMessage('AI has a question for you...');
         } else {
             try {
                 const resp = await conversationalTurn({
@@ -808,10 +817,11 @@ export default function Session() {
                 });
                 const aiText = resp?.text || 'Got it. Let\'s continue.';
                 setCurrentDebrief({ text: aiText });
-                setStatusMessage('AI replied.');
+                setPillMessage('AI replied. Waiting for your input...');
                 setIsStartAllowed(!(aiText && /\?/.test(aiText)));
             } catch (e: any) {
                 setCurrentDebrief({ text: `Sorry, I encountered an error. ${e?.message}` });
+                setPillMessage('Waiting for your input...');
             }
         }
     };
@@ -822,7 +832,7 @@ export default function Session() {
         if (!lastQ) return;
         const msg = (topicInput || '').trim();
         if (!msg) {
-            setStatusMessage('Type what you want me to demonstrate, then click Show Me.');
+             showNotification('Type what you want to demonstrate, then click Show Me.');
             setTimeout(() => topicInputRef.current?.focus(), 0);
             return;
         }
@@ -830,11 +840,14 @@ export default function Session() {
         setIsShowMeRecording(true);
         setImprintingMode('WORKFLOW');
         setActiveView('vnc');
-        setStatusMessage('Show Me: switched to Browser. Starting recording...');
+        setPillMessage('Switching to browser for "Show Me" demo...');
         setTopicInput('');
         if (!isRecording) {
             try { await handleStartRecording(); }
-            catch (e: any) { setStatusMessage(`Failed to start Show Me recording: ${e?.message || e}`); }
+            catch (e: any) { 
+                setSubmitError(`Failed to start Show Me recording: ${e?.message || e}`);
+                setPillMessage('Waiting for your input...');
+            }
         }
     };
 
@@ -850,15 +863,12 @@ export default function Session() {
             if (!MOCK_BACKEND) {
                 type StopRecordingResp = VNCActionResponse & { count?: number };
                 const stopResp = (await sendAndAwait('stop_recording', {}, 'stop_recording')) as StopRecordingResp;
-                console.log('[SessionPage] Backend acknowledged stop_recording:', stopResp);
                 if (typeof stopResp?.count === 'number') setPacketsCount(stopResp.count);
-                setStatusMessage(`Recording stopped. Server captured ${typeof stopResp?.count === 'number' ? stopResp.count : 0} actions.`);
-            } else {
-                setStatusMessage('Recording stopped (Mock).');
             }
+             showNotification('Recording stopped.');
 
         } catch (err: any) {
-            setStatusMessage(`Error: ${err?.message || 'Failed to stop recording'}`);
+             setSubmitError(`Error: ${err?.message || 'Failed to stop recording'}`);
         } finally {
             setIsRecording(false);
             setTimeToNextScreenshot(null);
@@ -900,58 +910,48 @@ export default function Session() {
         setSubmitError(null);
         setIsSubmitting(true);
         setIsStartAllowed(false);
-        // Ensure we stop recording to finalize audio and actions
         if (isRecording) {
             await handleStopRecording();
-            // Give MediaRecorder.onstop a moment to populate the blob
             await new Promise((r) => setTimeout(r, 150));
         }
 
         try {
             if (MOCK_BACKEND) {
-                setStatusMessage('Stopping recording and preparing data (Mocked)...');
-                await new Promise(r => setTimeout(r, 1000));
-                setStatusMessage('Submitting episode (Mocked)...');
+                setPillMessage('Submitting episode...');
                 await new Promise(r => setTimeout(r, 2000));
                 const fakeResponse = {
                     action: 'SPEAK_AND_INITIATE_DEBRIEF',
                     text: "Great question! On the real axis, the root locus exists between an odd number of poles and zeros. Count the total number of poles and zeros to the right of any point on the real axis. If it's odd, that section is part of the root locus."
                 };
                 setSubmitMessage(`Submitted. Processed 123 fake actions.`);
-                setStatusMessage('Episode submitted. AI is analyzing (Mocked)...');
+                setPillMessage('AI is analyzing...');
+                
+                await new Promise(r => setTimeout(r, 2000));
+
                 if (fakeResponse.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
                     const aiText = fakeResponse.text || '';
                     let hypothesis = 'Great question!';
                     let question = aiText.replace('Great question! ', '');
-                    const lastSentenceEnd = Math.max(aiText.lastIndexOf('. '), aiText.lastIndexOf('! '), aiText.lastIndexOf('? '));
-                    if (lastSentenceEnd > -1 && lastSentenceEnd < aiText.length - 2) {
-                        hypothesis = aiText.substring(0, lastSentenceEnd + 1);
-                        question = aiText.substring(lastSentenceEnd + 2).trim();
-                    }
+                    
                     setCurrentDebrief({ hypothesis, text: question });
                     setImprintingMode('DEBRIEF_CONCEPTUAL');
                     setActiveView('excalidraw');
                     setIsConceptualStarted(true);
                     setIsStartAllowed(false);
-                    setStatusMessage('AI has a question for you (Mocked).');
+                    setPillMessage('AI has a question for you...');
                     setTimeout(() => topicInputRef.current?.focus(), 0);
                 }
-                return; // Do not hit real backend in mock mode
+                return; 
             }
 
-            // Real backend flow
-            // Convert recorded audio (webm/ogg) to WAV Data URL
             const blob = audioBlobRef.current;
             const audio_b64: string = blob ? await convertBlobToWavDataURL(blob) : '';
-
-            // Fetch recorded actions (including periodic screenshots)
-            setStatusMessage('Fetching recorded actions from server...');
+            
+            setPillMessage('Fetching recorded actions...');
             const actionsResp = await sendAndAwait('get_recorded_actions', { session_id: roomName }, 'get_recorded_actions');
             const packets: RecordedPacket[] = Array.isArray((actionsResp as any)?.packets) ? (actionsResp as any).packets : [];
-            const periodicCount = packets.filter(p => p?.interaction_type === 'periodic_screenshot').length;
-            console.log('[EpisodeControls] Recorded actions ready:', { total: packets.length, periodic_screenshots: periodicCount, source: (actionsResp as any)?.source });
-            setStatusMessage(`Submitting episode... (${packets.length} actions, ${periodicCount} periodic screenshots)`);
-
+            
+            setPillMessage(`Submitting episode...`);
             const response = await submitImprintingEpisode({
                 expert_id: user?.id || 'unknown_expert',
                 session_id: roomName,
@@ -964,9 +964,8 @@ export default function Session() {
                 in_response_to_question: isShowMeRecording && showMeQuestionRef.current ? showMeQuestionRef.current : undefined,
             });
 
-            console.log('[EpisodeControls] Submit success', response);
             setSubmitMessage(`Submitted. Processed ${packets.length} actions.`);
-            setStatusMessage('Episode submitted. AI is analyzing...');
+            setPillMessage('AI is analyzing...');
 
             if (response?.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
                 const aiText = (response as any).text || '';
@@ -976,13 +975,14 @@ export default function Session() {
                     setActiveView('excalidraw');
                     setIsConceptualStarted(true);
                     setIsStartAllowed(false);
+                    setPillMessage('AI has a question for you...');
                 } else {
                     setImprintingMode('WORKFLOW');
                     setIsStartAllowed(true);
+                    setPillMessage('Waiting for your input...');
                 }
             }
-
-            // Reset buffers/state after submit
+            
             packetsRef.current = [];
             setPacketsCount(0);
             audioChunksRef.current = [];
@@ -992,6 +992,7 @@ export default function Session() {
             showMeQuestionRef.current = null;
         } catch (err: any) {
             setSubmitError(err?.message || 'Failed to submit');
+            setPillMessage('Waiting for your input...');
         } finally {
             setIsSubmitting(false);
         }
@@ -1005,8 +1006,9 @@ export default function Session() {
             const assetInfo = await stageAsset({ expert_id: user.id, session_id: roomName, curriculum_id: String(curriculumId), file });
             const item = { filename: assetInfo.filename || file.name, role: role || "ASSET", asset_id: assetInfo.asset_id };
             setStagedAssets(prev => [...prev, item]);
+            showNotification(`${file.name} uploaded.`);
         } catch (e: any) {
-            setStatusMessage(`Error uploading asset: ${e?.message || e}`);
+            showNotification(`Error uploading asset: ${e?.message || e}`);
         } finally {
             if (event.target) event.target.value = '';
         }
@@ -1055,7 +1057,6 @@ export default function Session() {
     if (!isLoaded) return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
     if (isIntroActive) return <IntroPage onAnimationComplete={handleIntroComplete} />;
 
-    // Guard: require a courseId in the URL. Prevents accidental fallback to a hardcoded curriculum.
     if (!courseId) {
         return (
             <div className="w-full h-full flex items-center justify-center text-white">
@@ -1073,14 +1074,14 @@ export default function Session() {
         );
     }
 
-// ...
-
-
     return (
         <>
             {(DEV_BYPASS || isSignedIn) ? (
                 <>
                     <Sphere />
+                    {/* --- RENDER THE NEW STATUS PILL --- */}
+                    <StatusPill message={pillMessage} type={pillType} />
+                    
                     {
                         false ? (
                             <div className='w-full h-full'>
@@ -1104,32 +1105,7 @@ export default function Session() {
                                         handleSendConceptual={handleSendConceptual}
                                         topicInputRef={topicInputRef}
                                     />
-                                    {imprinting_mode === 'WORKFLOW' && (
-                                      <div className={`fixed bottom-0=100 left-0 right-0 z-50 ${isFinishModalOpen ? 'hidden' : ''}`}>
-                                        <div className="mx-auto w-full md:w-[90%] lg:w-[70%] px-3 pb-3">
-                                            <div className="bg-[#0F1226]/90 border border-[#2A2F4A] backdrop-blur-md rounded-t-xl p-3 text-white">
-                                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                                                    <div className="flex flex-wrap gap-2 items-center">
-                                                        <div className="ml-2 flex items-start gap-2">
-                                                            <textarea value={setupActionsText} onChange={(e) => setSetupActionsText(e.target.value)} placeholder='Paste setup actions JSON array...' className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-64 h-16 text-xs" />
-                                                        </div>
-                                                        <input ref={fileInputRef} type="file" onChange={handleAssetUpload} className="hidden" />
-                                                        {isShowMeRecording && (<span title={showMeQuestionRef.current || 'Show Me demo active'} className="ml-2 inline-flex items-center gap-1 rounded-full border border-indigo-400/70 bg-indigo-600/20 px-2 py-1 text-[11px] text-indigo-200"><span className="inline-block h-2 w-2 rounded-full bg-indigo-300 animate-pulse" />Show Me demo active</span>)}
-                                                    </div>
-                                                    <div className="text-xs text-gray-300 space-y-1 md:text-right">
-                                                        <div><span className="text-gray-400">Mic:</span> {isRecording ? 'Recording' : 'Idle'}</div>
-                                                        <div><span className="text-gray-400">Packets:</span> {packetsCount}</div>
-                                                        <div><span className="text-gray-400">Action WS:</span> {isVNCConnected ? 'Connected' : 'Disconnected'}</div>
-                                                        {statusMessage && <div className="text-sky-300">{statusMessage}</div>}
-                                                        {submitMessage && <div className="text-emerald-300">{submitMessage}</div>}
-                                                        {submitError && <div className="text-red-300">{submitError}</div>}
-                                                        {stagedAssets.length > 0 && (<div className="mt-2 text-left"><div className="text-gray-400">Staged:</div><ul className="mt-1 max-h-24 overflow-y-auto space-y-1">{stagedAssets.map((a, i) => (<li key={i} className="flex items-center justify-between gap-2 text-[11px] bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1"><div className="truncate"><span className="text-white">{a.filename}</span><span className="text-gray-400"> · {a.role}</span></div><button onClick={() => handleRemoveStagedAsset(i)} className="text-red-300 hover:text-red-200" disabled={isSubmitting}>x</button></li>))}</ul></div>)}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                      </div>
-                                    )}
+                                    {/* --- THIS IS THE PANEL THAT HAS BEEN REMOVED --- */}
                                 </div>
                                 {imprinting_mode === 'WORKFLOW' ? (
                                 <TeacherFooter
