@@ -467,7 +467,7 @@ const ConceptualFooter = ({ onFinishClick, isFinishDisabled, onShowMeClick, isSh
 
 export default function Session() {
     // --- MOCK BACKEND FLAG ---
-    const MOCK_BACKEND = true;
+    const MOCK_BACKEND = false;
 
     const { activeView, setActiveView, imprinting_mode, setImprintingMode, currentLO, setCurrentLO, imprintingPhase, setImprintingPhase, curriculumDraft, setCurriculumDraft } = useSessionStore();
     const [isIntroActive, setIsIntroActive] = useState(false);
