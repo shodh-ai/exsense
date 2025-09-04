@@ -5,8 +5,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MicButton } from '@/components/MicButton';
 import { UploadButton } from '@/components/UploadButton';
 import { MessageButton } from '@/components/MessageButton';
-// MODIFICATION: Added Send icon for the new chat input
-import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send } from 'lucide-react';
+// MODIFICATION: Added Send icon for the new chat input and Minus icon for the timer
+import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Minus } from 'lucide-react';
 // Keep other existing imports
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
@@ -263,6 +263,7 @@ interface TeacherFooterProps {
     onUploadClick?: () => void;
     onCaptureClick?: () => void;
     onIncreaseTimer: () => void;
+    onDecreaseTimer: () => void;
     screenshotIntervalSec: number;
     onSaveScriptClick?: () => void;
     isRecording: boolean;
@@ -281,7 +282,8 @@ interface TeacherFooterProps {
 const TeacherFooter = ({ 
     onUploadClick, 
     onCaptureClick, 
-    onIncreaseTimer, 
+    onIncreaseTimer,
+    onDecreaseTimer,
     screenshotIntervalSec, 
     onSaveScriptClick,
     isRecording,
@@ -310,12 +312,18 @@ const TeacherFooter = ({
                   className="absolute top-1/2 right-1/2 flex items-center gap-6" 
                   style={{ marginRight: '150px', transform: 'translateY(-50%)' }}
                 >
-                    <div className="w-[202px] h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] py-2 pr-2 pl-4 rounded-[600px]">
+                    <div className="w-[250px] h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] py-2 pr-2 pl-4 rounded-[600px]">
                         <div className='flex items-center gap-2'>
                            <Timer className="w-6 h-6 text-[#566FE9]" />
                            <span className="font-semibold text-sm text-[#566FE9] font-[500] text-[16px]">{formatTime(screenshotIntervalSec)}</span>
                         </div>
                         <div className='flex items-center gap-2'>
+                           <button 
+                                onClick={onDecreaseTimer}
+                                className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
+                           >
+                               <Minus className="w-5 h-5 text-[#566FE9]" />
+                           </button>
                            <button 
                                 onClick={onIncreaseTimer}
                                 className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
@@ -1053,6 +1061,10 @@ export default function Session() {
         setScreenshotIntervalSec(prev => prev + 5);
     };
 
+    const handleDecreaseTimer = () => {
+        setScreenshotIntervalSec(prev => Math.max(5, prev - 5));
+    };
+
 
     if (!isLoaded) return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
     if (isIntroActive) return <IntroPage onAnimationComplete={handleIntroComplete} />;
@@ -1112,6 +1124,7 @@ export default function Session() {
                                     onUploadClick={() => fileInputRef.current?.click()}
                                     onCaptureClick={handleCaptureScreenshot}
                                     onIncreaseTimer={handleIncreaseTimer}
+                                    onDecreaseTimer={handleDecreaseTimer}
                                     screenshotIntervalSec={screenshotIntervalSec}
                                     onSaveScriptClick={handleSaveSetupText}
                                     isRecording={isRecording}

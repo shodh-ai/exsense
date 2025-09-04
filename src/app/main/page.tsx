@@ -11,8 +11,8 @@ export default function ShodhAiWebsite(): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLHeadingElement>(null);
 
-  // State to manage text visibility
-  const [isTextVisible, setIsTextVisible] = useState(false);
+  // State to manage text visibility - start with true to prevent hydration mismatch
+  const [isTextVisible, setIsTextVisible] = useState(true);
 
   // Logic for resizing the font
   const fitText = useCallback(() => {

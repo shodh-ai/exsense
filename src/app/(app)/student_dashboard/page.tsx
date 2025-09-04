@@ -1,407 +1,270 @@
 "use client";
-import { XIcon, Star } from "lucide-react";
+
 import React, { JSX } from "react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/accordion";
-import { Avatar, AvatarImage } from "@/components/avatar";
+
 import { Badge } from "@/components/badge";
 import { Button } from "@/components/button";
-// import { Card, CardContent } from "@/components/card";
-import CourseMap from "@/components/CourseMap";
-import { Separator } from "@/components/separator";
+import { Card, CardContent } from "@/components/card";
 import Sphere from "@/components/Sphere";
 import Footer from "@/components/Footer";
+import CourseMap from "@/components/CourseMap";
 
-// --- TYPE DEFINITIONS ---
-type CourseDetail = {
-  icon: string;
-  label: string;
-  value: string;
-};
-
-type Review = {
-  name: string;
-  avatar: string;
-  rating: number;
-  time: string;
-  comment: string;
-};
-
-type FaqItem = {
-  question: string;
-  answer: string;
-};
-
-// --- DATA CONSTANTS ---
-const courseTags: string[] = ["Top Rated", "AI-Powered", "Beginner Friendly"];
-
-const courseDetails: CourseDetail[] = [
-  { icon: "/difficulty.svg", label: "Difficulty", value: "Intermediate" },
-  { icon: "/star.svg", label: "Rating", value: "4.7 (320 reviews)" },
-  { icon: "/duration.svg", label: "Duration", value: "8 hrs 21 mins" },
-  { icon: "/usercount.svg", label: "User Count", value: "4,200+ enrolled" },
-  { icon: "/language.svg", label: "Language", value: "English Only" },
-  { icon: "/assignment.svg", label: "Assignments", value: "83" },
-];
-
-const courseAnalytics: CourseDetail[] = [
-    { icon: "/Score.svg", label: "Average Test score", value: "78%" },
-    { icon: "/time.svg", label: "Average Time Spent", value: "3h42m per student" },
-    { icon: "/completion.svg", label: "Completion Rate", value: "65%" },
-    { icon: "/doubt.svg", label: "Unsolved Doubtst", value: "6 pending" },
-    { icon: "/accuracy.svg", label: "Accuracy Rate", value: "82%" },
-    { icon: "/satisfaction.svg", label: "Satisfaction level", value: "4.3/5.0(91 reviews)" },
-];
-
-const skills: string[] = [
-  "Data Preprocessing",
-  "Hyperparameter Tuning",
-  "Deep Learning Architectures",
-  "Feature Engineering",
-  "Neural Networks",
-  "Deep Learning Models",
-];
-
-const learningOutcomes: string[] = [
-  "Learn the fundamentals of neural networks and how to build them using TensorFlow.",
-  "Explore the advanced techniques in deep learning, including convolutional and recurrent neural networks.",
-  "Understand the principles of reinforcement learning and how it applies to game AI.",
-  "Dive into natural language processing and develop models for sentiment analysis and text generation.",
-  "Get hands-on experience with real-world projects by participating in Kaggle competitions.",
-];
-
-
-const faqs: FaqItem[] = [
+// --- Data Definitions ---
+const studentData = [
   {
-    question: "Do I need prior programming experience to take this course?",
-    answer:
-      "Not necessarily! While basic Python knowledge is helpful, the course starts with a beginner-friendly introduction to key concepts.",
+    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012663.svg",
+    label: "Student Name",
+    value: "Sanket Sharma",
   },
   {
-    question: "What kind of support is available if I get stuck?",
-    answer:
-      "You'll have access to our community forums and dedicated Q&A sessions with the instructor.",
+    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664-1.svg",
+    label: "Learning Style",
+    value: "Visual + Theoretical",
   },
   {
-    question: "Which version of TensorFlow is used in this course?",
-    answer:
-      "We use the latest stable version of TensorFlow. The course materials are regularly updated to reflect any significant changes.",
+    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012663-1.svg",
+    label: "Average Test Score",
+    value: "78%",
   },
   {
-    question:
-      "What's the difference between this course and the advanced TensorFlow course?",
-    answer:
-      "This course focuses on the fundamentals, while the advanced course dives into more complex topics like generative models and custom architectures.",
+    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664-3.svg",
+    label: "Completion Rate",
+    value: "65%",
+  },
+  {
+    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664.svg",
+    label: "Average Time Spent",
+    value: "3h 42m",
+  },
+  {
+    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664-2.svg",
+    label: "Accuracy Rate",
+    value: "82%",
   },
 ];
+
+const strengths = [
+  "Practical Engagement",
+  "Foundational Understanding",
+  "AI Adaptability",
+  "Focused Learning",
+  "Clear Communication",
+];
+
+const achievements = [
+  "Riya completed all hands-on lab exercises within the first attempt for 80% of the modules.",
+  "She demonstrates excellent recall of key networking and storage concepts in multi-cloud setups.",
+  "Her score improvement between Module 2 and Module 4 was +18% after applying targeted AI suggestions.",
+  "Her code comments and explanations in collaborative assignments are clear and concise.",
+];
+
+const improvementAreas = [
+  "Engagement Strategies Needed",
+  "Core Concepts Revisit Required",
+  "Targeted Focus Areas",
+  "Communication Gaps Detected",
+];
+
+const improvementPoints = [
+  "Riya faced challenges in completing hands-on lab exercises for 20% of the modules on her first attempt.",
+  "She occasionally struggles to recall advanced networking and storage concepts in cloud environments.",
+  "Her score improvement between Module 2 and Module 4 was only +5%, indicating a need for more effective AI suggestions.",
+  "Her code comments and explanations in collaborative assignments sometimes lack clarity and detail.",
+];
+
+const actionPlanTags = [
+  "Interactive Learning Modules",
+  "Address barriers to effective teamwork",
+  "Skill Development Focus on Collaboration",
+  "Monthly workshops to enhance understanding of key principles",
+];
+
+// --- MODIFIED: Data structure updated to be a flat array ---
+const implementationItems = [
+  "Feedback Loop Implementation",
+  "Weekly sessions to review participant input and adjust strategies.",
+  "Mentorship Program Expansion",
+  "Establish connections to foster peer learning and support.",
+];
+
+// --- STYLES ---
+const pillBaseStyles =
+  "px-4 py-2 rounded-[30px] font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-xs leading-4 tracking-normal border-0";
+const sectionTitleStyles =
+  "w-full font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-[#394169] text-xl md:text-2xl";
 
 // --- SUB-COMPONENTS ---
 
-const StarRating = ({ rating }: { rating: number }) => {
-  const totalStars = 5;
-
-  return (
-    <div className="flex items-center">
-      {Array.from({ length: totalStars }, (_, index) => {
-        const starValue = index + 1;
-        const fillPercentage =
-          rating >= starValue
-            ? "100%"
-            : rating > index
-            ? `${(rating - index) * 100}%`
-            : "0%";
-
-        return (
-          <div key={index} className="relative h-5 w-5">
-            <Star className="absolute left-0 top-0 h-5 w-5 fill-gray-300 text-gray-300" />
-            <div
-              className="absolute left-0 top-0 h-full overflow-hidden"
-              style={{ width: fillPercentage }}
+const StudentProfileSection = (): JSX.Element => (
+  <section className="flex flex-col w-full items-start gap-6 relative animate-fade-in [--animation-delay:400ms]">
+    <h2 className={sectionTitleStyles}>Student Profile</h2>
+    <div className="flex flex-col md:flex-row items-center md:items-start gap-6 w-full animate-fade-in [--animation-delay:600ms]">
+      <img
+        className="w-48 h-48 md:w-60 md:h-60 rounded-lg object-cover flex-shrink-0"
+        alt="Student profile picture"
+        src="https://c.animaapp.com/metm9igaQcD0W7/img/rectangle-3777.png"
+      />
+      <div className="flex flex-col flex-1 items-start w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full">
+          {studentData.map((item, index) => (
+            <Card
+              key={index}
+              className="animate-fade-in border-none bg-transparent shadow-none"
+              style={{ "--animation-delay": `${700 + index * 100}ms` } as React.CSSProperties}
             >
-              <Star className="h-5 w-5 flex-shrink-0 fill-[#566FE9] text-[#566FE9]" />
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
-const CourseHeader = () => (
-  <div className="flex justify-between items-center">
-    <h2 className="text-base font-semibold text-black">Course Overview</h2>
-  </div>
-);
-
-const CourseBanner = () => (
-  <div className="flex justify-center">
-    <img
-      className="w-full rounded-lg h-auto max-h-48 md:max-h-[200px] object-cover"
-      alt="Course banner"
-      src="/banner.svg"
-    />
-  </div>
-);
-
-const CourseIntroduction = ({ tags }: { tags: string[] }) => (
-  <section className="flex flex-col gap-3">
-    <div className="flex flex-wrap gap-2">
-      {tags.map((tag) => (
-        <Badge
-          key={tag}
-          variant="outline"
-          className="rounded-[30px] bg-[#566fe91a] px-4 py-1.5 font-medium text-[#566fe9]"
-        >
-          {tag}
-        </Badge>
-      ))}
-    </div>
-    <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold leading-tight text-black md:text-[28px] md:leading-[33.6px]">
-        AI Foundations with TensorFlow
-      </h1>
-      <p className="text-base leading-6 text-black">
-        This beginner-friendly course introduces AI through practical projects
-        in image recognition, covering user flows, wire framing, and real-world
-        case studies.chatbots, and smart predictions.
-      </p>
-    </div>
-  </section>
-);
-
-const CourseDetailsSection = ({ details }: { details: CourseDetail[] }) => (
-  <section className="flex flex-col gap-7">
-    <div className="flex flex-col gap-6">
-      <h2 className="text-xl font-semibold text-black">Course details</h2>
-      <div className="flex flex-col gap-6 md:grid md:grid-cols-3 md:gap-x-12 md:gap-y-8">
-        {details.map((detail) => (
-          <div
-            key={detail.label}
-            className="flex items-center gap-3"
-          >
-            <div className="p-3 bg-[#566fe91a] rounded-xl">
-              <div className="w-7 h-7 relative">
+              <CardContent className="flex items-center gap-3 p-0">
                 <img
-                  className="absolute inset-0 m-auto"
-                  alt={detail.label}
-                  src={detail.icon}
+                  className="w-10 h-10 flex-shrink-0"
+                  alt={`${item.label} icon`}
+                  src={item.icon}
                 />
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="text-sm font-medium text-black opacity-60">
-                {detail.label}
-              </div>
-              <div className="text-base text-black">{detail.value}</div>
-            </div>
-          </div>
-        ))}
+                <div className="flex flex-col items-start gap-1.5 min-w-0">
+                  <div className="w-full font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-sm text-[#8187a0] truncate">
+                    {item.label}
+                  </div>
+                  <div className="font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-base text-[#394169]">
+                    {item.value}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     </div>
-    
   </section>
 );
 
-const CourseAnalyticsSection = ({ details }: { details: CourseDetail[] }) => (
-    <section className="flex flex-col gap-7">
-      <div className="flex flex-col gap-6">
-        <h2 className="text-xl font-semibold text-black">Course analytics</h2>
-        <div className="flex flex-col gap-6 md:grid md:grid-cols-3 md:gap-x-12 md:gap-y-8">
-          {details.map((detail) => (
-            <div
-              key={detail.label}
-              className="flex items-center gap-3"
+const StrengthsSection = (): JSX.Element => (
+    <section className="flex flex-col items-start gap-6 w-full animate-fade-in [--animation-delay:800ms]">
+      <h2 className={sectionTitleStyles}>Personalised Strengths</h2>
+      <div className="flex flex-col items-start gap-5 w-full">
+        <div className="w-full grid grid-cols-1 gap-2 sm:flex sm:flex-wrap animate-fade-in [--animation-delay:1000ms]">
+          {strengths.map((strength, index) => (
+            <Badge
+              key={`strength-${index}`}
+              variant="secondary"
+              className={`${pillBaseStyles} flex justify-center bg-[#e8f6e7] text-[#40bb33] hover:bg-[#dff0de]`}
             >
-              <div className="p-3 bg-[#566fe91a] rounded-xl">
-                <div className="w-7 h-7 relative">
-                  <img
-                    className="absolute inset-0 m-auto"
-                    alt={detail.label}
-                    src={detail.icon}
-                  />
-                </div>
-              </div>
-              <div className="flex flex-col gap-2">
-                <div className="text-sm font-medium text-black opacity-60">
-                  {detail.label}
-                </div>
-                <div className="text-base text-black">{detail.value}</div>
-              </div>
+              {strength}
+            </Badge>
+          ))}
+        </div>
+        <ul className="flex flex-col items-start gap-4 w-full animate-fade-in [--animation-delay:1200ms]">
+          {achievements.map((achievement, index) => (
+            <li key={`achievement-${index}`} className="flex items-start gap-3 w-full">
+              <img src="/good.svg" alt="Strength icon" className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base text-[#394169]">
+                {achievement}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+  
+  const ImprovementAreasSection = (): JSX.Element => (
+    <section className="flex flex-col items-start gap-6 w-full animate-fade-in [--animation-delay:1400ms]">
+      <h2 className={sectionTitleStyles}>Identified Areas for Improvement</h2>
+      <div className="flex flex-col items-start gap-5 w-full">
+        <div className="w-full grid grid-cols-1 gap-2 sm:flex sm:flex-wrap animate-fade-in [--animation-delay:1600ms]">
+          {improvementAreas.map((area, index) => (
+            <Badge
+              key={index}
+              variant="secondary"
+              className={`${pillBaseStyles} flex justify-center bg-[#feedf0] text-[#e3837e] hover:bg-[#fce5e8]`}
+            >
+              {area}
+            </Badge>
+          ))}
+        </div>
+        <div className="flex flex-col items-start gap-4 w-full animate-fade-in [--animation-delay:1800ms]">
+          {improvementPoints.map((point, index) => (
+            <div key={index} className="flex items-start gap-3 w-full">
+              <img src="/bad.svg" alt="Improvement area icon" className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base text-[#394169]">
+                {point}
+              </p>
             </div>
           ))}
         </div>
       </div>
-      
-      {/* --- MODIFIED SECTION --- */}
-      {/* Main wrapper for all buttons with a 12px (gap-3) vertical gap */}
-      <div className="flex flex-col gap-3">
-        {/* Wrapper for the first two buttons using CSS Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Button className="w-full rounded-[100px]  px-12 py-3 font-semibold text-[#566fe9] border border-[#566fe9] sm:px-20">
-            Start Your Journey
-          </Button>
-          <Button className="w-full rounded-[100px]  px-12 py-3 font-semibold text-[#566fe9] border border-[#566fe9] sm:px-20">
-            Start Your Journey
-          </Button>
+    </section>
+  );
+  
+  // --- MODIFIED: JSX updated to render a simple list ---
+  const ActionPlanSection = (): JSX.Element => (
+    <section className="flex flex-col items-start gap-6 w-full animate-fade-in [--animation-delay:2000ms]">
+      <h2 className={sectionTitleStyles}>AI-Suggested Action Plan</h2>
+      <div className="flex flex-col items-start gap-5 w-full animate-fade-in [--animation-delay:2200ms]">
+        <div className="w-full grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
+          {actionPlanTags.map((tag, index) => (
+            <Badge
+              key={index}
+              variant="secondary"
+              className={`${pillBaseStyles} flex justify-center bg-[#f6f6fe] text-[#566fe9] hover:bg-[#eeeefe] transition-colors`}
+            >
+              {tag}
+            </Badge>
+          ))}
         </div>
-
-        {/* Third button */}
-        <Button className="w-full rounded-[100px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20">
-          Start Your Journey
-        </Button>
+        <div className="flex flex-col items-start gap-4 w-full animate-fade-in [--animation-delay:2400ms]">
+          {implementationItems.map((item, index) => (
+            <div key={index} className="flex items-start gap-3 w-full">
+              <img src="/aisuggestion.svg" alt="AI suggestion icon" className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base text-[#394169]">
+                {item}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
-      {/* --- END OF MODIFIED SECTION --- */}
-
     </section>
   );
 
-const WhatYouWillLearnSection = ({
-  skills,
-  outcomes,
-}: {
-  skills: string[];
-  outcomes: string[];
-}) => (
-  <section className="flex flex-col gap-6">
-    <h2 className="text-xl font-semibold text-black">What you'll learn</h2>
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap">
-        {skills.map((skill) => (
-          <Badge
-            key={skill}
-            className="flex h-10 w-64 items-center justify-center rounded-full bg-[#eef2ff] px-5 text-sm font-medium text-[#566fe9] sm:w-auto sm:justify-start"
-          >
-            {skill}
-          </Badge>
-        ))}
-      </div>
-      <div className="flex flex-col gap-4">
-        {outcomes.map((outcome) => (
-          <div key={outcome} className="flex items-start gap-3">
-            <div className="flex-shrink-0 mt-1">
-              <img
-                className="h-[16.25px] w-[16.25px]"
-                alt="Checkmark"
-                src="/ticked.svg"
-              />
-            </div>
-            <p className="text-base leading-6 text-black">{outcome}</p>
-          </div>
-        ))}
-      </div>
-    </div>
-  </section>
-);
-
-const TeacherProfileSection = () => (
-  <section className="flex flex-col gap-6">
-    <h2 className="text-xl font-semibold text-black">Meet your teacher</h2>
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center gap-4">
-        <Avatar className="h-14 w-14">
-          <AvatarImage src="/teacher1.svg" alt="Arjun Mehta" />
-        </Avatar>
-        <div className="flex flex-col gap-1">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="text-base font-semibold text-black">
-              Arjun Mehta
-            </span>
-            <Badge
-              variant="outline"
-              className="flex items-center gap-1 rounded-[30px] border-[#566fe940] bg-[#566fe91a] py-1 pl-2.5 pr-3.5 text-[#566fe9]"
-            >
-              <div className="relative h-4 w-4">
-                <div className="relative left-px top-px h-[13px] w-3.5">
-                  <img
-                    className="absolute left-px top-0 h-3 w-[13px]"
-                    alt="Vector"
-                    src="/vector.svg"
-                  />
-                  <img
-                    className="absolute left-0 top-0 h-[13px] w-3.5"
-                    alt="Vector"
-                    src="/star1.svg"
-                  />
-                </div>
-              </div>
-              <span className="text-sm font-medium">Top Educator</span>
-            </Badge>
-          </div>
-          <span className="text-sm font-medium text-black opacity-60">
-            AI Educator at DeepLearn Lab.
-          </span>
-        </div>
-      </div>
-      <p className="text-base leading-6 text-black">
-        I'm a Digital Designer & teacher at BYOL international. Sharing is who I
-        am, and teaching is where I am at my best, because I've been on both
-        sides of that equation, and getting to deliver useful training is my
-        meaningful way to be a part of the creative community.
-        <br />
-        <br />
-        I've spent a long time watching others learn, and teach, to refine how I
-        work with you to be efficient, useful and, most importantly, memorable.
-        I want you to carry what I've shown you into a bright future.
-      </p>
-    </div>
-  </section>
-);
-
-
-
-const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
-  <section className="flex flex-col gap-6">
-    <h2 className="text-xl font-semibold text-black">FAQs</h2>
-    <Accordion type="single" collapsible className="w-full">
-      {faqs.map((faq, index) => (
-        <AccordionItem
-          key={index}
-          value={`faq-${index}`}
-          className="border-b border-solid border-gray-200"
+const ActionButtonsSection = ({ studentName }: { studentName: string }): JSX.Element => (
+    <section className="w-full animate-fade-in [--animation-delay:3000ms] flex flex-col gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+        <Button
+          variant="outline"
+          className="w-full h-auto px-6 py-4 rounded-[100px] border-1 border-[#566fe9] text-[#566fe9] font-semibold text-base hover:bg-[#566fe9] hover:text-white transition-colors"
         >
-          <AccordionTrigger className="py-4 text-left text-base font-semibold text-black">
-            {faq.question}
-          </AccordionTrigger>
-          <AccordionContent className="pb-4 text-base text-black">
-            {faq.answer}
-          </AccordionContent>
-        </AccordionItem>
-      ))}
-    </Accordion>
-  </section>
-);
+          Update Course Map
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full h-auto px-6 py-4 rounded-[100px] border-1 border-[#566fe9] text-[#566fe9] font-semibold text-base hover:bg-[#566fe9] hover:text-white transition-colors"
+        >
+          Schedule 1:1 Session
+        </Button>
+      </div>
+  
+      <Button className="w-full h-auto px-6 py-4 bg-[#566fe9] hover:bg-[#4a5fd1] rounded-[50px] text-white font-semibold text-base transition-colors">
+        {`Message ${studentName}`}
+      </Button>
+    </section>
+  );
+
 
 // --- MAIN PAGE COMPONENT ---
-export default function MyCoursesPage(): JSX.Element {
+export default function StudentProfilePage(): JSX.Element {
+  const studentName = studentData.find(item => item.label === "Student Name")?.value.split(" ")[0] || "Student";
+
   return (
     <>
       <Sphere />
-      <div className="flex h-full w-full flex-col font-sans text-gray-900">
+      <div className="flex h-full w-full flex-col font-['Plus_Jakarta_Sans',_sans-serif] text-gray-900">
         <main className="flex-grow overflow-y-auto">
-          <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
+          <div className="relative z-10 mx-auto w-full max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             {/* Central Content Container */}
-            <div className="mx-auto flex w-full max-w-[80%] flex-col gap-10 md:gap-12">
-              <div className="flex flex-col gap-6">
-                <CourseHeader />
-                <CourseBanner />
-              </div>
-
-              <CourseIntroduction tags={courseTags} />
-              <CourseAnalyticsSection details={courseAnalytics} />
-              <CourseDetailsSection details={courseDetails} />
-              
-              <WhatYouWillLearnSection
-                skills={skills}
-                outcomes={learningOutcomes}
-              />
+            <div className="mx-auto flex w-full max-w-[850px] flex-col items-start gap-12 md:gap-16">
+              <StudentProfileSection />
+              <StrengthsSection />
+              <ImprovementAreasSection />
+              <ActionPlanSection />
               <CourseMap />
-              <TeacherProfileSection />
-            
-              <FaqSection faqs={faqs} />
+              <ActionButtonsSection studentName={studentName} />
             </div>
           </div>
         </main>

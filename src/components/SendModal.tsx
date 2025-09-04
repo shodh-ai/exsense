@@ -81,7 +81,7 @@ export const SendModal = ({
             className="w-full rounded-lg py-2.5 font-medium border-gray-300 hover:bg-gray-50 text-gray-800"
             onClick={onClose} // Use the onClose prop
           >
-            Got questions?
+            Record Again
           </Button>
           <Button
             className="w-full rounded-lg py-2.5 font-medium bg-[#6366F1] hover:bg-[#4F46E5] text-white"

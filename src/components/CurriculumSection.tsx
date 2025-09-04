@@ -1,20 +1,24 @@
 "use client";
 
-import React, { JSX, useState } from "react";
+import React, { JSX, useState, useRef, useEffect } from "react";
 import { v4 as uuidv4 } from 'uuid';
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
 import { Textarea } from "@/components/textarea";
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon, Trash2Icon, ChevronDown } from "lucide-react";
 
 // --- TYPE DEFINITIONS ---
+const environments = ["VS Code Editor", "Salesforce", "Figma", "Jupyter", "Google Docs"] as const;
+type Environment = typeof environments[number];
+
 export interface Module {
   id: string;
   title: string;
+  environment: Environment;
 }
 
 export interface SectionData {
-  id: string;
+  id:string;
   title: string;
   description: string;
   modules: Module[];
@@ -27,9 +31,77 @@ interface CurriculumSectionProps {
   onDelete: (id: string) => void;
 }
 
+// --- Environment Dropdown Component ---
+const EnvironmentDropdown = ({
+  selectedEnvironment,
+  onEnvironmentChange,
+}: {
+  selectedEnvironment: Environment;
+  onEnvironmentChange: (environment: Environment) => void;
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const handleSelect = (environment: Environment) => {
+    onEnvironmentChange(environment);
+    setIsOpen(false);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  return (
+    <div className="relative inline-block text-left" ref={dropdownRef}>
+      <div>
+        {/* MODIFICATION START */}
+        <button
+          type="button"
+          className="inline-flex items-center justify-between w-[180px] h-[42px] rounded-[40px] pl-[16px] pr-[12px] py-[12px] bg-blue-100 text-sm font-medium text-blue-700 hover:bg-blue-200 focus:outline-none "
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          {selectedEnvironment}
+          <ChevronDown className="-mr-1 ml-2 h-5 w-5" />
+        </button>
+        {/* MODIFICATION END */}
+      </div>
+      {isOpen && (
+        <div className="origin-top-right absolute left-0 mt-2 w-56 rounded-md shadow-lg bg-white  z-10">
+          <div className="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
+            {environments.map((environment) => (
+              <a
+                key={environment}
+                href="#"
+                className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                role="menuitem"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSelect(environment);
+                }}
+              >
+                {environment}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 
 export const CurriculumSection = ({ section, onUpdate, onDelete }: CurriculumSectionProps): JSX.Element => {
   const [newModuleTitle, setNewModuleTitle] = useState("");
+  const [newModuleEnvironment, setNewModuleEnvironment] = useState<Environment>("VS Code Editor");
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const handleAddModule = () => {
@@ -37,23 +109,34 @@ export const CurriculumSection = ({ section, onUpdate, onDelete }: CurriculumSec
       inputRef.current?.focus();
       return;
     }
-    const newModule: Module = { id: uuidv4(), title: newModuleTitle.trim() };
+    const newModule: Module = {
+        id: uuidv4(),
+        title: newModuleTitle.trim(),
+        environment: newModuleEnvironment,
+    };
     const updatedModules = [...section.modules, newModule];
     onUpdate(section.id, { modules: updatedModules });
     setNewModuleTitle("");
+    setNewModuleEnvironment("VS Code Editor");
   };
 
   const handleDeleteModule = (moduleId: string) => {
-    const updatedModules = section.modules.filter(m => m.id !== moduleId); 
+    const updatedModules = section.modules.filter(m => m.id !== moduleId);
     onUpdate(section.id, { modules: updatedModules });
   };
+
+  const handleUpdateModule = (moduleId: string, updatedField: Partial<Module>) => {
+    const updatedModules = section.modules.map(m => m.id === moduleId ? { ...m, ...updatedField } : m);
+    onUpdate(section.id, { modules: updatedModules });
+  };
+
 
   return (
     <div className="w-full bg-[#fbfbfe] border border-gray-200 rounded-2xl p-4 space-y-[20px]">
       {/* --- Section Title --- */}
       <div className="space-y-[20px]" >
         <label className="text-sm font-semibold text-[#394169]">Section Title</label>
-        <div className="mt-2 flex items-center w-full bg-white border border-gray-200 p-3 pr-[5px] gap-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all duration-200 rounded-[600px] h-[50px]">
+        <div className="mt-2 flex items-center w-full bg-white border border-gray-200 p-3 pr-[5px] gap-2 focus-outline-none transition-all duration-200 rounded-[600px] h-[50px]">
           <Input
             placeholder="e.g., Introduction to Python"
             value={section.title}
@@ -69,7 +152,7 @@ export const CurriculumSection = ({ section, onUpdate, onDelete }: CurriculumSec
       {/* --- Section Description --- */}
       <div className="space-y-[20px]">
         <label className="text-sm font-semibold text-[#394169]">Section Description</label>
-        <div className="mt-2 flex items-center w-full bg-white border border-gray-200 p-3 pr-[5px] gap-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all duration-200 rounded-[12px]">
+        <div className="mt-2 flex items-center w-full bg-white border border-gray-200 p-3 pr-[5px] gap-2 f focus-outline-none transition-all duration-200 rounded-[12px]">
             <Textarea
               placeholder="Provide a detailed description of this course section..."
               value={section.description}
@@ -80,45 +163,52 @@ export const CurriculumSection = ({ section, onUpdate, onDelete }: CurriculumSec
       </div>
 
       {/* --- Modules --- */}
-      <div className="space-y-[20px]">
-        <label className="text-sm font-semibold text-[#394169]">Modules</label>
-        <div className="mt-2 space-y-[8px]">
-          {section.modules.map(module => (
-            <div key={module.id} className="flex items-center w-full bg-white border border-gray-200 p-3 pr-[5px] gap-2 transition-all duration-200 rounded-[600px] h-[50px]">
-              <div className="flex-grow select-none text-sm font-semibold p-[16px]">{module.title}</div>
-              <Button variant="ghost" size="icon" onClick={() => handleDeleteModule(module.id)} className="text-[#566FE9] hover:text-red-500 hover:bg-red-50 w-10 h-10  rounded-[100px]">
-                <Trash2Icon className="w-5 h-5" />
-              </Button>
+        <div className="space-y-[20px]">
+            <label className="text-sm font-semibold text-[#394169]">Modules</label>
+            <div className="mt-2 space-y-[8px]">
+                {section.modules.map(module => (
+                    <div key={module.id} className="flex items-center w-full bg-white border border-gray-200 p-[4px] pr-[5px] gap-2 transition-all duration-200 rounded-[600px] h-[50px]">
+                        <EnvironmentDropdown
+                            selectedEnvironment={module.environment}
+                            onEnvironmentChange={(environment) => handleUpdateModule(module.id, { environment })}
+                        />
+                        <Input
+                            placeholder="e.g., Understanding CSS Selectors"
+                            value={module.title}
+                            onChange={(e) => handleUpdateModule(module.id, { title: e.target.value })}
+                            className="flex-grow border-0 p-[4px] h-auto bg-transparent focus:outline-none text-sm font-semibold"
+                        />
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteModule(module.id)} className="text-[#566FE9] hover:text-red-500 hover:bg-red-50 w-10 h-10 rounded-[100px]">
+                            <Trash2Icon className="w-5 h-5" />
+                        </Button>
+                    </div>
+                ))}
+                <div className="flex items-center w-full bg-white border border-gray-200 p-1 pr-[5px] gap-2  focus-outline-none transition-all duration-200 rounded-[600px] h-[50px]">
+                    <div className="pl-0">
+                        <EnvironmentDropdown
+                            selectedEnvironment={newModuleEnvironment}
+                            onEnvironmentChange={setNewModuleEnvironment}
+                        />
+                    </div>
+                    <Input
+                        placeholder="Add new concept"
+                        value={newModuleTitle}
+                        onChange={(e) => setNewModuleTitle(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleAddModule(); }}
+                        ref={inputRef}
+                        className="flex-grow border-0 p-0 pl-[16px] h-auto bg-transparent focus:outline-none text-sm font-semibold"
+                    />
+                    <Button onClick={handleAddModule} size="icon" className="group bg-[#E9EBFD] hover:bg-[#4a5fd1] w-10 h-10 flex-shrink-0 rounded-[600px]">
+                        <PlusIcon className="w-5 h-5 text-[#566FE9] group-hover:text-white" />
+                    </Button>
+                </div>
             </div>
-          ))}
-          <div className="flex items-center w-full bg-white border border-gray-200 p-2 pr-[5px] gap-2 focus-within:ring-2 focus-outline-none transition-all duration-200 rounded-[600px] h-[50px]">
-            <Input
-              placeholder="Add new concept"
-              value={newModuleTitle}
-              onChange={(e) => setNewModuleTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleAddModule(); }}
-              ref={inputRef}
-              className="flex-grow border-0 p-0 pl-[16px] h-auto bg-transparent focus:outline-none text-sm font-semibold"
-            />
-            {/* MODIFICATION START */}
-            <Button onClick={() => {
-              if (newModuleTitle.trim() === "") {
-                inputRef.current?.focus();
-              } else {
-                handleAddModule();
-              }
-            }} size="icon" className="group bg-[#E9EBFD] hover:bg-[#4a5fd1] w-10 h-10 flex-shrink-0 rounded-[600px]">
-              <PlusIcon className="w-5 h-5 text-[#566FE9] group-hover:text-white" />
-            </Button>
-            {/* MODIFICATION END */}
-          </div>
         </div>
-      </div>
 
       {/* --- Scope --- */}
       <div className="space-y-[20px]">
         <label className="text-sm font-semibold text-[#394169]">Scope</label>
-        <div className="mt-2 flex items-center w-full bg-white border border-gray-200 p-3 pr-[5px] gap-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all duration-200 rounded-[12px]">
+        <div className="mt-2 flex items-center w-full bg-white border border-gray-200 p-3 pr-[5px] gap-2 focus-within:ring-2 focus-outline-none  duration-200 rounded-[12px]">
             <Textarea
               placeholder="Define the in-scope and out-of-scope boundaries for this section..."
               value={section.scope}
