@@ -17,6 +17,32 @@ const plusJakartaSans = Plus_Jakarta_Sans({
  weight: ["400", "500", "600", "700"],
 });
 
+const Breadcrumb = () => (
+    <div className="flex items-center text-sm text-gray-500 mb-4">
+      <a href="/student_dashboard" className="flex items-center hover:underline">
+        <svg
+          className="w-5 h-5 mr-2"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2"
+            d="M15 19l-7-7 7-7"
+          ></path>
+        </svg>
+      </a>
+      <a href="/student_dashboard" className="hover:underline">
+        Dashboard
+      </a>
+      <span className="mx-2">·</span>
+      <span className="text-gray-800">Explore Courses</span>
+    </div>
+  );
+
 
 const CoursesPage = (): JSX.Element => {
  // Dynamic courses state
@@ -59,6 +85,7 @@ const CoursesPage = (): JSX.Element => {
  <main className="relative w-full h-[90%] max-w-4xl self-center rounded-3xl p-6 md:p-8 z-10 flex flex-col mt-0 overflow-hidden custom-scrollbar pr-2">
  {/* STICKY HEADER CONTAINER */}
  <div className="sticky top-0 bg-transparent z-20 pb-6">
+ <Breadcrumb />
  <div className="w-full flex justify-between items-center mb-8">
  <h1 className="font-semibold text-black text-xl md:text-2xl">
  Our Interactive Session

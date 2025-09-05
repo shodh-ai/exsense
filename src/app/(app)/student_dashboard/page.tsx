@@ -1,277 +1,176 @@
-"use client";
+'use client';
 
+import { SearchIcon } from "lucide-react";
 import React, { JSX } from "react";
-
-import { Badge } from "@/components/badge";
 import { Button } from "@/components/button";
 import { Card, CardContent } from "@/components/card";
 import Sphere from "@/components/Sphere";
 import Footer from "@/components/Footer";
-import CourseMap from "@/components/CourseMap";
+import Link from "next/link";
+// Updated import to use the correct hook from your useApi file
+import { useMyEnrollments } from "@/hooks/useApi";
 
-// --- Data Definitions ---
-const studentData = [
+// Data for overview cards, tailored for a student's perspective
+const overviewCards = [
   {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012663.svg",
-    label: "Student Name",
-    value: "Sanket Sharma",
+    title: "Courses in Progress",
+    value: "4",
+    trend: "1 new course started this week",
+    positive: true,
   },
   {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664-1.svg",
-    label: "Learning Style",
-    value: "Visual + Theoretical",
+    title: "Completed Courses",
+    value: "8",
+    trend: "2 courses completed this month",
+    positive: true,
   },
   {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012663-1.svg",
-    label: "Average Test Score",
-    value: "78%",
-  },
-  {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664-3.svg",
-    label: "Completion Rate",
-    value: "65%",
-  },
-  {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664.svg",
-    label: "Average Time Spent",
-    value: "3h 42m",
-  },
-  {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664-2.svg",
-    label: "Accuracy Rate",
-    value: "82%",
+    title: "Average Score",
+    value: "85%",
+    trend: "-2% lower score than last week",
+    positive: false,
   },
 ];
 
-const strengths = [
-  "Practical Engagement",
-  "Foundational Understanding",
-  "AI Adaptability",
-  "Focused Learning",
-  "Clear Communication",
-];
+// Narrow types for enrollments to align with expected UI usage
+type Enrollment = {
+  id: string | number;
+  progress?: number | null;
+  course: {
+    id: string | number;
+    title?: string; // used in text and <img alt>, must be string when present
+    imageUrl?: string | null;
+    instructorName?: string | null;
+  } | null;
+};
 
-const achievements = [
-  "Riya completed all hands-on lab exercises within the first attempt for 80% of the modules.",
-  "She demonstrates excellent recall of key networking and storage concepts in multi-cloud setups.",
-  "Her score improvement between Module 2 and Module 4 was +18% after applying targeted AI suggestions.",
-  "Her code comments and explanations in collaborative assignments are clear and concise.",
-];
-
-const improvementAreas = [
-  "Engagement Strategies Needed",
-  "Core Concepts Revisit Required",
-  "Targeted Focus Areas",
-  "Communication Gaps Detected",
-];
-
-const improvementPoints = [
-  "Riya faced challenges in completing hands-on lab exercises for 20% of the modules on her first attempt.",
-  "She occasionally struggles to recall advanced networking and storage concepts in cloud environments.",
-  "Her score improvement between Module 2 and Module 4 was only +5%, indicating a need for more effective AI suggestions.",
-  "Her code comments and explanations in collaborative assignments sometimes lack clarity and detail.",
-];
-
-const actionPlanTags = [
-  "Interactive Learning Modules",
-  "Address barriers to effective teamwork",
-  "Skill Development Focus on Collaboration",
-  "Monthly workshops to enhance understanding of key principles",
-];
-
-// --- MODIFIED: Data structure updated to be a flat array ---
-const implementationItems = [
-  "Feedback Loop Implementation",
-  "Weekly sessions to review participant input and adjust strategies.",
-  "Mentorship Program Expansion",
-  "Establish connections to foster peer learning and support.",
-];
-
-// --- STYLES ---
-const pillBaseStyles =
-  "px-4 py-2 rounded-[30px] font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-xs leading-4 tracking-normal border-0";
-const sectionTitleStyles =
-  "w-full font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-[#394169] text-xl md:text-2xl";
-
-// --- SUB-COMPONENTS ---
-
-const StudentProfileSection = (): JSX.Element => (
-  <section className="flex flex-col w-full items-start gap-6 relative animate-fade-in [--animation-delay:400ms]">
-    <h2 className={sectionTitleStyles}>Student Profile</h2>
-    <div className="flex flex-col md:flex-row items-center md:items-start gap-6 w-full animate-fade-in [--animation-delay:600ms]">
-      <img
-        className="w-48 h-48 md:w-60 md:h-60 rounded-lg object-cover flex-shrink-0"
-        alt="Student profile picture"
-        src="https://c.animaapp.com/metm9igaQcD0W7/img/rectangle-3777.png"
-      />
-      <div className="flex flex-col flex-1 items-start w-full">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full">
-          {studentData.map((item, index) => (
-            <Card
-              key={index}
-              className="animate-fade-in border-none bg-transparent shadow-none"
-              style={{ "--animation-delay": `${700 + index * 100}ms` } as React.CSSProperties}
-            >
-              <CardContent className="flex items-center gap-3 p-0">
-                <img
-                  className="w-10 h-10 flex-shrink-0"
-                  alt={`${item.label} icon`}
-                  src={item.icon}
-                />
-                <div className="flex flex-col items-start gap-1.5 min-w-0">
-                  <div className="w-full font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-sm text-[#8187a0] truncate">
-                    {item.label}
-                  </div>
-                  <div className="font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-base text-[#394169]">
-                    {item.value}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </div>
-  </section>
-);
-
-const StrengthsSection = (): JSX.Element => (
-    <section className="flex flex-col items-start gap-6 w-full animate-fade-in [--animation-delay:800ms]">
-      <h2 className={sectionTitleStyles}>Personalised Strengths</h2>
-      <div className="flex flex-col items-start gap-5 w-full">
-        <div className="w-full grid grid-cols-1 gap-2 sm:flex sm:flex-wrap animate-fade-in [--animation-delay:1000ms]">
-          {strengths.map((strength, index) => (
-            <Badge
-              key={`strength-${index}`}
-              variant="secondary"
-              className={`${pillBaseStyles} flex justify-center bg-[#e8f6e7] text-[#40bb33] hover:bg-[#dff0de]`}
-            >
-              {strength}
-            </Badge>
-          ))}
-        </div>
-        <ul className="flex flex-col items-start gap-4 w-full animate-fade-in [--animation-delay:1200ms]">
-          {achievements.map((achievement, index) => (
-            <li key={`achievement-${index}`} className="flex items-start gap-3 w-full">
-              <img src="/good.svg" alt="Strength icon" className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base text-[#394169]">
-                {achievement}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
-  
-  const ImprovementAreasSection = (): JSX.Element => (
-    <section className="flex flex-col items-start gap-6 w-full animate-fade-in [--animation-delay:1400ms]">
-      <h2 className={sectionTitleStyles}>Identified Areas for Improvement</h2>
-      <div className="flex flex-col items-start gap-5 w-full">
-        <div className="w-full grid grid-cols-1 gap-2 sm:flex sm:flex-wrap animate-fade-in [--animation-delay:1600ms]">
-          {improvementAreas.map((area, index) => (
-            <Badge
-              key={index}
-              variant="secondary"
-              className={`${pillBaseStyles} flex justify-center bg-[#feedf0] text-[#e3837e] hover:bg-[#fce5e8]`}
-            >
-              {area}
-            </Badge>
-          ))}
-        </div>
-        <div className="flex flex-col items-start gap-4 w-full animate-fade-in [--animation-delay:1800ms]">
-          {improvementPoints.map((point, index) => (
-            <div key={index} className="flex items-start gap-3 w-full">
-              <img src="/bad.svg" alt="Improvement area icon" className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base text-[#394169]">
-                {point}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-  
-  // --- MODIFIED: JSX updated to render a simple list ---
-  const ActionPlanSection = (): JSX.Element => (
-    <section className="flex flex-col items-start gap-6 w-full animate-fade-in [--animation-delay:2000ms]">
-      <h2 className={sectionTitleStyles}>AI-Suggested Action Plan</h2>
-      <div className="flex flex-col items-start gap-5 w-full animate-fade-in [--animation-delay:2200ms]">
-        <div className="w-full grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
-          {actionPlanTags.map((tag, index) => (
-            <Badge
-              key={index}
-              variant="secondary"
-              className={`${pillBaseStyles} flex justify-center bg-[#f6f6fe] text-[#566fe9] hover:bg-[#eeeefe] transition-colors`}
-            >
-              {tag}
-            </Badge>
-          ))}
-        </div>
-        <div className="flex flex-col items-start gap-4 w-full animate-fade-in [--animation-delay:2400ms]">
-          {implementationItems.map((item, index) => (
-            <div key={index} className="flex items-start gap-3 w-full">
-              <img src="/aisuggestion.svg" alt="AI suggestion icon" className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base text-[#394169]">
-                {item}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-
-const ActionButtonsSection = ({ studentName }: { studentName: string }): JSX.Element => (
-    <section className="w-full animate-fade-in [--animation-delay:3000ms] flex flex-col gap-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-        <Button
-          variant="outline"
-          className="w-full h-auto px-6 py-4 rounded-[100px] border-1 border-[#566fe9] text-[#566fe9] font-semibold text-base hover:bg-[#566fe9] hover:text-white transition-colors"
-        >
-          Update Course Map
-        </Button>
-        <Button
-          variant="outline"
-          className="w-full h-auto px-6 py-4 rounded-[100px] border-1 border-[#566fe9] text-[#566fe9] font-semibold text-base hover:bg-[#566fe9] hover:text-white transition-colors"
-        >
-          Schedule 1:1 Session
-        </Button>
-      </div>
-  
-      <Button className="w-full h-auto px-6 py-4 bg-[#566fe9] hover:bg-[#4a5fd1] rounded-[50px] text-white font-semibold text-base transition-colors">
-        {`Message ${studentName}`}
-      </Button>
-    </section>
-  );
-
-
-// --- MAIN PAGE COMPONENT ---
-export default function StudentProfilePage(): JSX.Element {
-  const studentName = studentData.find(item => item.label === "Student Name")?.value.split(" ")[0] || "Student";
+const StudentDashboard = (): JSX.Element => {
+  // Use the useMyEnrollments hook to fetch the student's enrolled courses
+  // The data will be an array of Enrollment objects, which we assume contain course details
+  const { data: enrollments = [], isLoading, error } = useMyEnrollments();
 
   return (
     <>
       <Sphere />
-      <div className="flex h-full w-full flex-col font-['Plus_Jakarta_Sans',_sans-serif] text-gray-900">
-        <main className="flex-grow overflow-y-auto">
-          <div className="relative z-10 mx-auto w-full max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
-            {/* Central Content Container */}
-            <div className="mx-auto flex w-full max-w-[850px] flex-col items-start gap-12 md:gap-16">
-              <StudentProfileSection />
-              <StrengthsSection />
-              <ImprovementAreasSection />
-              <ActionPlanSection />
-              <CourseMap />
-              <ActionButtonsSection studentName={studentName} />
+      <div className="relative w-full max-h-[87%] overflow-x-hidden ">
+        <div className="flex flex-col w-full max-w-4xl mx-auto pt-16 px-4 sm:px-6 lg:px-8 pb-10 relative z-10">
+          {/* Student Overview section */}
+          <section className="flex flex-col gap-6 w-full mb-12">
+            <h2 className="font-bold text-[18px] leading-[22px] text-[#394169]">
+              My Performance Summary
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 w-full">
+              {overviewCards.map((card, index) => (
+                <Card
+                  key={index}
+                  className="border border-[#566fe966] rounded-xl bg-white"
+                >
+                  <CardContent className="p-4">
+                    <div className="flex flex-col gap-[18px]">
+                      <p className="font-semibold text-[16px] leading-[16px] text-[#8187a0]">
+                        {card.title}
+                      </p>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-[28px] leading-[34px] text-[#394169]">
+                            {card.value}
+                          </span>
+                          <img
+                            className="w-6 h-6"
+                            alt="Trend indicator"
+                            src={
+                              card.positive
+                                ? "/up_arrow.svg"
+                                : "/down_arrow.svg"
+                            }
+                          />
+                        </div>
+                        <p className="font-semibold text-[12px] leading-[16px] text-[#8187a0] whitespace-nowrap">
+                          {card.trend}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-          </div>
-        </main>
-        <div className="h-[60px] w-full flex-shrink-0">
-          <Footer />
+          </section>
+
+          {/* My Enrolled Courses section */}
+          <section className="flex flex-col gap-5 w-full">
+            <div className="flex flex-wrap items-center justify-between w-full gap-2">
+              <h2 className="font-bold text-[18px] leading-[22px] text-[#394169]">
+                My Enrolled Courses
+              </h2>
+              <Button
+                asChild
+                variant="ghost"
+                className="bg-[#566fe91a] rounded-[40px] text-[#566fe9] hover:bg-[#566fe930] h-[32px] px-4 py-2 flex items-center gap-1"
+              >
+                <Link href="/browse-courses">
+                  <SearchIcon className="w-4 h-4" />
+                  <span className="font-semibold text-[12px] leading-[16px]">
+                    Browse
+                  </span>
+                </Link>
+              </Button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+              {isLoading && <p>Loading your enrolled courses...</p>}
+              {error && <p className="text-red-500">Error loading your courses</p>}
+              {!isLoading && !error && enrollments.map((enrollment: Enrollment) => (
+                // Assuming the API returns the course object nested within the enrollment object
+                enrollment.course && (
+                  <Link key={enrollment.id} href={`/student/course/${enrollment.course.id}`} className="block">
+                    <Card
+                      className="border border-[#566fe966] rounded-xl bg-white overflow-hidden hover:shadow-md transition-shadow"
+                    >
+                      <CardContent className="p-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
+                          <img
+                            className="w-full h-40 object-cover sm:w-[88px] sm:h-[88px] sm:flex-shrink-0 sm:m-4"
+                            alt={enrollment.course.title || "Course image"}
+                            src={enrollment.course.imageUrl || "/1.png"} // Use course image if available
+                          />
+                          <div className="flex flex-col flex-1 gap-3 min-w-0 p-4 sm:p-0 sm:pr-4">
+                            <div className="flex flex-col gap-0.5">
+                              <h3 className="font-semibold text-[14px] leading-tight text-[#394169] truncate">
+                                {enrollment.course.title}
+                              </h3>
+                              <p className="font-semibold text-[12px] leading-[16px] text-[#8187a0]">
+                                {enrollment.course.instructorName || 'Instructor not specified'}
+                              </p>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              {/* Student's progress would likely be on the enrollment record */}
+                              {typeof enrollment.progress === 'number' && (
+                                <div>
+                                  <p className="font-semibold text-[12px] leading-[16px] text-[#394169] mb-1">
+                                    {enrollment.progress}% complete
+                                  </p>
+                                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                    <div className="bg-[#566fe9] h-1.5 rounded-full" style={{ width: `${enrollment.progress}%` }}></div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                )
+              ))}
+              {!isLoading && !error && enrollments.length === 0 && (
+                <p>You haven't enrolled in any courses yet.</p>
+              )}
+            </div>
+          </section>
         </div>
       </div>
+      <Footer />
     </>
   );
-}
+};
+
+export default StudentDashboard;

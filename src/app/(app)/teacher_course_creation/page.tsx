@@ -351,6 +351,38 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
   </section>
 );
 
+const Breadcrumb = () => (
+  <div className="flex items-center text-sm text-gray-500">
+    <a href="#" className="flex items-center hover:underline">
+      <svg
+        className="w-5 h-5 mr-2"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+          d="M15 19l-7-7 7-7"
+        ></path>
+      </svg>
+    </a>
+    <a href="/teacher-dash" className="hover:underline">
+      Dashboard
+    </a>
+   
+    
+    <span className="mx-2">·</span>
+    <a href="/Process_Curriculum" className="hover:underline">
+      Curriculum Editor
+    </a>
+    <span className="mx-2">·</span>
+    <span className="text-gray-800">Course Overview</span>
+  </div>
+);
+
 // --- MAIN PAGE COMPONENT ---
 export default function MyCoursesPage(): JSX.Element {
   return (
@@ -361,6 +393,7 @@ export default function MyCoursesPage(): JSX.Element {
           <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             {/* Central Content Container */}
             <div className="mx-auto flex w-full max-w-[80%] flex-col gap-10 md:gap-12">
+              <Breadcrumb />
               <div className="flex flex-col gap-6">
                 <CourseHeader />
                 <CourseBanner />
@@ -368,7 +401,7 @@ export default function MyCoursesPage(): JSX.Element {
 
               <CourseIntroduction tags={courseTags} />
               {/* --- SECTION ADDED HERE --- */}
-           
+
               <CourseDetailsSection details={courseDetails} />
               <WhatYouWillLearnSection
                 skills={skills}
@@ -381,8 +414,8 @@ export default function MyCoursesPage(): JSX.Element {
           </div>
         </main>
         <div className="h-[60px] w-full flex-shrink-0">
-                  <Footer />
-                </div>
+          <Footer />
+        </div>
       </div>
     </>
   );
