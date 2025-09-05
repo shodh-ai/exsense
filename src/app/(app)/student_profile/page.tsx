@@ -12,32 +12,32 @@ import CourseMap from "@/components/CourseMap";
 // --- Data Definitions ---
 const studentData = [
   {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012663.svg",
+    icon: "/studentname.svg",
     label: "Student Name",
     value: "Sanket Sharma",
   },
   {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664-1.svg",
+    icon: "/learning.svg",
     label: "Learning Style",
     value: "Visual + Theoretical",
   },
   {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012663-1.svg",
+    icon: "/score.svg",
     label: "Average Test Score",
     value: "78%",
   },
   {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664-3.svg",
+    icon: "/time.svg",
     label: "Completion Rate",
     value: "65%",
   },
   {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664.svg",
+    icon: "/time.svg",
     label: "Average Time Spent",
     value: "3h 42m",
   },
   {
-    icon: "https://c.animaapp.com/metm9igaQcD0W7/img/frame-1000012664-2.svg",
+    icon: "/accuracy.svg",
     label: "Accuracy Rate",
     value: "82%",
   },
@@ -91,7 +91,7 @@ const implementationItems = [
 const pillBaseStyles =
   "px-4 py-2 rounded-[30px] font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-xs leading-4 tracking-normal border-0";
 const sectionTitleStyles =
-  "w-full font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-[#394169] text-xl md:text-2xl";
+  "w-full font-['Plus_Jakarta_Sans',_sans-serif] font-bold text-[#394169] text-[18px]";
 
 // --- SUB-COMPONENTS ---
 
@@ -125,10 +125,11 @@ const Breadcrumb = () => (
     </div>
   );
 
+// --- MODIFIED: The StudentProfileSection is updated with the new icon box styles ---
 const StudentProfileSection = (): JSX.Element => (
   <section className="flex flex-col w-full items-start gap-6 relative animate-fade-in [--animation-delay:400ms]">
     <h2 className={sectionTitleStyles}>Student Profile</h2>
-    <div className="flex flex-col md:flex-row items-center md:items-start gap-6 w-full animate-fade-in [--animation-delay:600ms]">
+    <div className="flex flex-col md:flex-row items-center md:items-center gap-6 w-full animate-fade-in [--animation-delay:600ms]">
       <img
         className="w-48 h-48 md:w-60 md:h-60 rounded-lg object-cover flex-shrink-0"
         alt="Student profile picture"
@@ -142,17 +143,20 @@ const StudentProfileSection = (): JSX.Element => (
               className="animate-fade-in border-none bg-transparent shadow-none"
               style={{ "--animation-delay": `${700 + index * 100}ms` } as React.CSSProperties}
             >
-              <CardContent className="flex items-center gap-3 p-0">
-                <img
-                  className="w-10 h-10 flex-shrink-0"
-                  alt={`${item.label} icon`}
-                  src={item.icon}
-                />
+              <CardContent className="flex items-center gap-[10px] p-0">
+                {/* This is the new styled container for the icon */}
+                <div className="flex h-[52px] w-[52px] flex-shrink-0 items-center justify-center rounded-[12px] bg-[#E9EBFD] p-[12px]">
+                  <img
+                    className="h-full w-full object-contain"
+                    alt={`${item.label} icon`}
+                    src={item.icon}
+                  />
+                </div>
                 <div className="flex flex-col items-start gap-1.5 min-w-0">
                   <div className="w-full font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-sm text-[#8187a0] truncate">
                     {item.label}
                   </div>
-                  <div className="font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-base text-[#394169]">
+                  <div className="font-['Plus_Jakarta_Sans',_sans-serif] font-semibold text-base font-semibold text-[#394169]">
                     {item.value}
                   </div>
                 </div>
@@ -184,7 +188,7 @@ const StrengthsSection = (): JSX.Element => (
           {achievements.map((achievement, index) => (
             <li key={`achievement-${index}`} className="flex items-start gap-3 w-full">
               <img src="/good.svg" alt="Strength icon" className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base text-[#394169]">
+              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base font-semibold text-[#394169]">
                 {achievement}
               </p>
             </li>
@@ -213,7 +217,7 @@ const StrengthsSection = (): JSX.Element => (
           {improvementPoints.map((point, index) => (
             <div key={index} className="flex items-start gap-3 w-full">
               <img src="/bad.svg" alt="Improvement area icon" className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base text-[#394169]">
+              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base font-semibold text-[#394169]">
                 {point}
               </p>
             </div>
@@ -243,7 +247,7 @@ const StrengthsSection = (): JSX.Element => (
           {implementationItems.map((item, index) => (
             <div key={index} className="flex items-start gap-3 w-full">
               <img src="/aisuggestion.svg" alt="AI suggestion icon" className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base text-[#394169]">
+              <p className="flex-1 font-['Plus_Jakarta_Sans',_sans-serif] font-medium text-base font-semibold text-[#394169]">
                 {item}
               </p>
             </div>
@@ -254,8 +258,8 @@ const StrengthsSection = (): JSX.Element => (
   );
 
 const ActionButtonsSection = ({ studentName }: { studentName: string }): JSX.Element => (
-    <section className="w-full animate-fade-in [--animation-delay:3000ms] flex flex-col gap-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+    <section className="w-full animate-fade-in [--animation-delay:3000ms] flex flex-col gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
         <Button
           variant="outline"
           className="w-full h-auto px-6 py-4 rounded-[100px] border-1 border-[#566fe9] text-[#566fe9] font-semibold text-base hover:bg-[#566fe9] hover:text-white transition-colors"
@@ -288,7 +292,7 @@ export default function StudentProfilePage(): JSX.Element {
         <main className="flex-grow overflow-y-auto">
           <div className="relative z-10 mx-auto w-full max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             {/* Central Content Container */}
-            <div className="mx-auto flex w-full max-w-[850px] flex-col items-start gap-12 md:gap-16">
+            <div className="mx-auto flex w-full max-w-[850px] flex-col items-start gap-15 ">
               <Breadcrumb />
               <StudentProfileSection />
               <StrengthsSection />

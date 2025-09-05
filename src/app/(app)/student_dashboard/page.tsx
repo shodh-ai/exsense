@@ -10,27 +10,7 @@ import Link from "next/link";
 // Updated import to use the correct hook from your useApi file
 import { useMyEnrollments } from "@/hooks/useApi";
 
-// Data for overview cards, tailored for a student's perspective
-const overviewCards = [
-  {
-    title: "Courses in Progress",
-    value: "4",
-    trend: "1 new course started this week",
-    positive: true,
-  },
-  {
-    title: "Completed Courses",
-    value: "8",
-    trend: "2 courses completed this month",
-    positive: true,
-  },
-  {
-    title: "Average Score",
-    value: "85%",
-    trend: "-2% lower score than last week",
-    positive: false,
-  },
-];
+// Overview cards will be computed dynamically from enrollments
 
 // Narrow types for enrollments to align with expected UI usage
 type Enrollment = {
@@ -48,6 +28,35 @@ const StudentDashboard = (): JSX.Element => {
   // Use the useMyEnrollments hook to fetch the student's enrolled courses
   // The data will be an array of Enrollment objects, which we assume contain course details
   const { data: enrollments = [], isLoading, error } = useMyEnrollments();
+
+  // Compute overview stats from enrollments
+  const numericProgress = enrollments
+    .map((e: Enrollment) => (typeof e.progress === 'number' ? (e.progress as number) : null))
+    .filter((p: number | null): p is number => p !== null);
+
+  const inProgressCount = isLoading ? null : numericProgress.filter((p: number) => p > 0 && p < 100).length;
+  const completedCount = isLoading ? null : numericProgress.filter((p: number) => p === 100).length;
+  const averageProgress = isLoading || numericProgress.length === 0
+    ? null
+    : Math.round(numericProgress.reduce((sum: number, p: number) => sum + p, 0) / numericProgress.length);
+
+  const overviewCards = [
+    {
+      title: "Courses in Progress",
+      value: inProgressCount === null ? "—" : String(inProgressCount),
+      positive: true,
+    },
+    {
+      title: "Completed Courses",
+      value: completedCount === null ? "—" : String(completedCount),
+      positive: true,
+    },
+    {
+      title: "Average Progress",
+      value: averageProgress === null ? "—" : `${averageProgress}%`,
+      positive: averageProgress !== null ? averageProgress >= 50 : true,
+    },
+  ];
 
   return (
     <>
@@ -85,9 +94,11 @@ const StudentDashboard = (): JSX.Element => {
                             }
                           />
                         </div>
-                        <p className="font-semibold text-[12px] leading-[16px] text-[#8187a0] whitespace-nowrap">
-                          {card.trend}
-                        </p>
+                        {"trend" in card && (card as any).trend ? (
+                          <p className="font-semibold text-[12px] leading-[16px] text-[#8187a0] whitespace-nowrap">
+                            {(card as any).trend}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
                   </CardContent>

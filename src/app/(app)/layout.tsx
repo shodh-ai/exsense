@@ -2,7 +2,7 @@ import ToasterClient from "@/components/ToasterClient";
 import QueryProvider from "@/components/QueryProvider";
 import { PageContentManager } from "@/components/PageContentManager";
 import { NavigationEvents } from "@/components/NavigationEvents";
-import { Sidebar } from "@/components/Sidebar"; // <-- 1. IMPORT THE SIDEBAR
+import SidebarContainer from "@/components/SidebarContainer"; // Use container to conditionally hide sidebar
 import React, { Suspense } from "react";
 
 export default function AppLayout({
@@ -15,8 +15,8 @@ export default function AppLayout({
       <body>
         <div className="m-0 overflow-hidden w-screen h-screen relative flex items-center justify-center">
           
-          {/* RENDER THE SIDEBAR HERE. It now controls its own visibility. */}
-          <Sidebar />
+          {/* Sidebar is conditionally rendered via SidebarContainer */}
+          <SidebarContainer />
 
           {/* Your original background elements - UNCHANGED */}
           <div className="bottom-0 left-0 w-[60%] aspect-square absolute translate-x-[-50%] translate-y-[50%] after:content-[''] after:absolute after:inset-0 after:bg-[radial-gradient(50%_50%_at_50%_50%,rgba(51,109,20,0.25)_0%,rgba(51,109,230,0.1)_40%,rgba(51,109,230,0.01)_80%,transparent_100%)] rounded-full -z-10" />
