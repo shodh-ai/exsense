@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Footer from '@/components/Footer';
 import { Room } from 'livekit-client';
 
@@ -9,74 +9,67 @@ import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
 import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
-import { useMermaidVisualization } from '@/hooks/useMermaidVisualization';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
 import SuggestedResponses from '@/components/session/SuggestedResponses';
 
-// File: exsense/src/app/session/page.tsx
-
-
+// --- MODIFICATION: Import BOTH converters (removed MermaidDirectRenderer import) ---
+import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw';
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
-const MermaidWrapper = dynamic(() => import('@/components/session/MermaidWrapper'), { ssr: false });
+const ExcalidrawWrapper = dynamic(() => import('@/components/session/ExcalidrawWrapper'), { ssr: false });
 const VncViewer = dynamic(() => import('@/components/session/VncViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
 const MessageDisplay = dynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
 
-// Fallback room for when LiveKit is not connected
 const fallbackRoom = new Room();
 type ViewKey = ReturnType<typeof useSessionStore.getState>['activeView'];
 
-// Define a type for button configuration, including both active and inactive icon paths
 interface ButtonConfig {
     key: ViewKey;
     label: string;
-    inactiveImagePath: string; // Path for icon when button is inactive
-    activeImagePath: string;   // Path for icon when button is active
+    inactiveImagePath: string;
+    activeImagePath: string;
 }
 
-// SessionContent component to render the main session UI
 interface SessionContentProps {
     activeView: ViewKey;
     setActiveView: (view: ViewKey) => void;
     componentButtons: ButtonConfig[];
     vncUrl: string;
-    diagramDefinition: string;
-    onDiagramUpdate: (definition: string) => void;
     handleVncInteraction: (interaction: { action: string; x: number; y: number }) => void;
+    diagramDefinition: string;
+    isDiagramGenerating: boolean;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, diagramDefinition, onDiagramUpdate, handleVncInteraction }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, handleVncInteraction, diagramDefinition, isDiagramGenerating }: SessionContentProps) {
     return (
-        <div className='w-full h-full flex flex-col items-center justify-between'>
-            <div className="w-full flex justify-center pt-[20px]">
-                <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center">
+        <div className='w-full h-full flex flex-col'>
+            <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
+                <div className="p-0 w-full md:w-1/2 lg/w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center">
                     {componentButtons.map(({ key, label, inactiveImagePath, activeImagePath }) => (
                         <button
                             key={key}
                             onClick={() => setActiveView(key)}
                             className={`w-[32.5%] h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
                         >
-                            <img
-                                src={activeView === key ? activeImagePath : inactiveImagePath}
-                                alt={label}
-                                className="w-[20px] h-[20px]"
-                            />
+                            <img src={activeView === key ? activeImagePath : inactiveImagePath} alt={label} className="w-[20px] h-[20px]" />
                             {label}
                         </button>
                     ))}
                 </div>
             </div>
-            
-            <div className="flex-grow relative w-full h-full">
+
+            {/* MODIFICATION: Added paddingBottom and proper overflow handling for scroll */}
+            <div className="flex-1 w-full overflow-hidden" style={{ minHeight: 0, paddingBottom: '8.5rem' }}>
                 <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
-                    <MermaidWrapper 
-                        diagramDefinition={diagramDefinition}
-                        onDiagramUpdate={onDiagramUpdate}
-                        className="w-full h-full"
-                    />
+                    {isDiagramGenerating && (
+                        <div className="flex items-center justify-center h-full text-gray-500">
+                            <p>Generating Diagram...</p>
+                        </div>
+                    )}
+                    {!isDiagramGenerating && <ExcalidrawWrapper />}
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
                     <VncViewer url={vncUrl} onInteraction={handleVncInteraction} />
@@ -92,127 +85,82 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, d
 export default function Session() {
     const activeView = useSessionStore((s) => s.activeView);
     const setActiveView = useSessionStore((s) => s.setActiveView);
+    const setVisualizationData = useSessionStore((s) => s.setVisualizationData);
+
     const [isIntroActive, setIsIntroActive] = useState(true);
+    const [diagramDefinition, setDiagramDefinition] = useState('');
+    const [generationStatus, setGenerationStatus] = useState<'idle' | 'streaming' | 'finished' | 'error'>('idle');
+
     const handleIntroComplete = () => setIsIntroActive(false);
     const { user, isSignedIn, isLoaded } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const SESSION_DEBUG = false;
-    
-    // Get course details from URL parameters
+
     const courseId = searchParams.get('courseId');
-    const courseTitle = searchParams.get('title');
-    
-    if (SESSION_DEBUG) console.log('Session page - Course details:', { courseId, courseTitle });
-    
-    // Add debugging for authentication state
-    useEffect(() => {
-        if (SESSION_DEBUG) console.log('Session page auth state:', { isLoaded, isSignedIn, userId: user?.id });
-    }, [isLoaded, isSignedIn, user?.id]);
 
-    // Promote role to publicMetadata after OAuth/login if needed
+    // --- MODIFICATION: The two-step conversion logic is restored ---
     useEffect(() => {
-        if (!isLoaded || !isSignedIn || !user) return;
-        const currentPublicRole = ((user.publicMetadata as any)?.role as string) || undefined;
-        const unsafeRole = ((user.unsafeMetadata as any)?.role as string) || undefined;
-        let pendingRole: string | undefined;
-        try { pendingRole = window.localStorage.getItem('pendingRole') || undefined; } catch {}
-        const desired = pendingRole || currentPublicRole || unsafeRole;
-        if (!desired || currentPublicRole === desired) {
-            try { window.localStorage.removeItem('pendingRole'); } catch {}
-            return;
-        }
-        fetch('/api/promote-role', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ role: desired })
-        })
-            .then(() => { try { window.localStorage.removeItem('pendingRole'); } catch {} })
-            .catch(() => {});
-    }, [isLoaded, isSignedIn, user]);
+        const convertAndRender = async () => {
+            if (diagramDefinition && diagramDefinition.trim()) {
+                try {
+                    console.log("Step 1: Parsing Mermaid to skeleton elements...");
+                    const { elements: skeletonElements } = await parseMermaidToExcalidraw(diagramDefinition);
+                    console.log(`Step 1 successful. Found ${skeletonElements.length} skeleton elements.`);
 
-    // Redirect to login if not authenticated (after Clerk has loaded)
+                    console.log("Step 2: Dynamically importing and converting to final Excalidraw elements...");
+                    const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw');
+                    const excalidrawElements = convertToExcalidrawElements(skeletonElements);
+                    console.log("Step 2 successful. Final elements created.");
+
+                    setVisualizationData(excalidrawElements);
+
+                } catch (error) {
+                    console.error("Failed to parse or convert Mermaid to Excalidraw:", error);
+                    setVisualizationData([{
+                        type: 'text',
+                        x: 100, y: 100, width: 400, height: 50,
+                        text: `Error rendering diagram:\n${error instanceof Error ? error.message : 'Unknown error'}`,
+                        fontSize: 16, strokeColor: '#c92a2a',
+                    }]);
+                }
+            } else {
+                setVisualizationData([]);
+            }
+        };
+
+        convertAndRender();
+    }, [diagramDefinition, setVisualizationData]);
+
     useEffect(() => {
         if (isLoaded && !isSignedIn) {
-            if (SESSION_DEBUG) console.log('User not authenticated, redirecting to login');
-            // Use window.location.href to force a complete page refresh
-            // This helps resolve Clerk authentication state synchronization issues
-            const timeoutId = setTimeout(() => {
-                if (!isSignedIn) {
-                    if (SESSION_DEBUG) console.log('Authentication state still not synced, forcing redirect to login');
-                    window.location.href = '/login';
-                }
-            }, 2000); // Increased timeout to 2 seconds for better state settling
-            
-            return () => clearTimeout(timeoutId);
+            window.location.href = '/login';
         }
     }, [isLoaded, isSignedIn, router]);
-    
-    // Wait for authentication to settle before initializing LiveKit
+
     const shouldInitializeLiveKit = isLoaded && isSignedIn && user?.id;
-    
-    // Generate unique room and user identifiers using Clerk user data
-    const roomName = shouldInitializeLiveKit ? `session-${user.id}` : `session-${Date.now()}`;
-    const userName = shouldInitializeLiveKit ? (user.emailAddresses[0]?.emailAddress || user.username || `user-${user.id}`) : `student-${Date.now()}`;
-    
-    // Initialize LiveKit session only when authenticated
+    const roomName = shouldInitializeLiveKit ? `session-${user.id}` : '';
+    const userName = shouldInitializeLiveKit ? (user.emailAddresses[0]?.emailAddress || `user-${user.id}`) : '';
+
     const {
-        room,
-        isConnected,
-        isLoading,
-        connectionError,
-        startTask,
-        agentIdentity,
-        transcriptionMessages,
-        statusMessages,
-        selectSuggestedResponse,
-    } = useLiveKitSession(
-        shouldInitializeLiveKit ? roomName : '',
-        shouldInitializeLiveKit ? userName : '',
-        courseId || undefined
-    );
-    
-    // Only mount SuggestedResponses when there are suggestions
+        room, isConnected, isLoading, connectionError, startTask, agentIdentity, transcriptionMessages, statusMessages, selectSuggestedResponse,
+    } = useLiveKitSession(roomName, userName, courseId || undefined);
+
     const hasSuggestions = useSessionStore((s) => s.suggestedResponses.length > 0);
-    useEffect(() => {
-        console.log('[SessionPage] hasSuggestions changed:', hasSuggestions);
-    }, [hasSuggestions]);
-    
-    // Expose Zustand store in the browser for manual testing (DevTools)
+
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            // Attach the store function itself; it has getState/setState on it
-            // Usage in DevTools:
-            //   window.__sessionStore.getState().setSuggestedResponses([{ id: '1', text: 'Hello' }], 'Quick reply')
             (window as any).__sessionStore = useSessionStore;
-            console.log('[Dev] Exposed window.__sessionStore for manual testing');
         }
     }, []);
-    
-    // Get URLs from environment variables
+
     const vncViewerUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || 'ws://localhost:6901';
     const vncActionUrl = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:8765';
     const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
 
-    // Initialize browser automation hooks
     const { disconnectVNC, executeBrowserAction } = useBrowserActionExecutor(room || null, vncActionUrl);
     const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room || null);
-    
-    // Initialize Mermaid visualization hook
-    const { 
-        diagramDefinition, 
-        isStreaming, 
-        error: mermaidError, 
-        startVisualization, 
-        clearDiagram, 
-        updateDiagram 
-    } = useMermaidVisualization();
 
-    if (SESSION_DEBUG) console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
-
-    // Wire VNC interactions directly from VncViewer
     const handleVncInteraction = (interaction: { action: string; x: number; y: number }) => {
-        console.log('[SessionPage] Interaction detected, sending to VNC listener:', interaction);
         executeBrowserAction({
             tool_name: 'browser_click',
             parameters: { x: interaction.x, y: interaction.y },
@@ -220,59 +168,24 @@ export default function Session() {
     };
 
     const componentButtons: ButtonConfig[] = [
-        {
-            key: 'vnc',
-            label: 'Browser',
-            inactiveImagePath: '/browser-inactive.svg',
-            activeImagePath: '/browser-active.svg'
-        },
-        {
-            key: 'excalidraw',
-            label: 'Whiteboard',
-            inactiveImagePath: '/whiteboard-inactive.svg',
-            activeImagePath: '/whiteboard-active.svg'
-        },
-        {
-            key: 'video',
-            label: 'Video',
-            inactiveImagePath: '/video-inactive.svg',
-            activeImagePath: '/video-active.svg'
-        },
+        { key: 'vnc', label: 'Browser', inactiveImagePath: '/browser-inactive.svg', activeImagePath: '/browser-active.svg' },
+        { key: 'excalidraw', label: 'Whiteboard', inactiveImagePath: '/whiteboard-inactive.svg', activeImagePath: '/whiteboard-active.svg' },
+        { key: 'video', label: 'Video', inactiveImagePath: '/video-inactive.svg', activeImagePath: '/video-active.svg' },
     ];
 
-    // Effect to manage WebSocket connections for browser automation
     useEffect(() => {
-        // Only connect when the LiveKit session is fully established
         if (isConnected && sessionBubbleUrl) {
-            if (SESSION_DEBUG) console.log("LiveKit connected, now connecting to session-bubble services...");
-            
-            // The VNC connection is now managed by the useBrowserActionExecutor hook
-            // We still need to manage the sensor connection here
             connectToVNCSensor(sessionBubbleUrl);
         }
-
-        // Return a cleanup function to disconnect when the component unmounts
         return () => {
             if (isConnected) {
-                if (SESSION_DEBUG) console.log("Session component unmounting, disconnecting from session-bubble.");
                 disconnectVNC();
                 disconnectFromVNCSensor();
             }
         };
     }, [isConnected, sessionBubbleUrl, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
 
-    // Show loading while Clerk is initializing
-    if (!isLoaded) {
-        return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
-    }
-    
-    // Show loading while authentication is settling
-    if (!isLoaded) {
-        return <div className="w-full h-full flex items-center justify-center text-white">Loading authentication...</div>;
-    }
-    
-    // Show loading while LiveKit is initializing
-    if (isLoading) {
+    if (!isLoaded || isLoading) {
         return <div className="w-full h-full flex items-center justify-center text-white">Initializing Session...</div>;
     }
     if (connectionError) {
@@ -286,44 +199,37 @@ export default function Session() {
         <>
             <SignedIn>
                 <Sphere />
-                <div className='flex flex-col w-full h-full items-center justify-between'>
-                    <SessionContent 
-                        activeView={activeView} 
-                        setActiveView={setActiveView} 
-                        componentButtons={componentButtons} 
-                        vncUrl={vncViewerUrl} 
-                        diagramDefinition={diagramDefinition}
-                        onDiagramUpdate={updateDiagram}
-                        handleVncInteraction={handleVncInteraction}
-                    />
+                <div className='flex flex-col w-screen h-screen'>
+                    <div className="flex-grow relative w-full h-0"> 
+                        <SessionContent 
+                            activeView={activeView} 
+                            setActiveView={setActiveView} 
+                            componentButtons={componentButtons} 
+                            vncUrl={vncViewerUrl} 
+                            handleVncInteraction={handleVncInteraction}
+                            diagramDefinition={diagramDefinition}
+                            isDiagramGenerating={generationStatus === 'streaming'}
+                        />
+                    </div>
+                
+                    <Footer room={room} agentIdentity={agentIdentity || undefined} />
+
                     {hasSuggestions && (
                         <SuggestedResponses onSelect={selectSuggestedResponse} />
                     )}
-                    <Footer room={room} agentIdentity={agentIdentity || undefined} />
                 </div>
                 
-                {/* Display transcription and status messages when connected */}
                 {isConnected && (
                     <MessageDisplay 
                         transcriptionMessages={transcriptionMessages || []}
                         statusMessages={statusMessages || []}
                     />
                 )}
-          
             </SignedIn>
             
             <SignedOut>
                 <div className="w-full h-full flex items-center justify-center text-white">
-                    <div className="text-center">
-                        <h2 className="text-xl mb-4">Authentication Required</h2>
-                        <p className="mb-4">Please sign in to access the session.</p>
-                        <button 
-                            onClick={() => router.push('/login')}
-                            className="bg-[#566FE9] text-white px-6 py-2 rounded-full hover:bg-[#566FE9]/95 transition"
-                        >
-                            Go to Login
-                        </button>
-                    </div>
+                    <p>Redirecting to login...</p>
                 </div>
             </SignedOut>
         </>

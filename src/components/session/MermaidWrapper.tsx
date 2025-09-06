@@ -42,8 +42,12 @@ export const MermaidWrapper: React.FC<MermaidWrapperProps> = ({
 
   // Render diagram when definition changes
   useEffect(() => {
-    if (!isInitialized || !containerRef.current || !diagramDefinition.trim()) {
-      return;
+    if (!isInitialized || !containerRef.current) {
+        // If there's no diagram, ensure the container is empty
+        if (!diagramDefinition.trim() && containerRef.current) {
+            containerRef.current.innerHTML = '';
+        }
+        return;
     }
 
     const renderDiagram = async () => {
@@ -52,13 +56,10 @@ export const MermaidWrapper: React.FC<MermaidWrapperProps> = ({
         const container = containerRef.current;
         if (!container) return;
 
-        // Clear previous content
         container.innerHTML = '';
 
-        // Generate unique ID for this diagram
         const diagramId = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         
-        // Validate and render the diagram
         const isValid = await mermaid.parse(diagramDefinition);
         if (isValid) {
           const { svg } = await mermaid.render(diagramId, diagramDefinition);
@@ -104,9 +105,18 @@ export const MermaidWrapper: React.FC<MermaidWrapperProps> = ({
   }, [diagramDefinition, onDiagramUpdate]);
 
   return (
-    <div className={`mermaid-wrapper ${className}`}>
+    <div className={`mermaid-wrapper ${className}`} style={{ 
+      height: '100%', 
+      width: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden',
+      // Ensure we stay within the canvas bounds with some padding
+      padding: '6rem',
+      boxSizing: 'border-box'
+    }}>
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm flex-shrink-0">
           {error}
         </div>
       )}
@@ -115,15 +125,20 @@ export const MermaidWrapper: React.FC<MermaidWrapperProps> = ({
         className="mermaid-container"
         style={{
           width: '100%',
-          height: '100%',
+          flex: '1 1 0',
           overflow: 'auto',
           display: 'flex',
           justifyContent: 'center',
-          alignItems: 'center'
+          alignItems: 'flex-start',
+          // Remove internal padding since wrapper now handles it
+          padding: '0',
+          boxSizing: 'border-box',
+          // Ensure we don't exceed the available height
+          maxHeight: '100%'
         }}
       />
       {!diagramDefinition.trim() && !error && (
-        <div className="flex items-center justify-center h-64 text-gray-500">
+        <div className="absolute inset-0 flex items-center justify-center text-gray-500 pointer-events-none">
           <p>No diagram to display</p>
         </div>
       )}
