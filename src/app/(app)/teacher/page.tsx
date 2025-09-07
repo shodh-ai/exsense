@@ -96,6 +96,7 @@ interface SessionContentProps {
     imprintingMode: ReturnType<typeof useSessionStore.getState>['imprinting_mode'];
     componentButtons: ButtonConfig[];
     vncUrl: string;
+    isCreatingSession: boolean;
     controlPanel?: React.ReactNode;
     vncOverlay?: React.ReactNode;
     handleVncInteraction: (interaction: { action: string; x: number; y: number }) => void;
@@ -112,6 +113,7 @@ function SessionContent({
     imprintingMode,
     componentButtons,
     vncUrl,
+    isCreatingSession,
     controlPanel,
     vncOverlay,
     handleVncInteraction,
@@ -158,7 +160,13 @@ function SessionContent({
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
                     <div className="w-full h-full flex flex-col md:flex-row gap-4">
                         <div className="flex-1">
-                            <VncViewer url={vncUrl} onInteraction={handleVncInteraction} overlay={vncOverlay} />
+                            {vncUrl ? (
+                                <VncViewer url={vncUrl} onInteraction={handleVncInteraction} overlay={vncOverlay} />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                    {isCreatingSession ? 'Preparing your secure browser...' : 'Connecting to browser...'}
+                                </div>
+                            )}
                         </div>
                         {controlPanel && (
                             <div className="w-full md:w-[360px] md:min-w-[320px]">
@@ -508,17 +516,97 @@ export default function Session() {
     }, [isLoaded, isSignedIn, router]);
 
     const roomName = user?.id ? `session-${user.id}` : `session-${Date.now()}`;
-    const vncViewerUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || 'ws://localhost:6901';
-    const vncActionUrl = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:8765';
     const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
 
-    const [viewerUrl, setViewerUrl] = useState<string>(vncViewerUrl);
-    const [actionUrl, setActionUrl] = useState<string>(vncActionUrl);
-    const [viewerUrlInput, setViewerUrlInput] = useState<string>(vncViewerUrl);
-    const [actionUrlInput, setActionUrlInput] = useState<string>(vncActionUrl);
+    // Dynamic VNC session state (initialized empty; populated by API)
+    const [viewerUrl, setViewerUrl] = useState<string>('');
+    const [actionUrl, setActionUrl] = useState<string>('');
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    // Persist VNC session across refresh to avoid creating a new pod unnecessarily
+    const SESSION_CACHE_KEY = 'vncSession';
+    const KEEP_SESSION_ON_REFRESH = (process.env.NEXT_PUBLIC_KEEP_SESSION_ON_REFRESH ?? 'true') === 'true';
+    const SESSION_CACHE_TTL_MS = (() => {
+        const v = Number(process.env.NEXT_PUBLIC_VNC_SESSION_TTL_MS || '600000'); // default 10 minutes
+        return Number.isFinite(v) && v > 0 ? v : 600000;
+    })();
+    const [viewerUrlInput, setViewerUrlInput] = useState<string>('');
+    const [actionUrlInput, setActionUrlInput] = useState<string>('');
 
-    const { isVNCConnected, disconnectVNC, executeBrowserAction, setOnVNCResponse, awaitVNCOpen } = useBrowserActionExecutor(null, actionUrl);
+    const { isVNCConnected, disconnectVNC, executeBrowserAction, setOnVNCResponse, awaitVNCOpen } = useBrowserActionExecutor(null, sessionId ? actionUrl : undefined);
     const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(null);
+
+    // --- Debug watchers for critical state ---
+    useEffect(() => {
+        if (!sessionId) return;
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] sessionId updated:', sessionId);
+    }, [sessionId]);
+
+    useEffect(() => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] viewerUrl updated:', viewerUrl || '(empty)');
+    }, [viewerUrl]);
+
+    useEffect(() => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] actionUrl updated:', actionUrl || '(empty)');
+    }, [actionUrl]);
+
+    useEffect(() => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] isVNCConnected changed:', isVNCConnected);
+    }, [isVNCConnected]);
+
+    useEffect(() => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] activeView changed:', activeView);
+    }, [activeView]);
+
+    // When user switches to VNC view but no session/URLs exist yet, auto-create a VNC session
+    const isCreatingVncRef = useRef(false);
+    // On mount, attempt to restore an existing session from cache
+    useEffect(() => {
+        try {
+            const raw = typeof window !== 'undefined' ? window.localStorage.getItem(SESSION_CACHE_KEY) : null;
+            if (!raw) return;
+            const cached = JSON.parse(raw) as { sessionId: string; viewerUrl: string; actionUrl: string; ts: number };
+            if (!cached?.sessionId || !cached?.viewerUrl || !cached?.actionUrl || !cached?.ts) return;
+            const age = Date.now() - cached.ts;
+            if (age > SESSION_CACHE_TTL_MS) {
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] Cached VNC session expired; creating new one');
+                window.localStorage.removeItem(SESSION_CACHE_KEY);
+                return;
+            }
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] Restoring cached VNC session:', cached.sessionId);
+            setSessionId(cached.sessionId);
+            setViewerUrl(cached.viewerUrl);
+            setActionUrl(cached.actionUrl);
+        } catch (e) {
+            // ignore cache restore errors
+        }
+    // run once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    useEffect(() => {
+        if (activeView !== 'vnc') return;
+        if (sessionId || viewerUrl || actionUrl) return;
+        if (isCreatingVncRef.current) return;
+        isCreatingVncRef.current = true;
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] activeView=vnc and no session/urls detected. Creating VNC session...');
+        setStatusMessage('Preparing VNC session...');
+        createVncSession()
+            .catch((e: any) => {
+                // eslint-disable-next-line no-console
+                console.error('[TeacherPage] Auto createVncSession failed:', e);
+                setSubmitError(e?.message || 'Failed to create VNC session');
+            })
+            .finally(() => {
+                isCreatingVncRef.current = false;
+            });
+    }, [activeView, sessionId, viewerUrl, actionUrl]);
 
     const handleSelectPractical = () => {
         setImprintingMode('WORKFLOW');
@@ -545,6 +633,7 @@ export default function Session() {
     const [statusMessage, setStatusMessage] = useState<string>('Session started. Waiting for initial prompt.');
     const [submitMessage, setSubmitMessage] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const [isCreatingSession, setIsCreatingSession] = useState(false);
     // Narrowed types to reduce any-usage
     type VNCActionResponse = { action?: string } & Record<string, unknown>;
     type RecordedPacket = { interaction_type?: string } & Record<string, unknown>;
@@ -565,6 +654,143 @@ export default function Session() {
     const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const curriculumId = courseId as string;
+
+    // Create a VNC session via async job and poll for readiness
+    const createVncSession = async () => {
+        const normalizeWsUrl = (u: string): string => {
+            try {
+                const parsed = new URL(u);
+                if (parsed.protocol === 'http:') parsed.protocol = 'ws:';
+                if (parsed.protocol === 'https:') parsed.protocol = 'wss:';
+                if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && parsed.protocol === 'ws:') {
+                    parsed.protocol = 'wss:';
+                }
+                return parsed.toString();
+            } catch (e) {
+                console.warn('[TeacherPage] Failed to normalize URL, using raw value:', u, e);
+                return u;
+            }
+        };
+
+        const pollStatus = async (jobId: string) => {
+            const intervalMs = 5000;
+            const maxAttempts = 36; // ~3 minutes
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                const res = await fetch(`/api/sessions/status/${encodeURIComponent(jobId)}`);
+                if (!res.ok) throw new Error(`Status check failed (${res.status})`);
+                const status = await res.json();
+                if (status?.status === 'READY') return status;
+                if (status?.status === 'FAILED') throw new Error(status?.error || 'Session creation failed');
+                await new Promise((r) => setTimeout(r, intervalMs));
+            }
+            throw new Error('Timed out waiting for session readiness');
+        };
+
+        try {
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] createVncSession: start async job...');
+            setIsCreatingSession(true);
+            setStatusMessage('Preparing your secure browser...');
+            const startResp = await fetch('/api/sessions', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            if (!startResp.ok) throw new Error(`Failed to start session job (${startResp.status})`);
+            const startData = await startResp.json();
+            const jobId: string | undefined = startData?.jobId;
+            if (!jobId) throw new Error('Invalid response from session start (missing jobId)');
+
+            // Poll for readiness
+            const ready = await pollStatus(jobId);
+            // Wait for 12 seconds to allow the GKE Ingress and health checks to fully propagate
+            console.log('[TeacherPage] Session is ready on the backend. Waiting 12 seconds for Ingress to stabilize...');
+            await new Promise((resolve) => setTimeout(resolve, 12000));
+            console.log('[TeacherPage] Ingress stabilization delay complete. Connecting now.');
+
+            const normalizedCommand = normalizeWsUrl(String(ready.commandUrl));
+            const normalizedStream = normalizeWsUrl(String(ready.streamUrl));
+            setSessionId(String(ready.sessionId));
+            setActionUrl(normalizedCommand);
+            setViewerUrl(normalizedStream);
+            setActionUrlInput(ready.commandUrl);
+            setViewerUrlInput(ready.streamUrl);
+            // Persist for reuse on refresh
+            try {
+                if (typeof window !== 'undefined') {
+                    window.localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
+                        sessionId: String(ready.sessionId),
+                        actionUrl: normalizedCommand,
+                        viewerUrl: normalizedStream,
+                        ts: Date.now(),
+                    }));
+                }
+            } catch {}
+            setStatusMessage('VNC session ready. Connecting...');
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] createVncSession: READY', {
+                sessionId: ready.sessionId,
+                commandUrl_raw: ready.commandUrl,
+                streamUrl_raw: ready.streamUrl,
+                commandUrl_normalized: normalizedCommand,
+                streamUrl_normalized: normalizedStream,
+            });
+        } catch (err: any) {
+            console.error('[TeacherPage] createVncSession error:', err);
+            setSubmitError(err?.message || 'Failed to create VNC session');
+            throw err;
+        } finally {
+            setIsCreatingSession(false);
+        }
+    };
+
+    // Cleanup helper: attempt to delete session reliably
+    const deleteVncSession = async (sid: string | null, useBeacon = false) => {
+        if (!sid) return;
+        const url = `/api/sessions/${encodeURIComponent(sid)}`;
+        try {
+            if (useBeacon && typeof navigator.sendBeacon === 'function') {
+                // Use method override to support DELETE semantics via beacon POST
+                const beaconUrl = `${url}?_method=DELETE`;
+                const blob = new Blob([JSON.stringify({ reason: 'page-unload' })], { type: 'application/json' });
+                navigator.sendBeacon(beaconUrl, blob);
+                return;
+            }
+            await fetch(url, { method: 'DELETE', keepalive: true });
+        } catch {
+            // Swallow errors during cleanup
+        }
+    };
+
+    // Optional: delete session during page unload (disabled by default to allow reuse after refresh)
+    useEffect(() => {
+        if (!KEEP_SESSION_ON_REFRESH) {
+            const onBeforeUnload = () => {
+                if (sessionId) {
+                    // eslint-disable-next-line no-console
+                    console.log('[TeacherPage] beforeunload: deleting VNC session', sessionId);
+                    deleteVncSession(sessionId, true);
+                }
+            };
+            window.addEventListener('beforeunload', onBeforeUnload);
+            return () => {
+                window.removeEventListener('beforeunload', onBeforeUnload as any);
+            };
+        }
+    }, [sessionId, KEEP_SESSION_ON_REFRESH]);
+
+    // On component unmount, optional cleanup (disabled by default to allow reuse)
+    useEffect(() => {
+        if (!KEEP_SESSION_ON_REFRESH) {
+            return () => {
+                if (sessionId) {
+                    // eslint-disable-next-line no-console
+                    console.log('[TeacherPage] unmount: deleting VNC session', sessionId);
+                    deleteVncSession(sessionId, false);
+                }
+            };
+        }
+    }, [sessionId, KEEP_SESSION_ON_REFRESH]);
 
     const handleSeedSubmit = async (content: string) => {
         setImprintingPhase('SEED_PROCESSING');
@@ -673,13 +899,19 @@ export default function Session() {
     useEffect(() => {
         // Route incoming VNC responses to awaiting callers
         setOnVNCResponse((resp: VNCActionResponse) => {
-
             try {
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] onVNCResponse:', resp);
                 const idx = pendingResolversRef.current.findIndex(p => p.expectAction === resp?.action);
                 if (idx >= 0) {
                     const [pending] = pendingResolversRef.current.splice(idx, 1);
                     clearTimeout(pending.timeoutId);
+                    // eslint-disable-next-line no-console
+                    console.log('[TeacherPage] onVNCResponse: resolving pending waiter', { id: pending.id, expectAction: pending.expectAction });
                     pending.resolve(resp);
+                } else {
+                    // eslint-disable-next-line no-console
+                    console.log('[TeacherPage] onVNCResponse: no waiter for action', resp?.action);
                 }
             } catch (e) { console.error('[TeacherPage] Error handling VNC response:', e); }
         });
@@ -694,18 +926,26 @@ export default function Session() {
         const expectAction = expectedAction || tool_name;
         return new Promise(async (resolve, reject) => {
             const id = `${expectAction}-${Date.now()}`;
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] sendAndAwait: scheduling waiter', { id, tool_name, expectAction, timeoutMs, parameters });
             const timeoutId = setTimeout(() => {
                 const idx = pendingResolversRef.current.findIndex(p => p.id === id);
                 if (idx >= 0) pendingResolversRef.current.splice(idx, 1);
+                // eslint-disable-next-line no-console
+                console.warn('[TeacherPage] sendAndAwait: timeout', { id, expectAction });
                 reject(new Error(`Timed out waiting for action '${expectAction}' response`));
             }, timeoutMs);
             pendingResolversRef.current.push({ id, expectAction, resolve, reject, timeoutId });
             try {
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] sendAndAwait: executeBrowserAction', { tool_name, parameters });
                 await executeBrowserAction({ tool_name, parameters });
             } catch (err) {
                 clearTimeout(timeoutId);
                 const idx = pendingResolversRef.current.findIndex(p => p.id === id);
                 if (idx >= 0) pendingResolversRef.current.splice(idx, 1);
+                // eslint-disable-next-line no-console
+                console.error('[TeacherPage] sendAndAwait: executeBrowserAction error', err);
                 reject(err);
             }
         });
@@ -724,6 +964,8 @@ export default function Session() {
     const handleStartRecording = async () => {
         if (!user?.id) return;
         try {
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleStartRecording: begin', { sessionId, viewerUrl, actionUrl, isVNCConnected, activeView });
             setSubmitMessage(null);
             setSubmitError(null);
             setImprintingMode('WORKFLOW');
@@ -733,18 +975,37 @@ export default function Session() {
             setStagedAssets([]);
             setIsPaused(false);
 
+            // Ensure we have a dynamic VNC session (creates the WebSocket URLs)
+            if (!sessionId) {
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] handleStartRecording: no sessionId, creating VNC session...');
+                await createVncSession();
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] handleStartRecording: after createVncSession', { sessionId: sessionId, viewerUrl, actionUrl });
+            }
+
             if (!MOCK_BACKEND) {
                 if (!isVNCConnected) {
                     setStatusMessage('Connecting to VNC backend...');
                     try {
+                        // eslint-disable-next-line no-console
+                        console.log('[TeacherPage] handleStartRecording: awaiting VNC WebSocket open...');
                         await awaitVNCOpen(15000);
+                        // eslint-disable-next-line no-console
+                        console.log('[TeacherPage] handleStartRecording: VNC WebSocket open');
                     } catch (connErr: any) {
+                        // eslint-disable-next-line no-console
+                        console.error('[TeacherPage] handleStartRecording: failed to connect to VNC backend', connErr);
                         setSubmitError(connErr?.message || 'Failed to connect to VNC backend');
                         setIsRecording(false);
                         return;
                     }
                 }
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] handleStartRecording: sending start_recording...');
                 await sendAndAwait('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec }, 'start_recording', 45000);
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] handleStartRecording: start_recording acknowledged');
             }
             setTimeToNextScreenshot(screenshotIntervalSec);
 
@@ -764,7 +1025,11 @@ export default function Session() {
             recordingIntervalRef.current = setInterval(() => {
                 setRecordingDuration(prev => prev + 1);
             }, 1000);
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleStartRecording: done');
         } catch (err: any) {
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] handleStartRecording: error', err);
             setSubmitError(err?.message || 'Failed to start recording');
             setIsRecording(false);
         }
@@ -1011,25 +1276,32 @@ export default function Session() {
             if (event.target) event.target.value = '';
         }
     };
-
+    
+    // Remove a staged asset by index
     const handleRemoveStagedAsset = (index: number) => setStagedAssets(prev => prev.filter((_, i) => i !== index));
 
+    // Finish session: stop recording, cleanup VNC session, reset URLs
     const executeFinishSession = async () => {
         try {
+            setIsFinishModalOpen(false);
             if (isRecording) {
                 await handleStopRecording();
-                await new Promise(r => setTimeout(r, 200));
+                await new Promise((r) => setTimeout(r, 150));
             }
-            if (packetsCount > 0 || (MOCK_BACKEND && activeView === 'vnc')) {
-                await handleSubmitEpisode();
-            } else {
-                setSubmitMessage('Session finished.');
-            }
-        } catch (err: any) {
-            console.error('Finish session error:', err);
+        } catch (e: any) {
+            setSubmitError(e?.message || 'Failed to finish session');
         } finally {
+            if (sessionId) {
+                await deleteVncSession(sessionId, false);
+                setSessionId(null);
+                // Reset to empty; new sessions will repopulate dynamically
+                setViewerUrl('');
+                setActionUrl('');
+                setViewerUrlInput('');
+                setActionUrlInput('');
+            }
+            // Ensure sockets are closed
             try { disconnectVNC(); } catch {}
-            try { disconnectFromVNCSensor(); } catch {}
         }
     };
 
@@ -1037,6 +1309,7 @@ export default function Session() {
         setIsFinishModalOpen(true);
     };
 
+    // Connect to interaction sensor and ensure cleanup
     useEffect(() => {
         if (sessionBubbleUrl) {
             connectToVNCSensor(sessionBubbleUrl);
@@ -1095,7 +1368,8 @@ export default function Session() {
                                         activeView={activeView}
                                         imprintingMode={imprinting_mode}
                                         componentButtons={componentButtons}
-                                        vncUrl={viewerUrl}
+                                        vncUrl={sessionId ? viewerUrl : ''}
+                                        isCreatingSession={isCreatingSession}
                                         vncOverlay={null}
                                         handleVncInteraction={handleVncInteraction}
                                         currentDebrief={currentDebrief}

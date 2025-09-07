@@ -7,8 +7,6 @@ import { Room } from 'livekit-client';
 import dynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
-import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
-import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
 import { useMermaidVisualization } from '@/hooks/useMermaidVisualization';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -21,7 +19,7 @@ import SuggestedResponses from '@/components/session/SuggestedResponses';
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
 const MermaidWrapper = dynamic(() => import('@/components/session/MermaidWrapper'), { ssr: false });
-const VncViewer = dynamic(() => import('@/components/session/VncViewer'), { ssr: false });
+const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
 const MessageDisplay = dynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
 
@@ -42,13 +40,13 @@ interface SessionContentProps {
     activeView: ViewKey;
     setActiveView: (view: ViewKey) => void;
     componentButtons: ButtonConfig[];
-    vncUrl: string;
+    livekitUrl: string;
+    livekitToken: string;
     diagramDefinition: string;
     onDiagramUpdate: (definition: string) => void;
-    handleVncInteraction: (interaction: { action: string; x: number; y: number }) => void;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, diagramDefinition, onDiagramUpdate, handleVncInteraction }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, livekitUrl, livekitToken, diagramDefinition, onDiagramUpdate }: SessionContentProps) {
     return (
         <div className='w-full h-full flex flex-col items-center justify-between'>
             <div className="w-full flex justify-center pt-[20px]">
@@ -79,7 +77,11 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, d
                     />
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
-                    <VncViewer url={vncUrl} onInteraction={handleVncInteraction} />
+                    {livekitUrl && livekitToken ? (
+                        <LiveKitViewer url={livekitUrl} token={livekitToken} />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300">Connecting to LiveKit...</div>
+                    )}
                 </div>
                 <div className={`${activeView === 'video' ? 'block' : 'hidden'} w-full h-full`}>
                     <VideoViewer />
@@ -166,6 +168,8 @@ export default function Session() {
         transcriptionMessages,
         statusMessages,
         selectSuggestedResponse,
+        livekitUrl,
+        livekitToken,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? roomName : '',
         shouldInitializeLiveKit ? userName : '',
@@ -189,14 +193,7 @@ export default function Session() {
         }
     }, []);
     
-    // Get URLs from environment variables
-    const vncViewerUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || 'ws://localhost:6901';
-    const vncActionUrl = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:8765';
-    const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
-
-    // Initialize browser automation hooks
-    const { disconnectVNC, executeBrowserAction } = useBrowserActionExecutor(room || null, vncActionUrl);
-    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room || null);
+    // LiveKit-only: no per-session URLs or legacy VNC state required
     
     // Initialize Mermaid visualization hook
     const { 
@@ -210,14 +207,7 @@ export default function Session() {
 
     if (SESSION_DEBUG) console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 
-    // Wire VNC interactions directly from VncViewer
-    const handleVncInteraction = (interaction: { action: string; x: number; y: number }) => {
-        console.log('[SessionPage] Interaction detected, sending to VNC listener:', interaction);
-        executeBrowserAction({
-            tool_name: 'browser_click',
-            parameters: { x: interaction.x, y: interaction.y },
-        });
-    };
+    // No direct VNC interactions; all browser control is over LiveKit data channel now.
 
     const componentButtons: ButtonConfig[] = [
         {
@@ -240,26 +230,13 @@ export default function Session() {
         },
     ];
 
-    // Effect to manage WebSocket connections for browser automation
-    useEffect(() => {
-        // Only connect when the LiveKit session is fully established
-        if (isConnected && sessionBubbleUrl) {
-            if (SESSION_DEBUG) console.log("LiveKit connected, now connecting to session-bubble services...");
-            
-            // The VNC connection is now managed by the useBrowserActionExecutor hook
-            // We still need to manage the sensor connection here
-            connectToVNCSensor(sessionBubbleUrl);
-        }
+    // Legacy VNC/session-manager flow removed.
 
-        // Return a cleanup function to disconnect when the component unmounts
-        return () => {
-            if (isConnected) {
-                if (SESSION_DEBUG) console.log("Session component unmounting, disconnecting from session-bubble.");
-                disconnectVNC();
-                disconnectFromVNCSensor();
-            }
-        };
-    }, [isConnected, sessionBubbleUrl, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
+    // Legacy cleanup removed.
+
+    // No unload handlers needed.
+
+    // No dynamic session creation required on view change.
 
     // Show loading while Clerk is initializing
     if (!isLoaded) {
@@ -291,10 +268,10 @@ export default function Session() {
                         activeView={activeView} 
                         setActiveView={setActiveView} 
                         componentButtons={componentButtons} 
-                        vncUrl={vncViewerUrl} 
+                        livekitUrl={livekitUrl}
+                        livekitToken={livekitToken}
                         diagramDefinition={diagramDefinition}
                         onDiagramUpdate={updateDiagram}
-                        handleVncInteraction={handleVncInteraction}
                     />
                     {hasSuggestions && (
                         <SuggestedResponses onSelect={selectSuggestedResponse} />
