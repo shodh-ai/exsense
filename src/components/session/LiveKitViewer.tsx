@@ -21,19 +21,21 @@ export default function LiveKitViewer({ url, token }: LiveKitViewerProps) {
   try { console.log('[FLOW] LiveKitViewer ready with url/token'); } catch {}
 
   return (
-    <LiveKitRoom
-      serverUrl={url}
-      token={token}
-      connect={true}
-      video={false}
-      audio={false}
-      connectOptions={{ autoSubscribe: false }}
-      className="w-full h-full"
-    >
-      <div className="w-full h-full" style={{ position: 'relative', zIndex: 10, minHeight: 360 }}>
-        <ExplicitVideoGrid />
-      </div>
-    </LiveKitRoom>
+    <div className="w-full h-full min-h-0" style={{ position: 'relative' }}>
+      <LiveKitRoom
+        serverUrl={url}
+        token={token}
+        connect={true}
+        video={false}
+        audio={false}
+        connectOptions={{ autoSubscribe: false }}
+        className="w-full h-full min-h-0"
+      >
+        <div className="w-full h-full min-h-0" style={{ position: 'relative', zIndex: 10 }}>
+          <ExplicitVideoGrid />
+        </div>
+      </LiveKitRoom>
+    </div>
   );
 }
 
@@ -194,7 +196,7 @@ function ExplicitVideoGrid() {
 
   try { console.log(`[FLOW] Rendering ${videoPairs.length} video track(s)`); } catch {}
   return (
-    <div className="w-full h-full grid grid-cols-1 md:grid-cols-2 gap-2 p-2">
+    <div className="w-full h-full min-h-0 grid grid-cols-1 auto-rows-fr gap-2 overflow-hidden">
       {videoPairs.map(({ pub, track }, idx) => (
         <VideoRenderer key={track.sid || `vid-${idx}`} track={track} pub={pub} />
       ))}
