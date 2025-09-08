@@ -2,7 +2,44 @@
 import { createApiClient } from './apiclient';
 import { useAuth } from '@clerk/nextjs';
 
-// Type definitions for your backend API
+// --- NEW/MODIFIED: Expanded type definitions for your backend API ---
+
+// New supporting type for the teacher object
+export interface Teacher {
+  name?: string;
+  email?: string;
+  bio?: string;
+}
+
+// New type for a single review
+export interface Review {
+  id: string;
+  rating: number;
+  comment: string;
+  createdAt: string; // Should be an ISO date string from the backend
+  user: {
+    name: string;
+    avatarUrl?: string;
+  };
+}
+
+// New type for a single FAQ item
+export interface Faq {
+  id: string;
+  question: string;
+  answer: string;
+}
+export interface CourseAnalytics {
+  averageTestScore?: number;  // as a percentage
+  averageTimeSpent?: string;  // e.g., "3h 42m"
+  completionRate?: number;    // as a percentage
+  unsolvedDoubts?: number;
+  accuracyRate?: number;      // as a percentage
+  satisfactionLevel?: number; // e.g., 4.3
+  satisfactionReviews?: number;
+}
+
+// Main Course interface, updated to include all dynamic data
 export interface Course {
   id: string;
   title: string;
@@ -11,11 +48,22 @@ export interface Course {
   updatedAt: string;
   enrollmentCount?: number;
   lessonCount?: number;
-  teacher?: {
-    name?: string;
-    email?: string;
-  };
+  teacher?: Teacher; // Uses the new Teacher type
+
+  // --- ADDED DYNAMIC FIELDS ---
+  imageUrl?: string;
+  tags?: string[];
+  difficulty?: string;
+  duration?: string; // e.g., "8 hrs 21 mins"
+  language?: string;
+  skills?: string[];
+  learningOutcomes?: string[];
+  reviews?: Review[];
+  faqs?: Faq[];
+  analytics?: CourseAnalytics;
 }
+
+// --- EXISTING TYPES (UNCHANGED) ---
 
 export interface Enrollment {
   id: string;
@@ -47,7 +95,6 @@ export interface LessonContent {
   order?: number;
 }
 
-// --- ADD THIS NEW INTERFACE ---
 export interface ProfileStat {
   icon: string;
   label: string;
@@ -55,7 +102,7 @@ export interface ProfileStat {
 }
 
 
-// Main API service class
+// --- Main API service class (UNCHANGED) ---
 export class ApiService {
   private client: ReturnType<typeof createApiClient>;
 
@@ -88,6 +135,10 @@ export class ApiService {
   async getEnrollments(): Promise<Enrollment[]> {
     return this.client.get('/api/enrollments');
   }
+  
+  async getTeacherAnalytics(): Promise<any> { 
+    return this.client.get('/api/teacher/me/analytics');
+  }
 
   async enrollInCourse(courseId: string): Promise<Enrollment> {
     return this.client.post('/api/enrollments', { courseId });
@@ -101,10 +152,13 @@ export class ApiService {
     return this.client.get(`/api/enrollments/user/${userId}`);
   }
 
-  // --- ADD THIS NEW METHOD ---
   async getProfileStats(): Promise<ProfileStat[]> {
     return this.client.get('/api/users/me/profile-stats');
   }
+
+async getCurriculum(id: string): Promise<any> { 
+  return this.client.get(`/api/curriculums/${id}`);
+}
 
   // Lessons API
   async getLessons(courseId: string): Promise<Lesson[]> {
@@ -192,7 +246,7 @@ export class ApiService {
   }
 }
 
-// Custom hook for using the API service
+// Custom hook for using the API service (UNCHANGED)
 export const useApiService = () => {
   const { getToken } = useAuth();
   

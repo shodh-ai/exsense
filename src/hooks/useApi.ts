@@ -23,6 +23,8 @@ export const queryKeys = {
   adminUsers: ['admin', 'users'] as const,
   adminCourses: ['admin', 'courses'] as const,
   adminAnalytics: ['admin', 'analytics', 'overview'] as const,
+  curriculum: (id: string) => ['curriculums', id] as const,
+  teacherAnalytics: ['teacher', 'me', 'analytics'] as const,
 };
 
 // ===== COURSES HOOKS =====
@@ -35,6 +37,15 @@ export const useCourses = () => {
     staleTime: 5 * 60 * 1000,
     retry: 3,
     retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  });
+};
+export const useTeacherAnalytics = () => {
+  const apiService = useApiService();
+  
+  return useQuery({
+    queryKey: queryKeys.teacherAnalytics,
+    queryFn: () => apiService.getTeacherAnalytics(),
+    staleTime: 5 * 60 * 1000, // Analytics can be cached for 5 minutes
   });
 };
 
@@ -71,6 +82,16 @@ export const useCourse = (id: string) => {
     queryFn: () => apiService.getCourse(id),
     enabled: !!id,
     staleTime: 5 * 60 * 1000,
+  });
+};
+export const useCurriculum = (id: string) => {
+  const apiService = useApiService();
+  
+  return useQuery({
+    queryKey: queryKeys.curriculum(id),
+    queryFn: () => apiService.getCurriculum(id),
+    enabled: !!id, 
+    staleTime: 5 * 60 * 1000, 
   });
 };
 

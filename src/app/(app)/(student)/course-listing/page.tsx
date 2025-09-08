@@ -1,5 +1,4 @@
 "use client";
-// src/pages/CoursesPage.tsx
 import { ChevronDownIcon, SearchIcon, XIcon } from "lucide-react";
 import React, { JSX, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -45,31 +44,40 @@ const Breadcrumb = () => (
 
 
 const CoursesPage = (): JSX.Element => {
- // Dynamic courses state
+ // Fetching the list of all courses from the backend.
  const { data, isLoading, error } = useCourses();
  const router = useRouter();
  
-
-
  const [activeCourseId, setActiveCourseId] = useState<number | string | null>(null);
 
+ // This block transforms the raw backend data into the format our components need.
  const courses: Course[] = useMemo(() => {
-   const fetched = data || [];
-   const mapped = fetched.map((c: any) => ({
+   // Use the fetched data, or an empty array if it hasn't loaded yet.
+   const fetchedCourses = data || [];
+   
+   // The .map() function loops through each course from the backend...
+   const mappedCourses = fetchedCourses.map((c: any) => ({
+     // ...and creates a new, clean object for our CourseCard.
      id: c.id,
      title: c.title,
-     description: c.description || "",
+     description: c.description || "No description available.", // Fallback for description
      instructor: c?.teacher?.name || c?.teacher?.email || "Unknown Instructor",
-     rating: "4.8",
-     reviews: String(c?.enrollmentCount ?? 0),
-     level: "Beginner",
-     duration: c?.lessonCount ? `${c.lessonCount} lessons` : "Self-paced",
-     image: "/1.png",
+     
+     // --- THIS IS THE KEY CHANGE ---
+     // We now use data from the backend with fallbacks for each field.
+     rating: String(c.rating ?? "4.8"), // Use backend rating, or "4.8" as a fallback
+     reviews: String(c.reviews ?? c.enrollmentCount ?? 0), // Use backend reviews, or enrollment count, or 0
+     level: c.difficulty ?? "Beginner", // Use backend difficulty, or "Beginner" as a fallback
+     duration: c.duration ?? (c.lessonCount ? `${c.lessonCount} lessons` : "Self-paced"), // Use backend duration or calculate from lessons
+     image: c.imageUrl ?? "/1.png", // Use backend image, or "/1.png" as a fallback
    })) as Course[];
-   if (mapped.length && activeCourseId === null) {
-     setActiveCourseId(mapped[0].id);
+
+   // Automatically select the first course in the list when the page loads.
+   if (mappedCourses.length && activeCourseId === null) {
+     setActiveCourseId(mappedCourses[0].id);
    }
-   return mapped;
+   
+   return mappedCourses;
  }, [data, activeCourseId]);
 
 
@@ -141,7 +149,7 @@ const CoursesPage = (): JSX.Element => {
  <CourseCard
  course={course}
  isActive={activeCourseId === course.id}
- isEnrolled={false}
+ isEnrolled={false} // This should probably be determined by user data in a real app
  onEnroll={() => router.push(`/course/${course.id}`)}
  />
  </div>

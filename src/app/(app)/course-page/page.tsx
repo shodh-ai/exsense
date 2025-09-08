@@ -14,9 +14,6 @@ import CourseMap from "@/components/CourseMap";
 import { Separator } from "@/components/separator";
 import Sphere from "@/components/Sphere";
 import Footer from "@/components/Footer";
-import { useParams, useRouter } from "next/navigation";
-import { useAuth } from "@clerk/nextjs";
-import { useCourse, useLessons, useEnrollInCourse } from "@/hooks/useApi";
 
 // --- TYPE DEFINITIONS ---
 type CourseDetail = {
@@ -37,6 +34,32 @@ type FaqItem = {
   question: string;
   answer: string;
 };
+
+// --- MOCK DATA ---
+const mockCourse = {
+  title: "Mastering TensorFlow: From Basics to Advanced",
+  description:
+    "A comprehensive course designed to take you from the fundamentals of machine learning to the advanced techniques of deep learning using TensorFlow.",
+  enrollmentCount: 1250,
+  lessonCount: 15,
+  teacher: {
+    name: "Arjun Mehta",
+    email: "AI Educator at DeepLearn Lab.",
+  },
+};
+
+const enrollMutation = {
+  isPending: false,
+  mutateAsync: async () => {
+    console.log("Enrollment initiated (mock)");
+  },
+};
+
+const enroll = () => {
+  console.log("Enroll button clicked (mock)");
+  enrollMutation.mutateAsync();
+};
+
 
 // --- DATA CONSTANTS (STATIC DATA) ---
 const courseTags: string[] = ["Top Rated", "AI-Powered", "Beginner Friendly"];
@@ -408,37 +431,16 @@ const Breadcrumb = () => (
 
 // --- MAIN PAGE COMPONENT ---
 export default function MyCoursesPage(): JSX.Element {
-  const { courseId } = useParams<{ courseId: string }>();
-  const router = useRouter();
-  const { isSignedIn } = useAuth();
-  const { data: course, isLoading: courseLoading, error: courseError } = useCourse(String(courseId));
-  const { data: lessons = [], isLoading: lessonsLoading, refetch: refetchLessons } = useLessons(String(courseId));
-  const enrollMutation = useEnrollInCourse();
-
-  const enroll = async () => {
-    if (!isSignedIn) {
-      router.push("/login");
-      return;
-    }
-    try {
-      await enrollMutation.mutateAsync(String(courseId));
-      await refetchLessons();
-    } catch (_) {
-      // Errors are handled via mutation toast
-    }
-  };
-
-  if (courseLoading) return <div className="p-6">Loading course...</div>;
-  if (courseError) return <div className="p-6 text-red-500">{(courseError as any)?.message || "Failed to load course"}</div>;
-  if (!course) return <div className="p-6">Course not found</div>;
+  // Removed all backend-related hooks and logic
+  const course = mockCourse;
 
   const courseDetails: CourseDetail[] = [
     { icon: "/difficulty.svg", label: "Difficulty", value: "Intermediate" },
     { icon: "/star.svg", label: "Rating", value: "4.7 (320 reviews)" },
     { icon: "/duration.svg", label: "Duration", value: "8 hrs 21 mins" },
-    { icon: "/usercount.svg", label: "User Count", value: `${course?.enrollmentCount ?? 0}+ enrolled` },
+    { icon: "/usercount.svg", label: "User Count", value: `${course.enrollmentCount}+ enrolled` },
     { icon: "/language.svg", label: "Language", value: "English Only" },
-    { icon: "/assignment.svg", label: "Assignments", value: `${course?.lessonCount ?? 0}` },
+    { icon: "/assignment.svg", label: "Assignments", value: `${course.lessonCount}` },
   ];
 
   const teacherBio = `I'm a Digital Designer & teacher at BYOL international. Sharing is who I
@@ -472,8 +474,8 @@ export default function MyCoursesPage(): JSX.Element {
               />
               <CourseMap />
               <TeacherProfileSection 
-                teacherName={course?.teacher?.name || "Arjun Mehta"}
-                teacherTitle={course?.teacher?.email || "AI Educator at DeepLearn Lab."}
+                teacherName={course.teacher.name}
+                teacherTitle={course.teacher.email}
                 teacherBio={teacherBio}
               />
               <ReviewsSection reviews={reviews} />
