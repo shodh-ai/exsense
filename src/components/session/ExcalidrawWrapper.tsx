@@ -11,6 +11,7 @@ import dynamic from "next/dynamic";
 import "@excalidraw/excalidraw/index.css";
 import { useSessionStore } from "@/lib/store";
 import { useExcalidrawIntegration } from "@/hooks/useExcalidrawIntegration";
+import type { NormalizedZoomValue } from "@excalidraw/excalidraw/types";
 
 declare global {
   interface Window {
@@ -32,6 +33,8 @@ declare global {
       updateScene: (scene: { elements?: any[], appState?: any }) => void;
       convertSkeletonToExcalidraw: (skeletonElements: any[]) => any[];
     };
+    __convertMermaidToExcalidrawWithColors?: (skeletonElements: any[], mermaidSyntax: string) => any[];
+    __enhancedConvertSkeletonToExcalidraw?: (skeletonElements: any[], mermaidSyntax: string) => any[];
   }
 }
 
@@ -57,8 +60,6 @@ const ExcalidrawWrapper = () => {
     handleChangeWithControl
   } = useExcalidrawIntegration();
 
-  // Removed scroll position reset to allow programmatic scrolling (scrollToContent)
-
   // Sync with session store
   useEffect(() => {
     if (excalidrawAPI && excalidrawAPI !== excalidrawAPIFromStore) {
@@ -66,9 +67,205 @@ const ExcalidrawWrapper = () => {
     }
   }, [excalidrawAPI, excalidrawAPIFromStore, setExcalidrawAPIToStore]);
 
-  // Expose debug functions to window (merge instead of overwrite)
+  // Helper function to ensure valid hex colors
+  const normalizeColor = (color?: string): string => {
+    if (!color) return '#1e1e1e';
+    
+    // If it's already a valid hex color, return it
+    if (color.match(/^#[0-9A-Fa-f]{6}$/)) {
+      return color;
+    }
+    
+    // If it's a 3-char hex, expand it
+    if (color.match(/^#[0-9A-Fa-f]{3}$/)) {
+      return color.replace(/^#(.)(.)(.)$/, '#$1$1$2$2$3$3');
+    }
+    
+    // Common color name mappings for Mermaid compatibility
+    const colorMap: { [key: string]: string } = {
+      'transparent': '#00000000',
+      'black': '#000000',
+      'white': '#ffffff',
+      'red': '#ff0000',
+      'green': '#00ff00',
+      'blue': '#0000ff',
+      'yellow': '#ffff00',
+      'orange': '#ffa500',
+      'purple': '#800080',
+      'pink': '#ffc0cb',
+      'gray': '#808080',
+      'grey': '#808080'
+    };
+    
+    return colorMap[color.toLowerCase()] || '#1e1e1e';
+  };
+
+  // Helper function to determine text color based on background
+  const getContrastingTextColor = (backgroundColor: string): string => {
+    // Remove alpha channel for calculation
+    const hex = backgroundColor.replace(/^#/, '').slice(0, 6);
+    
+    // Convert to RGB
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    
+    // Calculate luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Return black for light backgrounds, white for dark backgrounds
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+  };
+
+  // Improved text dimension calculation using canvas measurements
+  const getTextDimensions = (text: string, fontSize: number = 16, fontFamily: number = 1): { width: number; height: number } => {
+    if (!text || text.trim() === '') return { width: 20, height: fontSize * 1.25 };
+    
+    // Create a temporary canvas for accurate text measurement
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    
+    if (!context) {
+      // Fallback calculation
+      const lines = text.split('\n');
+      const avgCharWidth = fontSize * 0.6;
+      const maxLineLength = Math.max(...lines.map(line => line.length));
+      return {
+        width: Math.max(maxLineLength * avgCharWidth, 20),
+        height: lines.length * fontSize * 1.25
+      };
+    }
+    
+    // Set font properties similar to Excalidraw's font rendering
+    const fontWeight = 'normal';
+    const fontStyle = 'normal';
+    
+    // Map Excalidraw font families to actual fonts
+    const fontFamilyMap: { [key: number]: string } = {
+      1: 'Virgil, Segoe UI Emoji', // Hand-drawn
+      2: 'Helvetica, Segoe UI Emoji', // Normal
+      3: 'Cascadia, Segoe UI Emoji', // Code
+      4: 'Virgil, Segoe UI Emoji' // Default fallback
+    };
+    
+    const fontFamilyName = fontFamilyMap[fontFamily] || fontFamilyMap[1];
+    context.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamilyName}`;
+    
+    const lines = text.split('\n');
+    const lineHeight = fontSize * 1.25;
+    
+    // Measure each line and find the maximum width
+    let maxWidth = 0;
+    lines.forEach(line => {
+      const lineWidth = context.measureText(line.trim()).width;
+      maxWidth = Math.max(maxWidth, lineWidth);
+    });
+    
+    // Add some padding for better visual appearance
+    const padding = fontSize * 0.2;
+    
+    return {
+      width: Math.max(maxWidth + padding * 2, 20),
+      height: Math.max(lines.length * lineHeight + padding, fontSize * 1.25)
+    };
+  };
+
+  // Expose debug functions and color parser
   useEffect(() => {
     if (excalidrawAPI) {
+      // Add the complete color parser to window
+      window.__convertMermaidToExcalidrawWithColors = (skeletonElements: any[], mermaidSyntax: string) => {
+        // Inline color parser implementation
+        const parseComplete = (syntax: string) => {
+          const classDefinitions = new Map<string, { [key: string]: string }>();
+          const nodeClassAssignments = new Map();
+          const linkStyles = new Map();
+          
+          const lines = syntax.split('\n').map((line: string) => line.trim()).filter((line: string) => line);
+          
+          for (const line of lines) {
+            // Parse classDef
+            const classDefMatch = line.match(/classDef\s+(\w+)\s+(.+)/);
+            if (classDefMatch) {
+              const [, className, styleString] = classDefMatch;
+              const styles: { [key: string]: string } = {};
+              const parts = styleString.split(',').map((s: string) => s.trim());
+              for (const part of parts) {
+                const colonIndex = part.indexOf(':');
+                if (colonIndex > 0) {
+                  const key = part.substring(0, colonIndex).trim();
+                  const value = part.substring(colonIndex + 1).trim();
+                  styles[key] = value;
+                }
+              }
+              classDefinitions.set(className, styles);
+            }
+            
+            // Parse class assignments
+            const classMatch = line.match(/class\s+([A-Za-z0-9_,\s]+)\s+(\w+)/);
+            if (classMatch) {
+              const [, nodeIds, className] = classMatch;
+              const nodes = nodeIds.split(/[,\\s]+/).filter((id: string) => id.trim());
+              for (const nodeId of nodes) {
+                const cleanNodeId = nodeId.trim().replace(/;$/, '');
+                nodeClassAssignments.set(cleanNodeId, className);
+              }
+            }
+            
+            // Parse linkStyle
+            const linkStyleMatch = line.match(/linkStyle\s+(\d+)\s+(.+)/);
+            if (linkStyleMatch) {
+              const [, linkIndex, styleString] = linkStyleMatch;
+              const styles: { [key: string]: string } = {};
+              const parts = styleString.split(',').map((s: string) => s.trim());
+              for (const part of parts) {
+                const colonIndex = part.indexOf(':');
+                if (colonIndex > 0) {
+                  const key = part.substring(0, colonIndex).trim();
+                  const value = part.substring(colonIndex + 1).trim();
+                  styles[key] = value;
+                }
+              }
+              linkStyles.set(parseInt(linkIndex), styles);
+            }
+          }
+          
+          return { classDefinitions, nodeClassAssignments, linkStyles };
+        };
+        
+        const { classDefinitions, nodeClassAssignments, linkStyles } = parseComplete(mermaidSyntax);
+        let linkIndex = 0;
+        
+        return skeletonElements.map((element: any, elementIndex: number) => {
+          const isLink = element.type === 'arrow' || element.type === 'line';
+          let appliedStyles: { [key: string]: any } = {};
+          
+          if (isLink) {
+            appliedStyles = linkStyles.get(linkIndex) || {};
+            linkIndex++;
+          } else {
+            const className = nodeClassAssignments.get(element.id);
+            if (className && classDefinitions.has(className)) {
+              appliedStyles = classDefinitions.get(className) || {};
+            }
+          }
+          
+          const backgroundColor = normalizeColor(appliedStyles.fill || element.backgroundColor || '#ffffff');
+          const strokeColor = normalizeColor(appliedStyles.stroke || element.strokeColor || '#000000');
+          const strokeWidth = parseFloat(appliedStyles['stroke-width']) || element.strokeWidth || 2;
+          const textColor = appliedStyles.color ? normalizeColor(appliedStyles.color) : getContrastingTextColor(backgroundColor);
+          
+          return {
+            ...element,
+            strokeColor: isLink ? strokeColor : strokeColor,
+            backgroundColor: element.type === 'text' ? 'transparent' : backgroundColor,
+            strokeWidth: strokeWidth,
+            // For text elements, use textColor as strokeColor
+            ...(element.type === 'text' && { strokeColor: textColor })
+          };
+        });
+      };
+
       window.__excalidrawDebug = {
         ...(window.__excalidrawDebug || {}),
         toggleLaserPointer: () => toggleLaserPointer(),
@@ -106,22 +303,33 @@ const ExcalidrawWrapper = () => {
         updateScene: (scene: { elements?: any[], appState?: any }) => {
           excalidrawAPI.updateScene?.(scene);
         },
-        convertSkeletonToExcalidraw: (skeletonElements: any[]) => {
-          // Enhanced implementation for skeleton to Excalidraw conversion with proper element type handling
+        convertSkeletonToExcalidraw: (skeletonElements: any[], mermaidSyntax?: string) => {
+          // Enhanced implementation with Mermaid color parsing
+          if (mermaidSyntax && window.__convertMermaidToExcalidrawWithColors) {
+            // Use the enhanced converter that parses Mermaid colors
+            return window.__convertMermaidToExcalidrawWithColors(skeletonElements, mermaidSyntax);
+          }
+          
+          // Fallback to basic conversion
           return skeletonElements.map((element, index) => {
+            // Normalize colors from Mermaid format
+            const fillColor = normalizeColor(element.backgroundColor || element.fill);
+            const strokeColor = normalizeColor(element.strokeColor || element.stroke);
+            const textColor = element.color ? normalizeColor(element.color) : getContrastingTextColor(fillColor);
+            
             const baseElement = {
               id: `element_${Date.now()}_${index}`,
               type: element.type || 'rectangle',
               x: element.x || 0,
               y: element.y || 0,
               angle: 0,
-              strokeColor: element.strokeColor || '#1e1e1e',
-              backgroundColor: element.backgroundColor || 'transparent',
-              fillStyle: 'solid',
+              strokeColor: strokeColor,
+              backgroundColor: fillColor,
+              fillStyle: element.fillStyle || 'solid',
               strokeWidth: element.strokeWidth || 2,
-              strokeStyle: 'solid',
-              roughness: 1,
-              opacity: 100,
+              strokeStyle: element.strokeStyle || 'solid',
+              roughness: element.roughness || 1,
+              opacity: element.opacity || 100,
               groupIds: [],
               frameId: null,
               boundElements: null,
@@ -151,19 +359,30 @@ const ExcalidrawWrapper = () => {
                 };
               
               case 'text':
+                const text = element.text || '';
+                const fontSize = element.fontSize || 16;
+                const fontFamily = element.fontFamily || 1;
+                const lineHeight = element.lineHeight || 1.25;
+                
+                // Use accurate text dimensions
+                const textDimensions = getTextDimensions(text, fontSize, fontFamily);
+                
                 return {
                   ...baseElement,
-                  width: element.width || 120,
-                  height: element.height || 25,
-                  text: element.text || '',
-                  fontSize: element.fontSize || 16,
-                  fontFamily: 1,
-                  textAlign: 'center',
-                  verticalAlign: 'middle',
+                  strokeColor: textColor, // Use calculated contrast color for text
+                  backgroundColor: 'transparent', // Text background should be transparent
+                  width: element.width || textDimensions.width,
+                  height: element.height || textDimensions.height,
+                  text: text,
+                  fontSize: fontSize,
+                  fontFamily: fontFamily,
+                  textAlign: element.textAlign || 'left',
+                  verticalAlign: element.verticalAlign || 'top',
                   containerId: null,
-                  originalText: element.text || '',
-                  lineHeight: 1.25,
-                  baseline: Math.round((element.fontSize || 16) * 0.9)
+                  originalText: text,
+                  autoResize: true,
+                  lineHeight: lineHeight,
+                  baseline: Math.round(fontSize * 0.8)
                 };
               
               case 'ellipse':
@@ -173,13 +392,30 @@ const ExcalidrawWrapper = () => {
                   height: element.height || 120
                 };
               
+              case 'diamond':
+                // Convert diamond to a diamond-shaped polygon or use freedraw
+                return {
+                  ...baseElement,
+                  type: 'freedraw',
+                  width: element.width || 120,
+                  height: element.height || 120,
+                  points: [
+                    [60, 0],   // top
+                    [120, 60], // right
+                    [60, 120], // bottom
+                    [0, 60],   // left
+                    [60, 0]    // close
+                  ].map(([x, y]) => [x - 60, y - 60]), // Center the diamond
+                  pressures: []
+                };
+              
               case 'rectangle':
               default:
                 return {
                   ...baseElement,
                   width: element.width || 120,
                   height: element.height || 60,
-                  roundness: { type: 3, value: 8 }
+                  roundness: element.roundness || (element.rounded ? { type: 3, value: 8 } : null)
                 };
             }
           });
@@ -191,7 +427,7 @@ const ExcalidrawWrapper = () => {
       // Cleanup
       delete window.__excalidrawDebug;
     };
-  }, [excalidrawAPI, toggleLaserPointer]);
+  }, [excalidrawAPI, toggleLaserPointer, getTextDimensions]);
 
   // Handle Excalidraw API initialization
   const handleExcalidrawAPI = useCallback((api: any) => {
@@ -218,8 +454,6 @@ const ExcalidrawWrapper = () => {
       } catch {}
     }
   }, [excalidrawAPI, setExcalidrawAPI]);
-  
-  // Removed handleCanvasChange which prevented scrolling
 
   // --- Plan rendering helpers (images via Google CSE and colorful rounded boxes)
   type WhiteboardPlan = {
@@ -291,14 +525,20 @@ const ExcalidrawWrapper = () => {
   };
 
   const addRoundedBox = (opts: { x: number; y: number; width: number; height: number; text?: string; color?: string; stroke?: string; fontSize?: number }, idx = 0) => {
-    const { x, y, width, height, text, color, stroke, fontSize } = opts;
+    const { x, y, width, height, text, fontSize = 18 } = opts;
+    
+    // Normalize colors
+    const backgroundColor = normalizeColor(opts.color || palette[idx % palette.length]);
+    const strokeColor = normalizeColor(opts.stroke || '#1f2937');
+    const textColor = text ? getContrastingTextColor(backgroundColor) : '#000000';
+    
     const rect = {
       id: makeId(),
       type: 'rectangle',
       x, y, width, height,
       angle: 0,
-      strokeColor: stroke || '#1f2937',
-      backgroundColor: color || palette[idx % palette.length],
+      strokeColor: strokeColor,
+      backgroundColor: backgroundColor,
       fillStyle: 'solid',
       strokeWidth: 2,
       strokeStyle: 'solid',
@@ -315,17 +555,25 @@ const ExcalidrawWrapper = () => {
       versionNonce: Math.floor(Math.random() * 1000000),
       seed: Math.floor(Math.random() * 2147483647),
     };
+    
     const elements: any[] = [rect];
+    
     if (text) {
+      // Use accurate text dimensions for positioning and sizing
+      const textDimensions = getTextDimensions(text, fontSize, 1);
+      
+      // Center the text within the rectangle
+      const textX = x + (width - textDimensions.width) / 2;
+      const textY = y + (height - textDimensions.height) / 2;
+      
+      // Create text element with proper contrast color and accurate sizing
       const textEl = {
         id: makeId(),
         type: 'text',
-        x: x + 16,
-        y: y + (height / 2) - (fontSize ? fontSize / 2 : 10),
-        width: Math.max(80, width - 32),
-        height: fontSize ? fontSize + 8 : 24,
+        x: Math.max(textX, x + 5), // Ensure minimum padding from left edge
+        y: Math.max(textY, y + 5), // Ensure minimum padding from top edge
         angle: 0,
-        strokeColor: '#111827',
+        strokeColor: textColor, // Use contrasting color
         backgroundColor: 'transparent',
         fillStyle: 'solid',
         strokeWidth: 1,
@@ -339,25 +587,29 @@ const ExcalidrawWrapper = () => {
         link: null,
         locked: false,
         isDeleted: false,
-        text,
-        fontSize: fontSize || 18,
+        text: text,
+        fontSize: fontSize,
         fontFamily: 1,
-        textAlign: 'center',
-        verticalAlign: 'middle',
-        containerId: rect.id,
+        textAlign: 'left',
+        verticalAlign: 'top',
+        containerId: null,
         originalText: text,
-        autoResize: false,
+        autoResize: true,
         lineHeight: 1.25,
+        width: textDimensions.width,
+        height: textDimensions.height,
         versionNonce: Math.floor(Math.random() * 1000000),
         seed: Math.floor(Math.random() * 2147483647),
       };
       elements.push(textEl);
     }
+    
     insertElements(elements);
   };
 
   const addArrow = (opts: { from: { x: number; y: number }; to: { x: number; y: number }; color?: string; width?: number }) => {
-    const { from, to, color, width } = opts;
+    const { from, to, width } = opts;
+    const color = normalizeColor(opts.color || '#111827');
     const dx = (to.x - from.x) || 0;
     const dy = (to.y - from.y) || 0;
     const arrow = {
@@ -368,7 +620,7 @@ const ExcalidrawWrapper = () => {
       width: 0,
       height: 0,
       angle: 0,
-      strokeColor: color || '#111827',
+      strokeColor: color,
       backgroundColor: 'transparent',
       fillStyle: 'solid',
       strokeWidth: width ?? 2,
@@ -406,7 +658,7 @@ const ExcalidrawWrapper = () => {
     plan.images?.forEach((img) => {
       tasks.push(addImageByQuery(img.query, img.x ?? 0, img.y ?? 0, img.width ?? 480, img.height ?? 320) as any);
     });
-    // Insert boxes immediately
+    // Insert boxes immediately with proper colors
     plan.boxes?.forEach((box, i) => addRoundedBox(box, i));
     // Wait for images so arrows can be drawn on top
     await Promise.allSettled(tasks);
@@ -456,50 +708,23 @@ const ExcalidrawWrapper = () => {
     };
   }, [excalidrawAPI]);
 
-
-  // Ensure scene fits and leaves a small margin so text isn't clipped at edges
-  useEffect(() => {
-    if (!excalidrawAPI) return;
-
-    const didInitialFitRef = { current: false } as React.MutableRefObject<boolean>;
-    const fittingRef = { current: false } as React.MutableRefObject<boolean>;
-
-    const fit = (force = false) => {
-      if (fittingRef.current) return;
-      try {
-        fittingRef.current = true;
-        const els = excalidrawAPI.getSceneElements?.() || [];
-        if (els.length && excalidrawAPI.scrollToContent) {
-          // Keep zoom 1 and only scroll when needed; avoid scaling content
-          if (force || !didInitialFitRef.current) {
-            excalidrawAPI.updateScene?.({ appState: { zoom: { value: 1 } } });
-            excalidrawAPI.scrollToContent(els, { fitToContent: false, animate: false });
-            didInitialFitRef.current = true;
-          }
-        }
-      } catch {}
-      finally {
-        fittingRef.current = false;
-      }
-    };
-
-    // run after layout paints to get accurate container size
-    const raf = requestAnimationFrame(() => fit(true));
-
-    const onResize = () => fit(true);
-    window.addEventListener('resize', onResize);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      cancelAnimationFrame(raf);
-    };
-  }, [excalidrawAPI]);
-
   return (
-    <div ref={containerRef} className="excalidraw-no-ui" style={{ position: 'relative', height: '100%', width: '100%', zIndex: 20, backgroundColor: 'transparent', transition: 'opacity 80ms ease' }}>
+    <div 
+      ref={containerRef} 
+      className="excalidraw-scrollable" 
+      style={{ 
+        position: 'relative', 
+        height: '100%', 
+        width: '100%', 
+        zIndex: 20, 
+        backgroundColor: 'transparent', 
+        transition: 'opacity 80ms ease',
+        overflow: 'auto'
+      }}
+    >
       <Excalidraw
         excalidrawAPI={handleExcalidrawAPI}
-        onPointerUpdate={handlePointerUpdate}
-        renderTopRightUI={() => null} // This will remove the "Library" button
+        renderTopRightUI={() => null}
         UIOptions={{
           canvasActions: {
             changeViewBackgroundColor: false,
@@ -514,30 +739,28 @@ const ExcalidrawWrapper = () => {
             image: false,
           },
         }}
-        viewModeEnabled={true}
+        viewModeEnabled={false}
         zenModeEnabled={false}
         gridModeEnabled={false}
         initialData={{
           appState: {
             viewBackgroundColor: 'transparent',
-            // Set initial scroll position to 0,0
             scrollX: 0,
             scrollY: 0,
+            zoom: { value: 1 as NormalizedZoomValue }
           }
         }}
       />
-      {/* Scoped UI suppression for control panel: hide main menu, toolbar, and library trigger */}
       <style jsx global>{`
-        .excalidraw-no-ui .layer-ui__wrapper__top-right { display: none !important; }
-        .excalidraw-no-ui .layer-ui__wrapper__top-left { display: none !important; }
-        .excalidraw-no-ui .sidebar-trigger { display: none !important; }
-        .excalidraw-no-ui .App-toolbar-container { display: none !important; }
-        .excalidraw-no-ui .App-bottom-bar { display: none !important; }
-        .excalidraw-no-ui .help-icon { display: none !important; }
-        .excalidraw-no-ui .fixed-zen-mode-transition,
-        .excalidraw-no-ui .zen-mode-transition { display: none !important; }
-        /* Fallback: hide the entire UI overlay layer if any remnants remain */
-        .excalidraw-no-ui .layer-ui__wrapper { display: none !important; }
+        .excalidraw-scrollable .layer-ui__wrapper__top-right { display: none !important; }
+        .excalidraw-scrollable .layer-ui__wrapper__top-left { display: none !important; }
+        .excalidraw-scrollable .sidebar-trigger { display: none !important; }
+        .excalidraw-scrollable .App-toolbar-container { display: none !important; }
+        .excalidraw-scrollable .App-bottom-bar { display: none !important; }
+        .excalidraw-scrollable .help-icon { display: none !important; }
+        .excalidraw-scrollable .fixed-zen-mode-transition,
+        .excalidraw-scrollable .zen-mode-transition { display: none !important; }
+        .excalidraw-scrollable .layer-ui__wrapper { display: none !important; }
       `}</style>
     </div>
   );
