@@ -134,6 +134,7 @@ export interface UseLiveKitSessionReturn {
   selectSuggestedResponse: (suggestion: { id: string; text: string; reason?: string }) => Promise<void>;
   livekitUrl: string;
   livekitToken: string;
+  deleteSessionNow: () => Promise<void>;
 }
 
 export function useLiveKitSession(roomName: string, userName: string, courseId?: string): UseLiveKitSessionReturn {
@@ -1177,6 +1178,18 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, [startTask, clearSuggestedResponses]);
 
+  // Expose an imperative deletion helper so pages can terminate the pod when leaving route
+  const deleteSessionNow = useCallback(async () => {
+    try {
+      const fn = sendDeleteNowRef.current;
+      if (typeof fn === 'function') {
+        await fn();
+      }
+    } catch (e) {
+      if (SESSION_FLOW_DEBUG) console.warn('[FLOW] deleteSessionNow error (non-fatal):', e);
+    }
+  }, []);
+
   return { 
     isConnected, 
     isLoading, 
@@ -1189,5 +1202,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     selectSuggestedResponse,
     livekitUrl,
     livekitToken,
+    deleteSessionNow,
   };
 }
