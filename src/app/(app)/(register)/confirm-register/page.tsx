@@ -36,16 +36,31 @@ export default function ConfirmRegister() {
             .catch(() => {});
     }, [isLoaded, isSignedIn, user]);
 
+    // Auto-redirect to the appropriate dashboard based on role
     useEffect(() => {
+        // Determine desired role from public/unsafe metadata or pendingRole
+        const currentPublicRole = ((user?.publicMetadata as any)?.role as string) || undefined;
+        const unsafeRole = ((user?.unsafeMetadata as any)?.role as string) || undefined;
+        let pendingRole: string | undefined;
+        try { pendingRole = window.localStorage.getItem('pendingRole') || undefined; } catch {}
+        const desired = (pendingRole || currentPublicRole || unsafeRole || '').toLowerCase();
+        const destination = desired === 'expert' ? '/teacher-dash' : '/my-course';
+
         const timer = setTimeout(() => {
-            router.push("/registration-test");
-        }, 500000);
+            router.push(destination);
+        }, 2000);
 
         return () => clearTimeout(timer);
-    }, [router]);
+    }, [router, user]);
 
     const handleContinue = () => {
-        router.push("/registration-test");
+        const currentPublicRole = ((user?.publicMetadata as any)?.role as string) || undefined;
+        const unsafeRole = ((user?.unsafeMetadata as any)?.role as string) || undefined;
+        let pendingRole: string | undefined;
+        try { pendingRole = window.localStorage.getItem('pendingRole') || undefined; } catch {}
+        const desired = (pendingRole || currentPublicRole || unsafeRole || '').toLowerCase();
+        const destination = desired === 'expert' ? '/teacher-dash' : '/my-course';
+        router.push(destination);
     };
 
     return (
@@ -58,7 +73,7 @@ export default function ConfirmRegister() {
                         Account Created!
                     </div>
                     <div className="text-sm sm:text-base text-gray-700">
-                        You will be redirected to your <br /> registration test in a few seconds.
+                        You will be redirected to your dashboard in a few seconds.
                     </div>
                 </div>
                 <button
@@ -71,3 +86,4 @@ export default function ConfirmRegister() {
         </div>
     );
 }
+
