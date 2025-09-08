@@ -11,8 +11,7 @@ import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send } from 'luc
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { useSessionStore } from '@/lib/store';
-import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
-import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
+import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
@@ -25,7 +24,7 @@ import { SendModal } from '@/components/SendModal';
 
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
-const VncViewer = dynamic(() => import('@/components/session/VncViewer'), { ssr: false });
+const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
 
 
@@ -95,34 +94,34 @@ interface SessionContentProps {
     activeView: ReturnType<typeof useSessionStore.getState>['activeView'];
     imprintingMode: ReturnType<typeof useSessionStore.getState>['imprinting_mode'];
     componentButtons: ButtonConfig[];
-    vncUrl: string;
-    isCreatingSession: boolean;
+    livekitUrl: string;
+    livekitToken: string;
+    isConnected: boolean;
     controlPanel?: React.ReactNode;
-    vncOverlay?: React.ReactNode;
-    handleVncInteraction: (interaction: { action: string; x: number; y: number }) => void;
     // Props for the debrief view
     currentDebrief: DebriefMessage | null;
     topicInput: string;
     setTopicInput: (value: string) => void;
     handleSendConceptual: () => void;
     topicInputRef: React.RefObject<HTMLTextAreaElement | null>;
+    sendBrowserInteraction: (payload: object) => Promise<void>;
 }
 
 function SessionContent({
     activeView,
     imprintingMode,
     componentButtons,
-    vncUrl,
-    isCreatingSession,
+    livekitUrl,
+    livekitToken,
+    isConnected,
     controlPanel,
-    vncOverlay,
-    handleVncInteraction,
     // Destructure new props
     currentDebrief,
     topicInput,
     setTopicInput,
     handleSendConceptual,
-    topicInputRef
+    topicInputRef,
+    sendBrowserInteraction,
 }: SessionContentProps) {
     return (
         <div className='w-full h-[90%] flex flex-col items-center justify-between'>
@@ -160,11 +159,11 @@ function SessionContent({
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
                     <div className="w-full h-full flex flex-col md:flex-row gap-4">
                         <div className="flex-1">
-                            {vncUrl ? (
-                                <VncViewer url={vncUrl} onInteraction={handleVncInteraction} overlay={vncOverlay} />
+                            {livekitUrl && livekitToken ? (
+                                <LiveKitViewer url={livekitUrl} token={livekitToken} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
-                                    {isCreatingSession ? 'Preparing your secure browser...' : 'Connecting to browser...'}
+                                    Connecting to LiveKit...
                                 </div>
                             )}
                         </div>
@@ -518,9 +517,27 @@ export default function Session() {
     const roomName = user?.id ? `session-${user.id}` : `session-${Date.now()}`;
     const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
 
+    // LiveKit integration (replace VNC viewer on Teacher page)
+    const shouldInitializeLiveKit = (!!user?.id) && (DEV_BYPASS || (isLoaded && isSignedIn));
+    const lkRoomName = shouldInitializeLiveKit ? `session-${user?.id}` : '';
+    const lkUserName = shouldInitializeLiveKit ? (user?.emailAddresses?.[0]?.emailAddress || `user-${user?.id}`) : '';
+    const {
+        livekitUrl,
+        livekitToken,
+        isConnected,
+        sendBrowserInteraction,
+    } = useLiveKitSession(
+        shouldInitializeLiveKit ? lkRoomName : '',
+        shouldInitializeLiveKit ? lkUserName : '',
+        (courseId as string) || undefined
+    );
+
     // Dynamic VNC session state (initialized empty; populated by API)
     const [viewerUrl, setViewerUrl] = useState<string>('');
     const [actionUrl, setActionUrl] = useState<string>('');
+    // LiveKit overrides: reconnect viewer to the pod's session room (sess-...)
+    const [overrideLkUrl, setOverrideLkUrl] = useState<string>('');
+    const [overrideLkToken, setOverrideLkToken] = useState<string>('');
     const [sessionId, setSessionId] = useState<string | null>(null);
     // Persist VNC session across refresh to avoid creating a new pod unnecessarily
     const SESSION_CACHE_KEY = 'vncSession';
@@ -532,14 +549,45 @@ export default function Session() {
     const [viewerUrlInput, setViewerUrlInput] = useState<string>('');
     const [actionUrlInput, setActionUrlInput] = useState<string>('');
 
-    const { isVNCConnected, disconnectVNC, executeBrowserAction, setOnVNCResponse, awaitVNCOpen } = useBrowserActionExecutor(null, sessionId ? actionUrl : undefined);
-    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(null);
+    // VNC removed: provide no-op stubs to keep legacy code compiling while we migrate UI to LiveKit
+    const isVNCConnected = false;
+    const disconnectVNC = () => {};
+    const executeBrowserAction = async (_opts: any) => {};
+    const setOnVNCResponse = (_fn: any) => {};
+    const awaitVNCOpen = async (_ms?: number) => {};
+    const connectToVNCSensor = (_url: string | null) => {};
+    const disconnectFromVNCSensor = () => {};
 
     // --- Debug watchers for critical state ---
     useEffect(() => {
         if (!sessionId) return;
         // eslint-disable-next-line no-console
         console.log('[TeacherPage] sessionId updated:', sessionId);
+        // Try to fetch a viewer token for the per-session room and override the viewer connection
+        (async () => {
+            try {
+                const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string | undefined;
+                if (!tokenServiceUrl) return;
+                const resp = await fetch(`${tokenServiceUrl}/api/dev/token-for-room`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ room_name: sessionId })
+                });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const newToken = data?.studentToken as string | undefined;
+                const newUrl = data?.livekitUrl as string | undefined;
+                if (newToken && newUrl) {
+                    setOverrideLkToken(newToken);
+                    setOverrideLkUrl(newUrl);
+                    // eslint-disable-next-line no-console
+                    console.log('[TeacherPage] Overriding viewer to session room', sessionId);
+                }
+            } catch (e) {
+                // eslint-disable-next-line no-console
+                console.warn('[TeacherPage] token-for-room failed', e);
+            }
+        })();
     }, [sessionId]);
 
     useEffect(() => {
@@ -1368,15 +1416,15 @@ export default function Session() {
                                         activeView={activeView}
                                         imprintingMode={imprinting_mode}
                                         componentButtons={componentButtons}
-                                        vncUrl={sessionId ? viewerUrl : ''}
-                                        isCreatingSession={isCreatingSession}
-                                        vncOverlay={null}
-                                        handleVncInteraction={handleVncInteraction}
+                                        livekitUrl={overrideLkUrl || livekitUrl}
+                                        livekitToken={overrideLkToken || livekitToken}
+                                        isConnected={isConnected}
                                         currentDebrief={currentDebrief}
                                         topicInput={topicInput}
                                         setTopicInput={setTopicInput}
                                         handleSendConceptual={handleSendConceptual}
                                         topicInputRef={topicInputRef}
+                                        sendBrowserInteraction={sendBrowserInteraction}
                                     />
                                     {imprinting_mode === 'WORKFLOW' && (
                                       <div className={`fixed bottom-0=100 left-0 right-0 z-50 ${isFinishModalOpen ? 'hidden' : ''}`}>

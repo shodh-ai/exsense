@@ -42,12 +42,14 @@ interface SessionContentProps {
 
     livekitUrl: string;
     livekitToken: string;
+    isConnected: boolean;
     diagramDefinition: string;
     isDiagramGenerating: boolean;
     onDiagramUpdate: (definition: string) => void;
+    sendBrowserInteraction: (payload: object) => Promise<void>;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, livekitUrl, livekitToken, diagramDefinition, isDiagramGenerating, onDiagramUpdate }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, livekitUrl, livekitToken, isConnected, diagramDefinition, isDiagramGenerating, onDiagramUpdate, sendBrowserInteraction }: SessionContentProps) {
     return (
         <div className='w-full h-full flex flex-col'>
             <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
@@ -77,7 +79,7 @@ function SessionContent({ activeView, setActiveView, componentButtons, livekitUr
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
                     {livekitUrl && livekitToken ? (
-                        <LiveKitViewer url={livekitUrl} token={livekitToken} />
+                        <LiveKitViewer url={livekitUrl} token={livekitToken} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-300">Connecting to LiveKit...</div>
                     )}
@@ -96,8 +98,16 @@ export default function Session() {
     const setVisualizationData = useSessionStore((s) => s.setVisualizationData);
 
     const [isIntroActive, setIsIntroActive] = useState(true);
-    const [diagramDefinition, setDiagramDefinition] = useState('');
-    const [generationStatus, setGenerationStatus] = useState<'idle' | 'streaming' | 'finished' | 'error'>('idle');
+    // Initialize Mermaid visualization hook (provides diagramDefinition and controls)
+    const {
+        diagramDefinition,
+        isStreaming,
+        error: mermaidError,
+        startVisualization,
+        clearDiagram,
+        updateDiagram,
+    } = useMermaidVisualization();
+    const SESSION_DEBUG = false;
 
     const handleIntroComplete = () => setIsIntroActive(false);
     const { user, isSignedIn, isLoaded } = useUser();
@@ -106,7 +116,8 @@ export default function Session() {
 
     const courseId = searchParams.get('courseId');
 
-    // --- MODIFICATION: The two-step conversion logic is restored ---
+    // (Removed duplicate useLiveKitSession destructuring; see below for the canonical instance)
+
     useEffect(() => {
         const convertAndRender = async () => {
             if (diagramDefinition && diagramDefinition.trim()) {
@@ -163,6 +174,7 @@ export default function Session() {
         livekitUrl,
         livekitToken,
         deleteSessionNow,
+        sendBrowserInteraction,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? roomName : '',
         shouldInitializeLiveKit ? userName : '',
@@ -180,17 +192,6 @@ export default function Session() {
 
     
     // LiveKit-only: no per-session URLs or legacy VNC state required
-    
-    // Initialize Mermaid visualization hook
-    const { 
-        diagramDefinition, 
-        isStreaming, 
-        error: mermaidError, 
-        startVisualization, 
-        clearDiagram, 
-        updateDiagram 
-    } = useMermaidVisualization();
-
     if (SESSION_DEBUG) console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 
     // No direct VNC interactions; all browser control is over LiveKit data channel now.
@@ -250,8 +251,11 @@ export default function Session() {
                         componentButtons={componentButtons} 
                         livekitUrl={livekitUrl}
                         livekitToken={livekitToken}
+                        isConnected={isConnected}
                         diagramDefinition={diagramDefinition}
+                        isDiagramGenerating={isStreaming}
                         onDiagramUpdate={updateDiagram}
+                        sendBrowserInteraction={sendBrowserInteraction}
                     />
 
                     {hasSuggestions && (

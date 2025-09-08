@@ -2,14 +2,15 @@
 import { LiveKitRoom, useRoomContext, useParticipants } from '@livekit/components-react';
 import '@livekit/components-styles';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Track, RemoteVideoTrack, TrackPublication, VideoQuality, RoomEvent } from 'livekit-client';
+import { Track, RemoteVideoTrack, TrackPublication, VideoQuality, RoomEvent, ConnectionState } from 'livekit-client';
 
 interface LiveKitViewerProps {
   url: string;
   token: string;
+  onInteraction?: (payload: object) => void | Promise<void>;
 }
 
-export default function LiveKitViewer({ url, token }: LiveKitViewerProps) {
+export default function LiveKitViewer({ url, token, onInteraction }: LiveKitViewerProps) {
   if (!token || !url) {
     return (
       <div className="w-full h-full flex items-center justify-center">
@@ -32,17 +33,43 @@ export default function LiveKitViewer({ url, token }: LiveKitViewerProps) {
         className="w-full h-full min-h-0"
       >
         <div className="w-full h-full min-h-0" style={{ position: 'relative', zIndex: 10 }}>
-          <ExplicitVideoGrid />
+          <ExplicitVideoGrid onInteraction={onInteraction} />
         </div>
       </LiveKitRoom>
     </div>
   );
 }
 
-function ExplicitVideoGrid() {
+type CaptureSize = { w: number; h: number } | null;
+
+function ExplicitVideoGrid({ onInteraction }: { onInteraction?: (payload: object) => void | Promise<void> }) {
   const room = useRoomContext();
   const participants = useParticipants();
   const [ready, setReady] = useState(false);
+  const [captureSize, setCaptureSize] = useState<CaptureSize>(null);
+
+  // Expose the LiveKit room and a helper sender for DevTools-based testing
+  useEffect(() => {
+    try {
+      (window as any).lkRoom = room;
+      (window as any).lkSend = (obj: any) => {
+        try {
+          const bytes = new TextEncoder().encode(JSON.stringify(obj));
+          (room as any)?.localParticipant?.publishData?.(bytes, { reliable: true });
+          console.log('[DEV] lkSend published', obj);
+        } catch (e) {
+          console.warn('[DEV] lkSend failed', e);
+        }
+      };
+      console.log('[DEV] window.lkRoom and window.lkSend set');
+    } catch {}
+    return () => {
+      try {
+        if ((window as any).lkRoom === room) delete (window as any).lkRoom;
+        if ((window as any).lkSend) delete (window as any).lkSend;
+      } catch {}
+    };
+  }, [room]);
 
   // Collect only remote VIDEO publications; avoid attaching audio as video.
   const videoPubs = useMemo(() => {
@@ -88,12 +115,28 @@ function ExplicitVideoGrid() {
       room.on(RoomEvent.TrackPublished, onPub);
       room.on(RoomEvent.TrackSubscribed, onSub);
       room.on(RoomEvent.TrackUnsubscribed, onUnsub);
+      const onData = (payload: Uint8Array, participant?: any, _?: any) => {
+        try {
+          const txt = new TextDecoder().decode(payload);
+          const obj = JSON.parse(txt);
+          if (obj && typeof obj === 'object') {
+            const w = Number(obj.width || obj.w);
+            const h = Number(obj.height || obj.h);
+            if (obj.type === 'meta' && Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+              setCaptureSize({ w, h });
+              console.log('[LK][viewer] capture meta received', { w, h, from: participant?.identity });
+            }
+          }
+        } catch {}
+      };
+      room.on(RoomEvent.DataReceived as any, onData);
       return () => {
         room.off(RoomEvent.ParticipantConnected, onPc);
         room.off(RoomEvent.ParticipantDisconnected, onPd);
         room.off(RoomEvent.TrackPublished, onPub);
         room.off(RoomEvent.TrackSubscribed, onSub);
         room.off(RoomEvent.TrackUnsubscribed, onUnsub);
+        room.off(RoomEvent.DataReceived as any, onData);
       };
     } catch {}
   }, [room]);
@@ -198,14 +241,17 @@ function ExplicitVideoGrid() {
   return (
     <div className="w-full h-full min-h-0 grid grid-cols-1 auto-rows-fr gap-2 overflow-hidden">
       {videoPairs.map(({ pub, track }, idx) => (
-        <VideoRenderer key={track.sid || `vid-${idx}`} track={track} pub={pub} />
+        <VideoRenderer key={track.sid || `vid-${idx}`} track={track} pub={pub} onInteraction={onInteraction} captureSize={captureSize || undefined} />
       ))}
     </div>
   );
 }
 
-function VideoRenderer({ track, pub }: { track: RemoteVideoTrack, pub: any }) {
+function VideoRenderer({ track, pub, onInteraction, captureSize }: { track: RemoteVideoTrack, pub: any, onInteraction?: (payload: object) => void | Promise<void>, captureSize?: { w: number; h: number } }) {
   const ref = React.useRef<HTMLVideoElement>(null);
+  const room = useRoomContext();
+  const pendingRef = React.useRef<object[]>([]);
+  const flushingRef = React.useRef<boolean>(false);
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -262,14 +308,124 @@ function VideoRenderer({ track, pub }: { track: RemoteVideoTrack, pub: any }) {
     };
   }, [track]);
 
+  // --- Interaction handlers ---
+  const publishOrQueue = async (payload: object) => {
+    const tryRoomSend = async () => {
+      if (!room || room.state !== ConnectionState.Connected) throw new Error('viewer room not connected');
+      const bytes = new TextEncoder().encode(JSON.stringify(payload));
+      await room.localParticipant.publishData(bytes, { reliable: true });
+    };
+    try {
+      await tryRoomSend();
+      try { console.log('[Interaction][viewer-room] sent', payload); } catch {}
+      return;
+    } catch (e) {
+      try {
+        if (onInteraction) {
+          await onInteraction(payload);
+          try { console.log('[Interaction][fallback-hook] sent', payload); } catch {}
+          return;
+        }
+      } catch {}
+      // Queue and start a flusher
+      pendingRef.current.push(payload);
+      try { console.log('[Interaction][queued]', payload, 'queue_len=', pendingRef.current.length); } catch {}
+      if (!flushingRef.current) {
+        flushingRef.current = true;
+        const flush = async () => {
+          if (!room || room.state !== ConnectionState.Connected) return;
+          const items = pendingRef.current.splice(0, pendingRef.current.length);
+          for (const p of items) {
+            try {
+              const bytes = new TextEncoder().encode(JSON.stringify(p));
+              await room.localParticipant.publishData(bytes);
+              try { console.log('[Interaction][flush] sent', p); } catch {}
+            } catch {
+              // put back and retry later
+              pendingRef.current.unshift(p);
+              try { console.warn('[Interaction][flush] failed; re-queued'); } catch {}
+              break;
+            }
+          }
+        };
+        const id = setInterval(async () => {
+          try { await flush(); } catch {}
+          if (pendingRef.current.length === 0 && room && room.state === ConnectionState.Connected) {
+            clearInterval(id);
+            flushingRef.current = false;
+          }
+        }, 500);
+      }
+    }
+  };
+
+  const handleMouseClick = async (event: React.MouseEvent<HTMLVideoElement>) => {
+    try {
+      try { console.log('[Interaction] click event'); } catch {}
+      const video = ref.current;
+      if (!video) return;
+      const rect = video.getBoundingClientRect();
+      const clientW = video.clientWidth;
+      const clientH = video.clientHeight;
+      const vidW = captureSize?.w || video.videoWidth || clientW;
+      const vidH = captureSize?.h || video.videoHeight || clientH;
+      const scale = Math.min(clientW / vidW, clientH / vidH);
+      const displayW = vidW * scale;
+      const displayH = vidH * scale;
+      const offsetX = (clientW - displayW) / 2;
+      const offsetY = (clientH - displayH) / 2;
+      // Coordinates relative to displayed video content (excluding letterbox bars)
+      const localX = (event.clientX - rect.left) - offsetX;
+      const localY = (event.clientY - rect.top) - offsetY;
+      // Clamp within display area
+      const clampedX = Math.max(0, Math.min(displayW, localX));
+      const clampedY = Math.max(0, Math.min(displayH, localY));
+      const scaledX = Math.round((clampedX / displayW) * vidW);
+      const scaledY = Math.round((clampedY / displayH) * vidH);
+      const payload = { action: 'click', x: scaledX, y: scaledY };
+      await publishOrQueue(payload);
+    } catch (e) {
+      console.warn('[Interaction] click handler failed:', e);
+    }
+  };
+
+  const handleKeyDown = async (event: React.KeyboardEvent<HTMLVideoElement>) => {
+    try {
+      try { console.log('[Interaction] keydown event', event.key); } catch {}
+      event.preventDefault();
+      const payload = (event.key.length === 1)
+        ? { action: 'type', text: event.key }
+        : { action: 'keypress', key: event.key };
+      await publishOrQueue(payload);
+    } catch (e) {
+      console.warn('[Interaction] keydown handler failed:', e);
+    }
+  };
+
+  const handleScroll = async (event: React.WheelEvent<HTMLVideoElement>) => {
+    try {
+      try { console.log('[Interaction] wheel event', { dx: event.deltaX, dy: event.deltaY }); } catch {}
+      event.preventDefault();
+      const payload = { action: 'scroll', dx: event.deltaX, dy: event.deltaY };
+      await publishOrQueue(payload);
+    } catch (e) {
+      console.warn('[Interaction] wheel handler failed:', e);
+    }
+  };
+
   return (
     <video
       ref={ref}
       autoPlay
       playsInline
       muted
-      className="w-full h-full bg-black rounded border-2 border-green-500 shadow-lg"
+      className="w-full h-full bg-black rounded border-2 border-green-500 shadow-lg cursor-crosshair"
       style={{ objectFit: 'contain', zIndex: 20, position: 'relative' }}
+      onMouseDown={() => { try { ref.current?.focus(); } catch {} }}
+      onClick={handleMouseClick}
+      onKeyDown={handleKeyDown}
+      onWheel={handleScroll}
+      tabIndex={0}
     />
   );
 }

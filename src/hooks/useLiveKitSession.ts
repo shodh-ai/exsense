@@ -135,6 +135,7 @@ export interface UseLiveKitSessionReturn {
   livekitUrl: string;
   livekitToken: string;
   deleteSessionNow: () => Promise<void>;
+  sendBrowserInteraction: (payload: object) => Promise<void>;
 }
 
 export function useLiveKitSession(roomName: string, userName: string, courseId?: string): UseLiveKitSessionReturn {
@@ -246,8 +247,16 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             if (!data.success) {
                 throw new Error('Token generation failed');
             }
-            
+
             const { studentToken: token, livekitUrl: wsUrl, roomName: actualRoomName } = data;
+            // NEW: capture sessionId immediately if provided by token service
+            try {
+                const sid = (data.sessionId as string | null) || null;
+                if (sid && typeof sid === 'string' && sid.startsWith('sess-')) {
+                    sessionIdRef.current = sid;
+                    if (SESSION_FLOW_DEBUG) console.log('[FLOW] Captured sessionId from token service response:', sid);
+                }
+            } catch {}
             const sessionStatusUrl: string | undefined = (data.sessionStatusUrl as string | undefined) || undefined;
             if (sessionStatusUrl) {
                 const proxied = toLocalStatusUrl(sessionStatusUrl);
@@ -1190,6 +1199,21 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, []);
 
+  // Publish arbitrary interaction payloads over LiveKit Data Channel to the browser bot
+  const sendBrowserInteraction = useCallback(async (payload: object) => {
+    try {
+      if (roomInstance.state !== ConnectionState.Connected) {
+        console.warn('[Interaction] Cannot send, room not connected');
+        return;
+      }
+      const json = JSON.stringify(payload);
+      const bytes = new TextEncoder().encode(json);
+      await roomInstance.localParticipant.publishData(bytes);
+    } catch (e) {
+      console.error('[Interaction] Failed to publish data:', e);
+    }
+  }, []);
+
   return { 
     isConnected, 
     isLoading, 
@@ -1203,5 +1227,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     livekitUrl,
     livekitToken,
     deleteSessionNow,
+    sendBrowserInteraction,
   };
 }
