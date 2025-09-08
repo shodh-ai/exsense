@@ -7,8 +7,8 @@ import { Room } from 'livekit-client';
 import dynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
-import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
-import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
+
+import { useMermaidVisualization } from '@/hooks/useMermaidVisualization';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
@@ -18,8 +18,10 @@ import SuggestedResponses from '@/components/session/SuggestedResponses';
 import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw';
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
+
 const ExcalidrawWrapper = dynamic(() => import('@/components/session/ExcalidrawWrapper'), { ssr: false });
-const VncViewer = dynamic(() => import('@/components/session/VncViewer'), { ssr: false });
+const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
+
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
 const MessageDisplay = dynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
 
@@ -37,13 +39,15 @@ interface SessionContentProps {
     activeView: ViewKey;
     setActiveView: (view: ViewKey) => void;
     componentButtons: ButtonConfig[];
-    vncUrl: string;
-    handleVncInteraction: (interaction: { action: string; x: number; y: number }) => void;
+
+    livekitUrl: string;
+    livekitToken: string;
     diagramDefinition: string;
     isDiagramGenerating: boolean;
+    onDiagramUpdate: (definition: string) => void;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, handleVncInteraction, diagramDefinition, isDiagramGenerating }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, livekitUrl, livekitToken, diagramDefinition, isDiagramGenerating, onDiagramUpdate }: SessionContentProps) {
     return (
         <div className='w-full h-full flex flex-col'>
             <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
@@ -72,7 +76,11 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, h
                     {!isDiagramGenerating && <ExcalidrawWrapper />}
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
-                    <VncViewer url={vncUrl} onInteraction={handleVncInteraction} />
+                    {livekitUrl && livekitToken ? (
+                        <LiveKitViewer url={livekitUrl} token={livekitToken} />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300">Connecting to LiveKit...</div>
+                    )}
                 </div>
                 <div className={`${activeView === 'video' ? 'block' : 'hidden'} w-full h-full`}>
                     <VideoViewer />
@@ -142,9 +150,26 @@ export default function Session() {
     const userName = shouldInitializeLiveKit ? (user.emailAddresses[0]?.emailAddress || `user-${user.id}`) : '';
 
     const {
-        room, isConnected, isLoading, connectionError, startTask, agentIdentity, transcriptionMessages, statusMessages, selectSuggestedResponse,
-    } = useLiveKitSession(roomName, userName, courseId || undefined);
 
+        room,
+        isConnected,
+        isLoading,
+        connectionError,
+        startTask,
+        agentIdentity,
+        transcriptionMessages,
+        statusMessages,
+        selectSuggestedResponse,
+        livekitUrl,
+        livekitToken,
+        deleteSessionNow,
+    } = useLiveKitSession(
+        shouldInitializeLiveKit ? roomName : '',
+        shouldInitializeLiveKit ? userName : '',
+        courseId || undefined
+    );
+    
+    // Only mount SuggestedResponses when there are suggestions
     const hasSuggestions = useSessionStore((s) => s.suggestedResponses.length > 0);
 
     useEffect(() => {
@@ -153,19 +178,22 @@ export default function Session() {
         }
     }, []);
 
-    const vncViewerUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || 'ws://localhost:6901';
-    const vncActionUrl = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:8765';
-    const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
+    
+    // LiveKit-only: no per-session URLs or legacy VNC state required
+    
+    // Initialize Mermaid visualization hook
+    const { 
+        diagramDefinition, 
+        isStreaming, 
+        error: mermaidError, 
+        startVisualization, 
+        clearDiagram, 
+        updateDiagram 
+    } = useMermaidVisualization();
 
-    const { disconnectVNC, executeBrowserAction } = useBrowserActionExecutor(room || null, vncActionUrl);
-    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(room || null);
+    if (SESSION_DEBUG) console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 
-    const handleVncInteraction = (interaction: { action: string; x: number; y: number }) => {
-        executeBrowserAction({
-            tool_name: 'browser_click',
-            parameters: { x: interaction.x, y: interaction.y },
-        });
-    };
+    // No direct VNC interactions; all browser control is over LiveKit data channel now.
 
     const componentButtons: ButtonConfig[] = [
         { key: 'vnc', label: 'Browser', inactiveImagePath: '/browser-inactive.svg', activeImagePath: '/browser-active.svg' },
@@ -173,17 +201,32 @@ export default function Session() {
         { key: 'video', label: 'Video', inactiveImagePath: '/video-inactive.svg', activeImagePath: '/video-active.svg' },
     ];
 
+    // Legacy VNC/session-manager flow removed.
+
+    // Legacy cleanup removed.
+
+    // Proactively terminate the browser pod when leaving the session route or tab goes hidden
     useEffect(() => {
-        if (isConnected && sessionBubbleUrl) {
-            connectToVNCSensor(sessionBubbleUrl);
-        }
+        const DELETE_ON_VIS_HIDDEN = (process.env.NEXT_PUBLIC_DELETE_ON_VISIBILITY_HIDDEN || '').toLowerCase() === 'true';
+        const onVis = () => {
+            try {
+                if (DELETE_ON_VIS_HIDDEN && document.visibilityState === 'hidden') {
+                    void deleteSessionNow();
+                }
+            } catch {}
+        };
+        document.addEventListener('visibilitychange', onVis);
         return () => {
-            if (isConnected) {
-                disconnectVNC();
-                disconnectFromVNCSensor();
+            document.removeEventListener('visibilitychange', onVis);
+            // On route unmount in production, terminate the session
+            if (process.env.NODE_ENV === 'production') {
+                void deleteSessionNow();
+
             }
         };
-    }, [isConnected, sessionBubbleUrl, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
+    }, [deleteSessionNow]);
+
+    // No dynamic session creation required on view change.
 
     if (!isLoaded || isLoading) {
         return <div className="w-full h-full flex items-center justify-center text-white">Initializing Session...</div>;
@@ -199,20 +242,17 @@ export default function Session() {
         <>
             <SignedIn>
                 <Sphere />
-                <div className='flex flex-col w-screen h-screen'>
-                    <div className="flex-grow relative w-full h-0"> 
-                        <SessionContent 
-                            activeView={activeView} 
-                            setActiveView={setActiveView} 
-                            componentButtons={componentButtons} 
-                            vncUrl={vncViewerUrl} 
-                            handleVncInteraction={handleVncInteraction}
-                            diagramDefinition={diagramDefinition}
-                            isDiagramGenerating={generationStatus === 'streaming'}
-                        />
-                    </div>
-                
-                    <Footer room={room} agentIdentity={agentIdentity || undefined} />
+
+                <div className='flex flex-col w-full h-full items-center justify-between'>
+                    <SessionContent 
+                        activeView={activeView} 
+                        setActiveView={setActiveView} 
+                        componentButtons={componentButtons} 
+                        livekitUrl={livekitUrl}
+                        livekitToken={livekitToken}
+                        diagramDefinition={diagramDefinition}
+                        onDiagramUpdate={updateDiagram}
+                    />
 
                     {hasSuggestions && (
                         <SuggestedResponses onSelect={selectSuggestedResponse} />
