@@ -1,7 +1,8 @@
-// src/hooks/useApi.ts
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApiService, Course, Enrollment, Lesson, LessonContent } from '@/lib/api';
-import { toast } from 'sonner'; // Assuming you're using Sonner for notifications
+import { toast } from 'sonner';
+import { useAuth } from '@clerk/nextjs';
 
 // Query Keys for React Query
 export const queryKeys = {
@@ -18,6 +19,7 @@ export const queryKeys = {
   brumData: ['brum'] as const,
   reports: ['reports'] as const,
   userProgress: (userId: string) => ['reports', 'progress', userId] as const,
+  profileStats: ['profile-stats'] as const, // <-- ADDED KEY
   adminUsers: ['admin', 'users'] as const,
   adminCourses: ['admin', 'courses'] as const,
   adminAnalytics: ['admin', 'analytics', 'overview'] as const,
@@ -30,7 +32,7 @@ export const useCourses = () => {
   return useQuery({
     queryKey: queryKeys.courses,
     queryFn: () => apiService.getCourses(),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
     retry: 3,
     retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
@@ -49,8 +51,8 @@ export const useTeacherCourses = () => {
     refetchOnReconnect: false,
     retry: (failureCount, error: any) => {
       const status = error?.status as number | undefined;
-      if (status === 401 || status === 403) return false; // don't retry auth/forbidden
-      if (status === 429) return false; // never retry rate-limited endpoint
+      if (status === 401 || status === 403) return false;
+      if (status === 429) return false;
       return failureCount < 3;
     },
     retryDelay: (attemptIndex) => {
@@ -79,7 +81,6 @@ export const useCreateCourse = () => {
   return useMutation({
     mutationFn: (course: Partial<Course>) => apiService.createCourse(course),
     onSuccess: (newCourse: Course) => {
-      // Invalidate and refetch courses list
       queryClient.invalidateQueries({ queryKey: queryKeys.courses });
       queryClient.invalidateQueries({ queryKey: queryKeys.teacherCourses });
       toast.success('Course created successfully!');
@@ -97,7 +98,7 @@ export const useEnrollments = () => {
   return useQuery({
     queryKey: queryKeys.enrollments,
     queryFn: () => apiService.getEnrollments(),
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 2 * 60 * 1000,
   });
 };
 
@@ -119,7 +120,6 @@ export const useEnrollInCourse = () => {
   return useMutation({
     mutationFn: (courseId: string) => apiService.enrollInCourse(courseId),
     onSuccess: (enrollment: Enrollment) => {
-      // Invalidate enrollments queries
       queryClient.invalidateQueries({ queryKey: queryKeys.enrollments });
       queryClient.invalidateQueries({ queryKey: queryKeys.myEnrollments });
       queryClient.invalidateQueries({ 
@@ -133,14 +133,12 @@ export const useEnrollInCourse = () => {
   });
 };
 
-// Current user's enrollments (normalized)
 export const useMyEnrollments = (options?: { enabled?: boolean }) => {
   const apiService = useApiService();
   return useQuery({
     queryKey: queryKeys.myEnrollments,
     queryFn: async () => {
       const res: any = await apiService.getMyEnrollments();
-      // Backend may return an array or { enrollments: [] }
       return Array.isArray(res) ? res : (res?.enrollments ?? []);
     },
     staleTime: 2 * 60 * 1000,
@@ -149,6 +147,7 @@ export const useMyEnrollments = (options?: { enabled?: boolean }) => {
 };
 
 // ===== LESSONS HOOKS =====
+// ... (keep all lesson hooks)
 export const useLessons = (courseId: string) => {
   const apiService = useApiService();
   
@@ -156,7 +155,7 @@ export const useLessons = (courseId: string) => {
     queryKey: queryKeys.lessons(courseId),
     queryFn: () => apiService.getLessons(courseId),
     enabled: !!courseId,
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 10 * 60 * 1000,
   });
 };
 
@@ -216,7 +215,9 @@ export const useLesson = (id: string) => {
   });
 };
 
+
 // ===== LESSON CONTENTS HOOKS =====
+// ... (keep all lesson content hooks)
 export const useLessonContents = (lessonId: string) => {
   const apiService = useApiService();
   
@@ -269,7 +270,9 @@ export const useLessonContent = (id: string) => {
   });
 };
 
+
 // ===== BRUM/AI HOOKS =====
+// ... (keep brum hooks)
 export const useBrumData = () => {
   const apiService = useApiService();
   
@@ -297,6 +300,7 @@ export const useCreateBrumSession = () => {
 };
 
 // ===== REPORTS HOOKS =====
+// ... (keep reports hooks)
 export const useReports = () => {
   const apiService = useApiService();
   
@@ -318,7 +322,22 @@ export const useUserProgress = (userId: string) => {
   });
 };
 
+// --- ADD THE NEW HOOK HERE ---
+export const useProfileStats = () => {
+  const apiService = useApiService();
+  const { isSignedIn } = useAuth();
+
+  return useQuery({
+    queryKey: queryKeys.profileStats,
+    queryFn: () => apiService.getProfileStats(),
+    enabled: !!isSignedIn,
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
+  });
+};
+
 // ===== HEALTH CHECK HOOK =====
+// ... (keep health check and admin hooks)
 export const useHealthCheck = () => {
   const apiService = useApiService();
   
@@ -356,7 +375,6 @@ export const useToggleUserDisabled = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ userId, isDisabled }: { userId: string; isDisabled: boolean }) => {
-      // Toggle the state: if currently disabled, enable; otherwise disable
       if (isDisabled) {
         return apiService.enableUser(userId);
       }

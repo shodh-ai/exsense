@@ -9,10 +9,8 @@ export interface Course {
   description: string;
   createdAt: string;
   updatedAt: string;
-  // Optional fields returned by backend list endpoints
   enrollmentCount?: number;
   lessonCount?: number;
-  // Optional teacher reference for UI labeling
   teacher?: {
     name?: string;
     email?: string;
@@ -48,6 +46,14 @@ export interface LessonContent {
   data?: any;
   order?: number;
 }
+
+// --- ADD THIS NEW INTERFACE ---
+export interface ProfileStat {
+  icon: string;
+  label: string;
+  value: string;
+}
+
 
 // Main API service class
 export class ApiService {
@@ -93,6 +99,11 @@ export class ApiService {
 
   async getUserEnrollments(userId: string): Promise<Enrollment[]> {
     return this.client.get(`/api/enrollments/user/${userId}`);
+  }
+
+  // --- ADD THIS NEW METHOD ---
+  async getProfileStats(): Promise<ProfileStat[]> {
+    return this.client.get('/api/users/me/profile-stats');
   }
 
   // Lessons API
@@ -185,6 +196,5 @@ export class ApiService {
 export const useApiService = () => {
   const { getToken } = useAuth();
   
-  // Create a new instance on each call to ensure fresh token retrieval
   return new ApiService(getToken);
 };
