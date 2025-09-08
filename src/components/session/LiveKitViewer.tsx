@@ -369,19 +369,22 @@ function VideoRenderer({ track, pub, onInteraction, captureSize }: { track: Remo
       const clientH = video.clientHeight;
       const vidW = captureSize?.w || video.videoWidth || clientW;
       const vidH = captureSize?.h || video.videoHeight || clientH;
-      const scale = Math.min(clientW / vidW, clientH / vidH);
+      // Using object-fit: cover => scale is the larger ratio, the image may be cropped.
+      const scale = Math.max(clientW / vidW, clientH / vidH);
       const displayW = vidW * scale;
       const displayH = vidH * scale;
-      const offsetX = (clientW - displayW) / 2;
-      const offsetY = (clientH - displayH) / 2;
-      // Coordinates relative to displayed video content (excluding letterbox bars)
-      const localX = (event.clientX - rect.left) - offsetX;
-      const localY = (event.clientY - rect.top) - offsetY;
-      // Clamp within display area
-      const clampedX = Math.max(0, Math.min(displayW, localX));
-      const clampedY = Math.max(0, Math.min(displayH, localY));
-      const scaledX = Math.round((clampedX / displayW) * vidW);
-      const scaledY = Math.round((clampedY / displayH) * vidH);
+      // Amount cropped off on each axis
+      const cropX = Math.max(0, (displayW - clientW) / 2);
+      const cropY = Math.max(0, (displayH - clientH) / 2);
+      // Coordinates inside the scaled video space
+      const localX = (event.clientX - rect.left) + cropX;
+      const localY = (event.clientY - rect.top) + cropY;
+      // Map back to intrinsic video coordinates
+      let scaledX = Math.round(localX / scale);
+      let scaledY = Math.round(localY / scale);
+      // Clamp to [0, vidW/H]
+      scaledX = Math.max(0, Math.min(vidW - 1, scaledX));
+      scaledY = Math.max(0, Math.min(vidH - 1, scaledY));
       const payload = { action: 'click', x: scaledX, y: scaledY };
       await publishOrQueue(payload);
     } catch (e) {
@@ -420,7 +423,7 @@ function VideoRenderer({ track, pub, onInteraction, captureSize }: { track: Remo
       playsInline
       muted
       className="w-full h-full bg-black rounded border-2 border-green-500 shadow-lg cursor-crosshair"
-      style={{ objectFit: 'contain', zIndex: 20, position: 'relative' }}
+      style={{ objectFit: 'cover', zIndex: 20, position: 'relative' }}
       onMouseDown={() => { try { ref.current?.focus(); } catch {} }}
       onClick={handleMouseClick}
       onKeyDown={handleKeyDown}

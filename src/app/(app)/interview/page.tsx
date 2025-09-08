@@ -144,7 +144,7 @@ const SphereComponent: React.FC<SphereProps> = ({ scale = 1.0, className, isMicC
     // --- Refs for audio processing and animation state ---
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
-    const dataArrayRef = useRef<Uint8Array | null>(null);
+    const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
     const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
     const mediaStreamRef = useRef<MediaStream | null>(null);
 
@@ -160,7 +160,9 @@ const SphereComponent: React.FC<SphereProps> = ({ scale = 1.0, className, isMicC
                 analyserRef.current = audioContextRef.current.createAnalyser();
                 analyserRef.current.fftSize = FFT_SIZE;
                 const bufferLength = analyserRef.current.frequencyBinCount;
-                dataArrayRef.current = new Uint8Array(bufferLength);
+                // Create Uint8Array with an explicit ArrayBuffer to satisfy TS's Uint8Array<ArrayBuffer> expectation
+                const arrayBuffer = new ArrayBuffer(bufferLength);
+                dataArrayRef.current = new Uint8Array(arrayBuffer);
             } catch (e) {
                 console.error("AudioContext could not be created.", e);
             }

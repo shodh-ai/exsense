@@ -170,7 +170,7 @@ const Sphere: React.FC = () => {
     useEffect(() => { isAudioActiveRef.current = isAudioActive; }, [isAudioActive]);
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
-    const dataArrayRef = useRef<Uint8Array | null>(null);
+    const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
     const sourceNodeRef = useRef<MediaStreamAudioSourceNode | MediaElementAudioSourceNode | null>(null);
     const audioEleRef = useRef<HTMLAudioElement | null>(null);
     const baseScaleRef = useRef(1);
@@ -183,7 +183,9 @@ const Sphere: React.FC = () => {
             analyserRef.current = audioContextRef.current.createAnalyser();
             analyserRef.current.fftSize = FFT_SIZE;
             const bufferLength = analyserRef.current.frequencyBinCount;
-            dataArrayRef.current = new Uint8Array(bufferLength);
+            // Create Uint8Array with an explicit ArrayBuffer to satisfy TS's Uint8Array<ArrayBuffer> expectation
+            const arrayBuffer = new ArrayBuffer(bufferLength);
+            dataArrayRef.current = new Uint8Array(arrayBuffer);
         }
     }, []);
     const handleStartListen = useCallback((stream: MediaStream | null) => {
