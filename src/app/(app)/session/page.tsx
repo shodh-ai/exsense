@@ -170,6 +170,7 @@ export default function Session() {
         selectSuggestedResponse,
         livekitUrl,
         livekitToken,
+        deleteSessionNow,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? roomName : '',
         shouldInitializeLiveKit ? userName : '',
@@ -234,7 +235,25 @@ export default function Session() {
 
     // Legacy cleanup removed.
 
-    // No unload handlers needed.
+    // Proactively terminate the browser pod when leaving the session route or tab goes hidden
+    useEffect(() => {
+        const DELETE_ON_VIS_HIDDEN = (process.env.NEXT_PUBLIC_DELETE_ON_VISIBILITY_HIDDEN || '').toLowerCase() === 'true';
+        const onVis = () => {
+            try {
+                if (DELETE_ON_VIS_HIDDEN && document.visibilityState === 'hidden') {
+                    void deleteSessionNow();
+                }
+            } catch {}
+        };
+        document.addEventListener('visibilitychange', onVis);
+        return () => {
+            document.removeEventListener('visibilitychange', onVis);
+            // On route unmount in production, terminate the session
+            if (process.env.NODE_ENV === 'production') {
+                void deleteSessionNow();
+            }
+        };
+    }, [deleteSessionNow]);
 
     // No dynamic session creation required on view change.
 
