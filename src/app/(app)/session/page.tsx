@@ -68,15 +68,15 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                 </div>
             </div>
 
-            {/* MODIFICATION: Added paddingBottom and proper overflow handling for scroll */}
+            {/* MODIFICATION: Always render Excalidraw and overlay loader */}
             <div className="flex-1 w-full overflow-hidden" style={{ minHeight: 0, paddingBottom: '8.5rem' }}>
-                <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
+                <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full relative`}>
+                    <ExcalidrawWrapper />
                     {isDiagramGenerating && (
-                        <div className="flex items-center justify-center h-full text-gray-500">
+                        <div className="absolute inset-0 flex items-center justify-center text-gray-500 pointer-events-none">
                             <p>Generating Diagram...</p>
                         </div>
                     )}
-                    {!isDiagramGenerating && <ExcalidrawWrapper />}
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
                     {room ? (

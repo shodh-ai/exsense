@@ -486,6 +486,8 @@ export default function Session() {
     const searchParams = useSearchParams();
     const SESSION_DEBUG = false;
     const DEV_BYPASS = true;
+    // Disable legacy VNC session management; we use LiveKit data channel to control the browser pod
+    const ENABLE_VNC = false;
     const courseId = searchParams.get('courseId');
     const courseTitle = searchParams.get('title');
 
@@ -518,7 +520,6 @@ export default function Session() {
     }, [isLoaded, isSignedIn, router]);
 
     const roomName = user?.id ? `session-${user.id}` : `session-${Date.now()}`;
-    const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
 
     // LiveKit integration (replace VNC viewer on Teacher page)
     const shouldInitializeLiveKit = (!!user?.id) && (DEV_BYPASS || (isLoaded && isSignedIn));
@@ -537,129 +538,28 @@ export default function Session() {
         { spawnAgent: false, spawnBrowser: true }
     );
 
-    // Dynamic VNC session state (initialized empty; populated by API)
-    const [viewerUrl, setViewerUrl] = useState<string>('');
-    const [actionUrl, setActionUrl] = useState<string>('');
-    // LiveKit overrides: reconnect viewer to the pod's session room (sess-...)
-    const [overrideLkUrl, setOverrideLkUrl] = useState<string>('');
-    const [overrideLkToken, setOverrideLkToken] = useState<string>('');
-    const [sessionId, setSessionId] = useState<string | null>(null);
-    // Persist VNC session across refresh to avoid creating a new pod unnecessarily
-    const SESSION_CACHE_KEY = 'vncSession';
-    const KEEP_SESSION_ON_REFRESH = (process.env.NEXT_PUBLIC_KEEP_SESSION_ON_REFRESH ?? 'true') === 'true';
-    const SESSION_CACHE_TTL_MS = (() => {
-        const v = Number(process.env.NEXT_PUBLIC_VNC_SESSION_TTL_MS || '600000'); // default 10 minutes
-        return Number.isFinite(v) && v > 0 ? v : 600000;
-    })();
-    const [viewerUrlInput, setViewerUrlInput] = useState<string>('');
-    const [actionUrlInput, setActionUrlInput] = useState<string>('');
+    // VNC session management removed (LiveKit-only)
 
-    // VNC removed: provide no-op stubs to keep legacy code compiling while we migrate UI to LiveKit
-    const isVNCConnected = false;
-    const disconnectVNC = () => {};
-    const executeBrowserAction = async (_opts: any) => {};
-    const setOnVNCResponse = (_fn: any) => {};
-    const awaitVNCOpen = async (_ms?: number) => {};
-    const connectToVNCSensor = (_url: string | null) => {};
-    const disconnectFromVNCSensor = () => {};
+    // Legacy VNC stubs removed
 
-    // --- Debug watchers for critical state ---
-    useEffect(() => {
-        if (!sessionId) return;
-        // eslint-disable-next-line no-console
-        console.log('[TeacherPage] sessionId updated:', sessionId);
-        // Try to fetch a viewer token for the per-session room and override the viewer connection
-        (async () => {
-            try {
-                const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string | undefined;
-                if (!tokenServiceUrl) return;
-                const resp = await fetch(`${tokenServiceUrl}/api/dev/token-for-room`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ room_name: sessionId })
-                });
-                if (!resp.ok) return;
-                const data = await resp.json();
-                const newToken = data?.studentToken as string | undefined;
-                const newUrl = data?.livekitUrl as string | undefined;
-                if (newToken && newUrl) {
-                    setOverrideLkToken(newToken);
-                    setOverrideLkUrl(newUrl);
-                    // eslint-disable-next-line no-console
-                    console.log('[TeacherPage] Overriding viewer to session room', sessionId);
-                }
-            } catch (e) {
-                // eslint-disable-next-line no-console
-                console.warn('[TeacherPage] token-for-room failed', e);
-            }
-        })();
-    }, [sessionId]);
+    // Helper to send actions to browser pod over LiveKit data channel
+    const sendBrowser = React.useCallback(async (action: string, parameters: Record<string, unknown> = {}) => {
+        try {
+            await sendBrowserInteraction({ action, ...parameters });
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[TeacherPage] sendBrowser failed', e);
+        }
+    }, [sendBrowserInteraction]);
 
-    useEffect(() => {
-        // eslint-disable-next-line no-console
-        console.log('[TeacherPage] viewerUrl updated:', viewerUrl || '(empty)');
-    }, [viewerUrl]);
-
-    useEffect(() => {
-        // eslint-disable-next-line no-console
-        console.log('[TeacherPage] actionUrl updated:', actionUrl || '(empty)');
-    }, [actionUrl]);
-
-    useEffect(() => {
-        // eslint-disable-next-line no-console
-        console.log('[TeacherPage] isVNCConnected changed:', isVNCConnected);
-    }, [isVNCConnected]);
+    // --- Debug watchers for critical state --- (trimmed)
 
     useEffect(() => {
         // eslint-disable-next-line no-console
         console.log('[TeacherPage] activeView changed:', activeView);
     }, [activeView]);
 
-    // When user switches to VNC view but no session/URLs exist yet, auto-create a VNC session
-    const isCreatingVncRef = useRef(false);
-    // On mount, attempt to restore an existing session from cache
-    useEffect(() => {
-        try {
-            const raw = typeof window !== 'undefined' ? window.localStorage.getItem(SESSION_CACHE_KEY) : null;
-            if (!raw) return;
-            const cached = JSON.parse(raw) as { sessionId: string; viewerUrl: string; actionUrl: string; ts: number };
-            if (!cached?.sessionId || !cached?.viewerUrl || !cached?.actionUrl || !cached?.ts) return;
-            const age = Date.now() - cached.ts;
-            if (age > SESSION_CACHE_TTL_MS) {
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] Cached VNC session expired; creating new one');
-                window.localStorage.removeItem(SESSION_CACHE_KEY);
-                return;
-            }
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] Restoring cached VNC session:', cached.sessionId);
-            setSessionId(cached.sessionId);
-            setViewerUrl(cached.viewerUrl);
-            setActionUrl(cached.actionUrl);
-        } catch (e) {
-            // ignore cache restore errors
-        }
-    // run once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-    useEffect(() => {
-        if (activeView !== 'vnc') return;
-        if (sessionId || viewerUrl || actionUrl) return;
-        if (isCreatingVncRef.current) return;
-        isCreatingVncRef.current = true;
-        // eslint-disable-next-line no-console
-        console.log('[TeacherPage] activeView=vnc and no session/urls detected. Creating VNC session...');
-        setStatusMessage('Preparing VNC session...');
-        createVncSession()
-            .catch((e: any) => {
-                // eslint-disable-next-line no-console
-                console.error('[TeacherPage] Auto createVncSession failed:', e);
-                setSubmitError(e?.message || 'Failed to create VNC session');
-            })
-            .finally(() => {
-                isCreatingVncRef.current = false;
-            });
-    }, [activeView, sessionId, viewerUrl, actionUrl]);
+    // VNC auto-create and cache restore removed
 
     const handleSelectPractical = () => {
         setImprintingMode('WORKFLOW');
@@ -686,9 +586,7 @@ export default function Session() {
     const [statusMessage, setStatusMessage] = useState<string>('Session started. Waiting for initial prompt.');
     const [submitMessage, setSubmitMessage] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
-    const [isCreatingSession, setIsCreatingSession] = useState(false);
-    // Narrowed types to reduce any-usage
-    type VNCActionResponse = { action?: string } & Record<string, unknown>;
+    // const [isCreatingSession, setIsCreatingSession] = useState(false); // VNC: unused
     type RecordedPacket = { interaction_type?: string } & Record<string, unknown>;
 
     const packetsRef = useRef<RecordedPacket[]>([]);
@@ -708,142 +606,9 @@ export default function Session() {
 
     const curriculumId = courseId as string;
 
-    // Create a VNC session via async job and poll for readiness
-    const createVncSession = async () => {
-        const normalizeWsUrl = (u: string): string => {
-            try {
-                const parsed = new URL(u);
-                if (parsed.protocol === 'http:') parsed.protocol = 'ws:';
-                if (parsed.protocol === 'https:') parsed.protocol = 'wss:';
-                if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && parsed.protocol === 'ws:') {
-                    parsed.protocol = 'wss:';
-                }
-                return parsed.toString();
-            } catch (e) {
-                console.warn('[TeacherPage] Failed to normalize URL, using raw value:', u, e);
-                return u;
-            }
-        };
+    // VNC session helpers removed
 
-        const pollStatus = async (jobId: string) => {
-            const intervalMs = 5000;
-            const maxAttempts = 36; // ~3 minutes
-            for (let attempt = 0; attempt < maxAttempts; attempt++) {
-                const res = await fetch(`/api/sessions/status/${encodeURIComponent(jobId)}`);
-                if (!res.ok) throw new Error(`Status check failed (${res.status})`);
-                const status = await res.json();
-                if (status?.status === 'READY') return status;
-                if (status?.status === 'FAILED') throw new Error(status?.error || 'Session creation failed');
-                await new Promise((r) => setTimeout(r, intervalMs));
-            }
-            throw new Error('Timed out waiting for session readiness');
-        };
-
-        try {
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] createVncSession: start async job...');
-            setIsCreatingSession(true);
-            setStatusMessage('Preparing your secure browser...');
-            const startResp = await fetch('/api/sessions', {
-                method: 'POST',
-                headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({}),
-            });
-            if (!startResp.ok) throw new Error(`Failed to start session job (${startResp.status})`);
-            const startData = await startResp.json();
-            const jobId: string | undefined = startData?.jobId;
-            if (!jobId) throw new Error('Invalid response from session start (missing jobId)');
-
-            // Poll for readiness
-            const ready = await pollStatus(jobId);
-            // Wait for 12 seconds to allow the GKE Ingress and health checks to fully propagate
-            console.log('[TeacherPage] Session is ready on the backend. Waiting 12 seconds for Ingress to stabilize...');
-            await new Promise((resolve) => setTimeout(resolve, 12000));
-            console.log('[TeacherPage] Ingress stabilization delay complete. Connecting now.');
-
-            const normalizedCommand = normalizeWsUrl(String(ready.commandUrl));
-            const normalizedStream = normalizeWsUrl(String(ready.streamUrl));
-            setSessionId(String(ready.sessionId));
-            setActionUrl(normalizedCommand);
-            setViewerUrl(normalizedStream);
-            setActionUrlInput(ready.commandUrl);
-            setViewerUrlInput(ready.streamUrl);
-            // Persist for reuse on refresh
-            try {
-                if (typeof window !== 'undefined') {
-                    window.localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
-                        sessionId: String(ready.sessionId),
-                        actionUrl: normalizedCommand,
-                        viewerUrl: normalizedStream,
-                        ts: Date.now(),
-                    }));
-                }
-            } catch {}
-            setStatusMessage('VNC session ready. Connecting...');
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] createVncSession: READY', {
-                sessionId: ready.sessionId,
-                commandUrl_raw: ready.commandUrl,
-                streamUrl_raw: ready.streamUrl,
-                commandUrl_normalized: normalizedCommand,
-                streamUrl_normalized: normalizedStream,
-            });
-        } catch (err: any) {
-            console.error('[TeacherPage] createVncSession error:', err);
-            setSubmitError(err?.message || 'Failed to create VNC session');
-            throw err;
-        } finally {
-            setIsCreatingSession(false);
-        }
-    };
-
-    // Cleanup helper: attempt to delete session reliably
-    const deleteVncSession = async (sid: string | null, useBeacon = false) => {
-        if (!sid) return;
-        const url = `/api/sessions/${encodeURIComponent(sid)}`;
-        try {
-            if (useBeacon && typeof navigator.sendBeacon === 'function') {
-                // Use method override to support DELETE semantics via beacon POST
-                const beaconUrl = `${url}?_method=DELETE`;
-                const blob = new Blob([JSON.stringify({ reason: 'page-unload' })], { type: 'application/json' });
-                navigator.sendBeacon(beaconUrl, blob);
-                return;
-            }
-            await fetch(url, { method: 'DELETE', keepalive: true });
-        } catch {
-            // Swallow errors during cleanup
-        }
-    };
-
-    // Optional: delete session during page unload (disabled by default to allow reuse after refresh)
-    useEffect(() => {
-        if (!KEEP_SESSION_ON_REFRESH) {
-            const onBeforeUnload = () => {
-                if (sessionId) {
-                    // eslint-disable-next-line no-console
-                    console.log('[TeacherPage] beforeunload: deleting VNC session', sessionId);
-                    deleteVncSession(sessionId, true);
-                }
-            };
-            window.addEventListener('beforeunload', onBeforeUnload);
-            return () => {
-                window.removeEventListener('beforeunload', onBeforeUnload as any);
-            };
-        }
-    }, [sessionId, KEEP_SESSION_ON_REFRESH]);
-
-    // On component unmount, optional cleanup (disabled by default to allow reuse)
-    useEffect(() => {
-        if (!KEEP_SESSION_ON_REFRESH) {
-            return () => {
-                if (sessionId) {
-                    // eslint-disable-next-line no-console
-                    console.log('[TeacherPage] unmount: deleting VNC session', sessionId);
-                    deleteVncSession(sessionId, false);
-                }
-            };
-        }
-    }, [sessionId, KEEP_SESSION_ON_REFRESH]);
+    // VNC cleanup removed
 
     const handleSeedSubmit = async (content: string) => {
         setImprintingPhase('SEED_PROCESSING');
@@ -864,7 +629,7 @@ export default function Session() {
                 return;
             }
             setStatusMessage('Capturing screenshot...');
-            await sendAndAwait('browser_screenshot', {}, 'screenshot');
+            await sendBrowser('screenshot');
             setStatusMessage('Manual screenshot captured.');
             setTimeToNextScreenshot(screenshotIntervalSec);
         } catch (e: any) {
@@ -943,67 +708,6 @@ export default function Session() {
     const topicInputRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-
-
-    // --- Lightweight response awaiter infrastructure ---
-    type PendingResolver = { id: string; expectAction: string; resolve: (resp: VNCActionResponse) => void; reject: (err: any) => void; timeoutId: any };
-    const pendingResolversRef = useRef<PendingResolver[]>([]);
-
-    useEffect(() => {
-        // Route incoming VNC responses to awaiting callers
-        setOnVNCResponse((resp: VNCActionResponse) => {
-            try {
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] onVNCResponse:', resp);
-                const idx = pendingResolversRef.current.findIndex(p => p.expectAction === resp?.action);
-                if (idx >= 0) {
-                    const [pending] = pendingResolversRef.current.splice(idx, 1);
-                    clearTimeout(pending.timeoutId);
-                    // eslint-disable-next-line no-console
-                    console.log('[TeacherPage] onVNCResponse: resolving pending waiter', { id: pending.id, expectAction: pending.expectAction });
-                    pending.resolve(resp);
-                } else {
-                    // eslint-disable-next-line no-console
-                    console.log('[TeacherPage] onVNCResponse: no waiter for action', resp?.action);
-                }
-            } catch (e) { console.error('[TeacherPage] Error handling VNC response:', e); }
-        });
-    }, [setOnVNCResponse]);
-
-    const sendAndAwait = async (
-        tool_name: string,
-        parameters: Record<string, unknown>,
-        expectedAction?: string,
-        timeoutMs = 15000
-    ): Promise<VNCActionResponse> => {
-        const expectAction = expectedAction || tool_name;
-        return new Promise(async (resolve, reject) => {
-            const id = `${expectAction}-${Date.now()}`;
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] sendAndAwait: scheduling waiter', { id, tool_name, expectAction, timeoutMs, parameters });
-            const timeoutId = setTimeout(() => {
-                const idx = pendingResolversRef.current.findIndex(p => p.id === id);
-                if (idx >= 0) pendingResolversRef.current.splice(idx, 1);
-                // eslint-disable-next-line no-console
-                console.warn('[TeacherPage] sendAndAwait: timeout', { id, expectAction });
-                reject(new Error(`Timed out waiting for action '${expectAction}' response`));
-            }, timeoutMs);
-            pendingResolversRef.current.push({ id, expectAction, resolve, reject, timeoutId });
-            try {
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] sendAndAwait: executeBrowserAction', { tool_name, parameters });
-                await executeBrowserAction({ tool_name, parameters });
-            } catch (err) {
-                clearTimeout(timeoutId);
-                const idx = pendingResolversRef.current.findIndex(p => p.id === id);
-                if (idx >= 0) pendingResolversRef.current.splice(idx, 1);
-                // eslint-disable-next-line no-console
-                console.error('[TeacherPage] sendAndAwait: executeBrowserAction error', err);
-                reject(err);
-            }
-        });
-    };
-
     const handleSubmitSeed = async () => {
         if (!user?.id || !seedText.trim()) return;
         try {
@@ -1018,7 +722,7 @@ export default function Session() {
         if (!user?.id) return;
         try {
             // eslint-disable-next-line no-console
-            console.log('[TeacherPage] handleStartRecording: begin', { sessionId, viewerUrl, actionUrl, isVNCConnected, activeView });
+            console.log('[TeacherPage] handleStartRecording: begin', { activeView });
             setSubmitMessage(null);
             setSubmitError(null);
             setImprintingMode('WORKFLOW');
@@ -1027,39 +731,8 @@ export default function Session() {
             setPacketsCount(0);
             setStagedAssets([]);
             setIsPaused(false);
-
-            // Ensure we have a dynamic VNC session (creates the WebSocket URLs)
-            if (!sessionId) {
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] handleStartRecording: no sessionId, creating VNC session...');
-                await createVncSession();
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] handleStartRecording: after createVncSession', { sessionId: sessionId, viewerUrl, actionUrl });
-            }
-
-            if (!MOCK_BACKEND) {
-                if (!isVNCConnected) {
-                    setStatusMessage('Connecting to VNC backend...');
-                    try {
-                        // eslint-disable-next-line no-console
-                        console.log('[TeacherPage] handleStartRecording: awaiting VNC WebSocket open...');
-                        await awaitVNCOpen(15000);
-                        // eslint-disable-next-line no-console
-                        console.log('[TeacherPage] handleStartRecording: VNC WebSocket open');
-                    } catch (connErr: any) {
-                        // eslint-disable-next-line no-console
-                        console.error('[TeacherPage] handleStartRecording: failed to connect to VNC backend', connErr);
-                        setSubmitError(connErr?.message || 'Failed to connect to VNC backend');
-                        setIsRecording(false);
-                        return;
-                    }
-                }
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] handleStartRecording: sending start_recording...');
-                await sendAndAwait('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec }, 'start_recording', 45000);
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] handleStartRecording: start_recording acknowledged');
-            }
+            // In LiveKit flow, instruct the browser pod to start recording via data channel
+            await sendBrowser('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec });
             setTimeToNextScreenshot(screenshotIntervalSec);
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1090,7 +763,8 @@ export default function Session() {
 
     const handleVncInteraction = (interaction: { action: string; x: number; y: number }) => {
         if (!isRecording) return;
-        executeBrowserAction({ tool_name: 'browser_click', parameters: { x: interaction.x, y: interaction.y } });
+        // Send a click through the LiveKit data channel
+        void sendBrowser('click', { x: interaction.x, y: interaction.y });
     };
 
     const handleSendConceptual = async () => {
@@ -1164,36 +838,25 @@ export default function Session() {
                 mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
             }
         } catch (err) { console.warn('Stop recording warning:', err); }
-        try {
-            if (!MOCK_BACKEND) {
-                type StopRecordingResp = VNCActionResponse & { count?: number };
-                const stopResp = (await sendAndAwait('stop_recording', {}, 'stop_recording')) as StopRecordingResp;
-                console.log('[SessionPage] Backend acknowledged stop_recording:', stopResp);
-                if (typeof stopResp?.count === 'number') setPacketsCount(stopResp.count);
-                setStatusMessage(`Recording stopped. Server captured ${typeof stopResp?.count === 'number' ? stopResp.count : 0} actions.`);
-            } else {
-                setStatusMessage('Recording stopped (Mock).');
-            }
-
-        } catch (err: any) {
-            setStatusMessage(`Error: ${err?.message || 'Failed to stop recording'}`);
-        } finally {
-            setIsRecording(false);
-            setTimeToNextScreenshot(null);
-        }
+        setIsRecording(false);
+        setTimeToNextScreenshot(null);
     };
     
     const handleTogglePauseResume = () => {
         if (!mediaRecorderRef.current) return;
         if (isPaused) {
+            // Resume local mic and instruct pod to resume
             mediaRecorderRef.current.resume();
             setIsPaused(false);
+            try { void sendBrowser('resume_recording'); } catch {}
             recordingIntervalRef.current = setInterval(() => {
                 setRecordingDuration(prev => prev + 1);
             }, 1000);
         } else {
+            // Pause local mic and instruct pod to pause
             mediaRecorderRef.current.pause();
             setIsPaused(true);
+            try { void sendBrowser('pause_recording'); } catch {}
             if (recordingIntervalRef.current) {
                 clearInterval(recordingIntervalRef.current);
             }
@@ -1262,42 +925,28 @@ export default function Session() {
             const blob = audioBlobRef.current;
             const audio_b64: string = blob ? await convertBlobToWavDataURL(blob) : '';
 
-            // Fetch recorded actions (including periodic screenshots)
-            setStatusMessage('Fetching recorded actions from server...');
-            const actionsResp = await sendAndAwait('get_recorded_actions', { session_id: roomName }, 'get_recorded_actions');
-            const packets: RecordedPacket[] = Array.isArray((actionsResp as any)?.packets) ? (actionsResp as any).packets : [];
-            const periodicCount = packets.filter(p => p?.interaction_type === 'periodic_screenshot').length;
-            console.log('[EpisodeControls] Recorded actions ready:', { total: packets.length, periodic_screenshots: periodicCount, source: (actionsResp as any)?.source });
-            setStatusMessage(`Submitting episode... (${packets.length} actions, ${periodicCount} periodic screenshots)`);
-
-            const response = await submitImprintingEpisode({
-                expert_id: user?.id || 'unknown_expert',
-                session_id: roomName,
-                curriculum_id: String(curriculumId),
-                narration: 'Expert narration from episode.',
-                audio_b64,
-                expert_actions: packets,
-                staged_assets: stagedAssets,
-                current_lo: currentLO || undefined,
-                in_response_to_question: isShowMeRecording && showMeQuestionRef.current ? showMeQuestionRef.current : undefined,
-            });
-
-            console.log('[EpisodeControls] Submit success', response);
-            setSubmitMessage(`Submitted. Processed ${packets.length} actions.`);
-            setStatusMessage('Episode submitted. AI is analyzing...');
-
-            if (response?.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
-                const aiText = (response as any).text || '';
-                const hasQuestion = !!aiText && /\?/.test(aiText);
-                if (hasQuestion) {
-                    setImprintingMode('DEBRIEF_CONCEPTUAL');
-                    setActiveView('excalidraw');
-                    setIsConceptualStarted(true);
-                    setIsStartAllowed(false);
-                } else {
-                    setImprintingMode('WORKFLOW');
-                    setIsStartAllowed(true);
+            // In LiveKit flow, instruct the browser pod to stop and submit payload to imprinter.
+            setStatusMessage('Submitting episode via browser pod...');
+            try {
+                const payload: Record<string, unknown> = {
+                    session_id: roomName,
+                    curriculum_id: String(curriculumId),
+                    audio_b64,
+                    staged_assets: stagedAssets,
+                    current_lo: currentLO || undefined,
+                    narration: 'Expert narration from episode.',
+                    imprinting_mode: imprinting_mode,
+                    imprinting_environment: 'browser',
+                };
+                if (isShowMeRecording && showMeQuestionRef.current) {
+                    (payload as any).in_response_to_question = showMeQuestionRef.current;
                 }
+                await sendBrowser('stop_recording', payload);
+                setSubmitMessage('Submitted. Processing on server...');
+                setStatusMessage('Episode submitted. AI is analyzing...');
+            } catch (postErr: any) {
+                setSubmitError(postErr?.message || 'Failed to submit via pod');
+                setStatusMessage('Submit failed.');
             }
 
             // Reset buffers/state after submit
@@ -1344,17 +993,7 @@ export default function Session() {
         } catch (e: any) {
             setSubmitError(e?.message || 'Failed to finish session');
         } finally {
-            if (sessionId) {
-                await deleteVncSession(sessionId, false);
-                setSessionId(null);
-                // Reset to empty; new sessions will repopulate dynamically
-                setViewerUrl('');
-                setActionUrl('');
-                setViewerUrlInput('');
-                setActionUrlInput('');
-            }
-            // Ensure sockets are closed
-            try { disconnectVNC(); } catch {}
+            // no-op
         }
     };
 
@@ -1362,16 +1001,7 @@ export default function Session() {
         setIsFinishModalOpen(true);
     };
 
-    // Connect to interaction sensor and ensure cleanup
-    useEffect(() => {
-        if (sessionBubbleUrl) {
-            connectToVNCSensor(sessionBubbleUrl);
-        }
-        return () => {
-            disconnectVNC();
-            disconnectFromVNCSensor();
-        };
-    }, [sessionBubbleUrl, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
+    // Removed legacy VNC sensor connect effect
 
     const handleIncreaseTimer = () => {
         setScreenshotIntervalSec(prev => prev + 5);
@@ -1422,8 +1052,8 @@ export default function Session() {
                                         imprintingMode={imprinting_mode}
                                         componentButtons={componentButtons}
                                         room={room}
-                                        livekitUrl={overrideLkUrl || livekitUrl}
-                                        livekitToken={overrideLkToken || livekitToken}
+                                        livekitUrl={livekitUrl}
+                                        livekitToken={livekitToken}
                                         isConnected={isConnected}
                                         currentDebrief={currentDebrief}
                                         topicInput={topicInput}
@@ -1447,7 +1077,7 @@ export default function Session() {
                                                     <div className="text-xs text-gray-300 space-y-1 md:text-right">
                                                         <div><span className="text-gray-400">Mic:</span> {isRecording ? 'Recording' : 'Idle'}</div>
                                                         <div><span className="text-gray-400">Packets:</span> {packetsCount}</div>
-                                                        <div><span className="text-gray-400">Action WS:</span> {isVNCConnected ? 'Connected' : 'Disconnected'}</div>
+                                                        {/* VNC Action WS status removed */}
                                                         {statusMessage && <div className="text-sky-300">{statusMessage}</div>}
                                                         {submitMessage && <div className="text-emerald-300">{submitMessage}</div>}
                                                         {submitError && <div className="text-red-300">{submitError}</div>}

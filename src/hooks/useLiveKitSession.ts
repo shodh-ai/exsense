@@ -711,109 +711,85 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             } catch (phErr) {
               console.warn('[B2F RPC] Placeholder render failed (non-fatal):', phErr);
             }
-
-            console.log('[B2F RPC] Attempting streaming Visualizer service...');
+            // Call the non-streaming Visualizer endpoint and render when ready
             try {
               if (!visualizerBaseUrl) {
                 throw new Error('NEXT_PUBLIC_VISUALIZER_URL is not set');
               }
-              const streamingResp = await fetch(`${visualizerBaseUrl}/generate-diagram-stream`, {
+              // Prefer JSON endpoint for Excalidraw rendering
+              const resp = await fetch(`${visualizerBaseUrl}/generate-diagram`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
               });
-
-              if (streamingResp.ok && streamingResp.body) {
-                const reader = streamingResp.body.getReader();
-                const decoder = new TextDecoder('utf-8');
-                let buffered = '';
-                let gotAny = false;
-                // Local accumulators for both store and direct Excalidraw path
-                const byId = new Map<string, any>();
-                const byKey = new Map<string, any>();
-                let ordered: any[] = [];
-                let localSkeleton: any[] = [];
-                // Clear placeholder before first element
+              if (!resp.ok) {
+                throw new Error(`Visualizer service returned ${resp.status}`);
+              }
+              let returned: any[] = [];
+              try {
+                const contentType = resp.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                  const diagramData = await resp.json();
+                  returned = Array.isArray(diagramData?.elements) ? diagramData.elements : [];
+                } else {
+                  // Likely Mermaid text. Read it as text and forward to Mermaid debug hook if present.
+                  const text = await resp.text();
+                  if (text && typeof window !== 'undefined' && (window as any).__mermaidDebug?.setDiagram) {
+                    try { (window as any).__mermaidDebug.setDiagram(text); } catch {}
+                  }
+                  // Then, try a follow-up JSON call to get skeleton elements for Excalidraw.
+                  const jsonResp = await fetch(`${visualizerBaseUrl}/generate-diagram`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
+                  });
+                  if (jsonResp.ok) {
+                    const jsonData = await jsonResp.json();
+                    returned = Array.isArray(jsonData?.elements) ? jsonData.elements : [];
+                  } else {
+                    console.warn('[B2F RPC] Mermaid stream received; JSON follow-up failed with', jsonResp.status);
+                  }
+                }
+              } catch (parseErr) {
+                // If JSON parsing failed due to Mermaid text
                 try {
-                  const { setVisualizationData } = useSessionStore.getState();
-                  if (setVisualizationData) {
-                    setVisualizationData([] as any);
-                  } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                    window.__excalidrawDebug.setElements([]);
+                  const text = await resp.text();
+                  if (text && typeof window !== 'undefined' && (window as any).__mermaidDebug?.setDiagram) {
+                    try { (window as any).__mermaidDebug.setDiagram(text); } catch {}
                   }
                 } catch {}
-
-                while (true) {
-                  const { value, done } = await reader.read();
-                  if (done) break;
-                  buffered += decoder.decode(value, { stream: true });
-                  gotAny = true;
-                  
-                  // Update Mermaid diagram with accumulated text
-                  try {
-                    if (typeof window !== 'undefined' && window.__mermaidDebug) {
-                      window.__mermaidDebug.setDiagram(buffered.trim());
-                    }
-                  } catch (mermaidErr) {
-                    console.warn('[B2F RPC] Mermaid update failed:', mermaidErr);
-                  }
-                }
-                if (!gotAny) {
-                  console.warn('[B2F RPC] Streaming returned no elements, falling back to batch endpoint');
-                  throw new Error('No streaming elements');
-                }
-                if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Streaming visualization completed');
-              } else {
-                throw new Error(`Streaming not available: status ${streamingResp.status}`);
               }
-            } catch (streamErr) {
-              console.warn('[B2F RPC] Streaming failed, falling back to non-streaming:', streamErr);
+              if (returned.length === 0) {
+                console.warn('[B2F RPC] Visualizer returned no elements');
+              }
+              const { setVisualizationData } = useSessionStore.getState();
+              if (setVisualizationData) {
+                setVisualizationData(returned);
+              } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
+                const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(returned);
+                window.__excalidrawDebug.setElements(excalidrawElements);
+              }
+              if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Visualization generated via Visualizer service');
+            } catch (svcErr) {
+              console.error('[B2F RPC] ❌ Failed to call Visualizer service:', svcErr);
+              // Replace placeholder with an error message on failure
               try {
-                if (!visualizerBaseUrl) {
-                  throw new Error('NEXT_PUBLIC_VISUALIZER_URL is not set');
-                }
-                const resp = await fetch(`${visualizerBaseUrl}/generate-diagram`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
-                });
-                if (!resp.ok) {
-                  throw new Error(`Visualizer service returned ${resp.status}`);
-                }
-                const diagramData = await resp.json();
-                const returned = Array.isArray(diagramData?.elements) ? diagramData.elements : [];
-                if (returned.length === 0) {
-                  console.warn('[B2F RPC] Visualizer returned no elements');
-                }
+                const errorSkeleton = [
+                  {
+                    id: 'generating_error',
+                    type: 'text',
+                    text: '⚠️ Could not generate diagram.'
+                  }
+                ];
                 const { setVisualizationData } = useSessionStore.getState();
                 if (setVisualizationData) {
-                  setVisualizationData(returned);
+                  setVisualizationData(errorSkeleton as any);
                 } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                  const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(returned);
+                  const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(errorSkeleton);
                   window.__excalidrawDebug.setElements(excalidrawElements);
                 }
-                if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Visualization generated via Visualizer service');
-              } catch (svcErr) {
-                console.error('[B2F RPC] ❌ Failed to call Visualizer service:', svcErr);
-                // Replace placeholder with an error message on failure
-                try {
-                  const errorSkeleton = [
-                    {
-                      id: 'generating_error',
-                      type: 'text',
-                      text: '⚠️ Could not generate diagram.'
-                    }
-                  ];
-                  const { setVisualizationData } = useSessionStore.getState();
-                  if (setVisualizationData) {
-                    setVisualizationData(errorSkeleton as any);
-                  } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                    const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(errorSkeleton);
-                    window.__excalidrawDebug.setElements(excalidrawElements);
-                  }
-                } catch (errRender) {
-                  console.warn('[B2F RPC] Error placeholder render failed (non-fatal):', errRender);
-                }
+              } catch (errRender) {
+                console.warn('[B2F RPC] Error placeholder render failed (non-fatal):', errRender);
               }
             }
           }

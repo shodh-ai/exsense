@@ -120,6 +120,7 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
 
   // Helper: fetch an image URL and return a dataURL
   const fetchAsDataURL = useCallback(async (url: string): Promise<{ dataURL: string; mimeType: string } | null> => {
+    const VISUALIZER_BASE = process.env.NEXT_PUBLIC_VISUALIZER_URL || 'http://localhost:8002';
     const toDataURL = async (res: Response) => {
       const blob = await res.blob();
       const mimeType = blob.type || 'image/png';
@@ -142,7 +143,7 @@ const useVisualActionExecutor = (excalidrawAPI: ExcalidrawAPIRefValue | null): U
 
     // Fallback: use Visualizer proxy to bypass CORS
     try {
-      const proxied = `http://localhost:8002/proxy-image?url=${encodeURIComponent(url)}`;
+      const proxied = `${VISUALIZER_BASE.replace(/\/$/, '')}/proxy-image?url=${encodeURIComponent(url)}`;
       const res2 = await fetch(proxied, { mode: 'cors' });
       if (!res2.ok) return null;
       return await toDataURL(res2);
