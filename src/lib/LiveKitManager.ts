@@ -42,5 +42,3 @@ function simulateConversation() {
   setTimeout(() => onTranscriptionReceived({ channel: { alternatives: [{ transcript: "Hello. I am Rox, your AI Assistant!" }] } }), 2500);
   setTimeout(() => onEndOfSpeech(), 5000); // The text will disappear after 2 more seconds.
 }
-
-// To test, you could call simulateConversation() from a button click or a useEffect in a dev component.

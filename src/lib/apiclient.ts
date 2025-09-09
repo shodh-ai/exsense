@@ -35,9 +35,15 @@ export const createApiClient = ({ getToken }: ApiClientOptions) => {
             headers.set('Authorization', `Bearer ${token}`);
         }
 
-        const fullUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}${path}`;
+        // Determine base URL with a safe fallback to localhost for dev
+        const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+        const baseUrl = rawBase && rawBase.length > 0 ? rawBase : 'http://localhost:3001';
+        // Normalize URL join to avoid double slashes
+        const normalizedBase = baseUrl.replace(/\/+$/, '');
+        const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+        const fullUrl = `${normalizedBase}${normalizedPath}`;
         console.log('🔧 API Request Debug:', {
-            baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+            baseUrl,
             path,
             fullUrl,
             method

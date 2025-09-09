@@ -36,7 +36,7 @@ export default function Login() {
             if (userRole === 'expert') {
                 router.push("/teacher-dash");
             } else {
-                router.push("/my-course");
+                router.push("/student_dashboard");
             }
         }
     }, [isSignedIn, user, router]);
@@ -62,7 +62,7 @@ export default function Login() {
                 if (userRole === 'expert') {
                     router.push("/teacher-dash");
                 } else {
-                    router.push("/my-course");
+                    router.push("/student_dashboard");
                 }
                 return;
             }
@@ -84,7 +84,7 @@ export default function Login() {
                 if (userRole === 'expert') {
                     router.push("/teacher-dash");
                 } else {
-                    router.push("/my-course");
+                    router.push("/student_dashboard");
                 }
                 return;
             } else if (err.message?.includes("Invalid authentication credentials")) {

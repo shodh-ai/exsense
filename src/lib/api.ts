@@ -137,7 +137,18 @@ export class ApiService {
   }
   
   async getTeacherAnalytics(): Promise<any> { 
-    return this.client.get('/api/teacher/me/analytics');
+    // Prefer a teacher-scoped endpoint. If it's missing or forbidden, let the caller handle nulls.
+    try {
+      return await this.client.get('/api/teacher/me/analytics');
+    } catch (err: any) {
+      // If backend hasn't implemented the teacher analytics endpoint yet or access is forbidden,
+      // return null so UI can gracefully degrade without surfacing admin-only 403s.
+      const status = err?.status as number | undefined;
+      if (status === 404 || status === 401 || status === 403) {
+        return null;
+      }
+      throw err;
+    }
   }
 
   async enrollInCourse(courseId: string): Promise<Enrollment> {

@@ -100,7 +100,12 @@ export default function MyCoursesPage(): JSX.Element {
   const courseError = null;
 
   // We simulate the other hooks so the page doesn't crash.
-  const enrollMutation = { isPending: false, mutateAsync: async () => console.log("Simulating enrollment...") };
+  const enrollMutation = {
+    isPending: false,
+    mutateAsync: async (_courseId?: string) => {
+      console.log("Simulating enrollment...", _courseId);
+    },
+  };
   const refetchLessons = () => console.log("Simulating lesson refetch...");
 
   // ---
@@ -142,7 +147,7 @@ export default function MyCoursesPage(): JSX.Element {
           <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             <div className="mx-auto flex w-full max-w-[80%] flex-col gap-10 md:gap-12">
               {/* Added a Breadcrumb for better navigation, which was missing */}
-              <div className="flex items-center text-sm text-gray-500"><a href="/dashboard" className="hover:underline">Dashboard</a><span className="mx-2">·</span><span className="text-gray-800">{course.title}</span></div>
+              <div className="flex items-center text-sm text-gray-500"><a href="/student_dashboard" className="hover:underline">Dashboard</a><span className="mx-2">·</span><span className="text-gray-800">{course.title}</span></div>
               
               <div className="flex flex-col gap-6">
                 <CourseHeader />

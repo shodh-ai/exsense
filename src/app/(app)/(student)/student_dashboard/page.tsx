@@ -82,7 +82,7 @@ const StudentDashboard = (): JSX.Element => {
                 My Enrolled Courses
               </h2>
               <Button asChild variant="ghost" className="bg-[#566fe91a] rounded-[40px] text-[#566fe9] hover:bg-[#566fe930] h-[32px] px-4 py-2 flex items-center gap-1">
-                <Link href="/courses">
+                <Link href="/course-listing">
                   <SearchIcon className="w-4 h-4" />
                   <span className="font-semibold text-[12px] leading-[16px]">Browse</span>
                 </Link>
@@ -138,7 +138,7 @@ const StudentDashboard = (): JSX.Element => {
               
               {/* --- CLEAN "EMPTY STATE" MESSAGE --- */}
               {!isLoading && !error && enrollments.length === 0 && (
-                <p>You haven't enrolled in any courses yet. <Link href="/courses" className="text-blue-600 hover:underline">Explore courses</Link> to get started!</p>
+                <p>You haven't enrolled in any courses yet. <br /> <Link href="/course-listing" className="text-blue-600 hover:underline">Explore courses</Link> to get started!</p>
               )}
             </div>
           </section>

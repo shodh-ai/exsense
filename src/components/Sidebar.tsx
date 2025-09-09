@@ -9,10 +9,10 @@ import { cn } from '@/lib/utils';
 import ConfirmationModal from './ConfirmationModal';
 
 const navLinks = [
-  { href: '/dashboard', label: 'Dashboard', icon: '/icons/nav-dashboard-inactive.svg', activeIcon: '/icons/nav-dashboard-active.svg' },
-  { href: '/session', label: 'Live Session', icon: '/icons/nav-whiteboard-inactive.svg', activeIcon: '/icons/nav-whiteboard-active.svg' },
-  { href: '/chat', label: 'Messages', icon: '/icons/nav-chat-inactive.svg', activeIcon: '/icons/nav-chat-active.svg' },
-  { href: '/notifications', label: 'Notifications', icon: '/icons/nav-notifications-inactive.svg', activeIcon: '/icons/nav-notifications-active.svg' },
+  { href: '/dashboard', label: 'Dashboard', icon: '/frame1.svg', activeIcon: '/frame1.svg' },
+  { href: '/session', label: 'Live Session', icon: '/correct.svg', activeIcon: '/correct.svg' },
+  { href: '/chat', label: 'Messages', icon: '/doubt.svg', activeIcon: '/doubt.svg' },
+  { href: '/notifications', label: 'Notifications', icon: '/code.svg', activeIcon: '/code.svg' },
   { href: '/logout', label: 'Sign Out', icon: '/account.svg', activeIcon: '/account.svg' },
 ];
 

@@ -28,12 +28,16 @@ const initialBackendData: SectionData[] = [
 
 type CirriculumEditorProps = {
   initialSections?: SectionData[];
+  initialTitle?: string;
+  initialDescription?: string;
   onFinalize?: (data: { title:string; description:string; sections: SectionData[] }) => Promise<void> | void;
   finalizeLabel?: string;
 };
 
 const CirriculumEditor = ({
   initialSections,
+  initialTitle,
+  initialDescription,
   onFinalize,
   finalizeLabel,
 }: CirriculumEditorProps): JSX.Element => {
@@ -51,8 +55,31 @@ const CirriculumEditor = ({
   const [sectionIdToDelete, setSectionIdToDelete] = useState<string | null>(null);
 
   useEffect(() => {
-    if (initialSections && initialSections.length) setSections(initialSections);
-  }, [initialSections]);
+    if (initialSections && initialSections.length) {
+      const next = (initialTitle || initialDescription)
+        ? initialSections.map((s, idx) => (
+            idx === 0
+              ? {
+                  ...s,
+                  title: initialTitle ?? s.title,
+                  description: initialDescription ?? s.description,
+                }
+              : s
+          ))
+        : initialSections;
+      setSections(next);
+    } else if (initialTitle || initialDescription) {
+      setSections([
+        {
+          id: uuidv4(),
+          title: initialTitle || "",
+          description: initialDescription || "",
+          modules: [],
+          scope: "",
+        },
+      ]);
+    }
+  }, [initialSections, initialTitle, initialDescription]);
 
   const handleAddSection = () => {
     const newSection: SectionData = { id: uuidv4(), title: "", description: "", modules: [], scope: "" };
@@ -181,7 +208,7 @@ const CirriculumEditor = ({
                             </Button>
                         </div>
                         <Button onClick={handleFinalize} disabled={submitting || createCourse.isPending} className="flex-1 h-[50px] md:flex-initial md:w-auto px-7 py-4 h-auto bg-[#566fe9] rounded-[600px] text-white hover:bg-[#4a5fd1]">
-                            {submitting || createCourse.isPending ? 'Finalizing…' : 'Finalize'}
+                            {submitting || createCourse.isPending ? 'Finalizing…' : (finalizeLabel || 'Finalize')}
                         </Button>
                     </div>
                 </div>

@@ -39,13 +39,30 @@ export const useCourses = () => {
     retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 };
+
 export const useTeacherAnalytics = () => {
   const apiService = useApiService();
   
   return useQuery({
     queryKey: queryKeys.teacherAnalytics,
-    queryFn: () => apiService.getTeacherAnalytics(),
+    queryFn: async () => {
+      try {
+        return await apiService.getTeacherAnalytics();
+      } catch (err: any) {
+        const status = err?.status as number | undefined;
+        // Gracefully degrade for unauthorized/forbidden
+        if (status === 401 || status === 403) {
+          return null;
+        }
+        throw err;
+      }
+    },
     staleTime: 5 * 60 * 1000, // Analytics can be cached for 5 minutes
+    retry: (failureCount, error: any) => {
+      const status = error?.status as number | undefined;
+      if (status === 401 || status === 403) return false;
+      return failureCount < 2;
+    },
   });
 };
 
@@ -73,14 +90,31 @@ export const useTeacherCourses = () => {
     },
   });
 };
+export const useUpdateCourse = () => {
+  const apiService = useApiService();
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: ({ courseId, courseData }: { courseId: string, courseData: any }) => 
+      apiService.updateCourse(courseId, courseData),
+    onSuccess: (updatedCourse) => {
+      // Invalidate the course query to refetch fresh data
+      queryClient.invalidateQueries({ queryKey: queryKeys.course(updatedCourse.id) });
+      toast.success('Course updated successfully!');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to update course: ${error.message}`);
+    },
+  });
+};
 
-export const useCourse = (id: string) => {
+export const useCourse = (id: string, options?: { enabled?: boolean }) => {
   const apiService = useApiService();
   
   return useQuery({
     queryKey: queryKeys.course(id),
     queryFn: () => apiService.getCourse(id),
-    enabled: !!id,
+    enabled: options?.enabled ?? !!id,
     staleTime: 5 * 60 * 1000,
   });
 };
