@@ -1,52 +1,30 @@
 "use client";
-import { LiveKitRoom, useRoomContext, useParticipants } from '@livekit/components-react';
-import '@livekit/components-styles';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Track, RemoteVideoTrack, TrackPublication, VideoQuality, RoomEvent, ConnectionState } from 'livekit-client';
+import { Track, RemoteVideoTrack, TrackPublication, VideoQuality, RoomEvent, ConnectionState, Room, RemoteParticipant } from 'livekit-client';
 
 interface LiveKitViewerProps {
-  url: string;
-  token: string;
+  room: Room; // REQUIRED existing Room instance, already connected by the hook
   onInteraction?: (payload: object) => void | Promise<void>;
 }
 
-export default function LiveKitViewer({ url, token, onInteraction }: LiveKitViewerProps) {
-  if (!token || !url) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        Connecting to LiveKit...
-      </div>
-    );
-  }
-  // Debug log when viewer has the necessary props
-  try { console.log('[FLOW] LiveKitViewer ready with url/token'); } catch {}
-
+export default function LiveKitViewer({ room, onInteraction }: LiveKitViewerProps) {
+  try { console.log('[FLOW] LiveKitViewer using provided room instance'); } catch {}
   return (
     <div className="w-full h-full min-h-0" style={{ position: 'relative' }}>
-      <LiveKitRoom
-        serverUrl={url}
-        token={token}
-        connect={true}
-        video={false}
-        audio={false}
-        connectOptions={{ autoSubscribe: false }}
-        className="w-full h-full min-h-0"
-      >
-        <div className="w-full h-full min-h-0" style={{ position: 'relative', zIndex: 10 }}>
-          <ExplicitVideoGrid onInteraction={onInteraction} />
-        </div>
-      </LiveKitRoom>
+      <div className="w-full h-full min-h-0" style={{ position: 'relative', zIndex: 10 }}>
+        <ExplicitVideoGrid room={room} onInteraction={onInteraction} />
+      </div>
     </div>
   );
 }
 
 type CaptureSize = { w: number; h: number } | null;
 
-function ExplicitVideoGrid({ onInteraction }: { onInteraction?: (payload: object) => void | Promise<void> }) {
-  const room = useRoomContext();
-  const participants = useParticipants();
+function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?: (payload: object) => void | Promise<void> }) {
   const [ready, setReady] = useState(false);
   const [captureSize, setCaptureSize] = useState<CaptureSize>(null);
+  const [tick, setTick] = useState(0); // force re-render on room events
+  const [videoTracks, setVideoTracks] = useState<{ pub: any; track: RemoteVideoTrack }[]>([]);
 
   // Expose the LiveKit room and a helper sender for DevTools-based testing
   useEffect(() => {
@@ -71,24 +49,32 @@ function ExplicitVideoGrid({ onInteraction }: { onInteraction?: (payload: object
     };
   }, [room]);
 
-  // Collect only remote VIDEO publications; avoid attaching audio as video.
-  const videoPubs = useMemo(() => {
-    const pubs: TrackPublication[] = [];
+  // Helper to rebuild videoTracks from current room state
+  const rebuildFromRoom = () => {
+    const next: { pub: any; track: RemoteVideoTrack }[] = [];
     try {
-      participants.forEach((p) => {
+      room.remoteParticipants.forEach((p: RemoteParticipant) => {
         p.trackPublications.forEach((pub) => {
-          if (pub.kind === Track.Kind.Video) pubs.push(pub);
+          try {
+            if (pub?.kind === Track.Kind.Video) {
+              const t = pub.track as RemoteVideoTrack | undefined;
+              if (t && typeof t.attach === 'function') {
+                next.push({ pub, track: t });
+              }
+            }
+          } catch {}
         });
       });
     } catch {}
-    return pubs;
-  }, [participants]);
+    setVideoTracks(next);
+  };
 
   useEffect(() => {
-    // Room-level diagnostics for why tracks may not appear
+    // Room-level diagnostics and force re-render on relevant events
     try {
-      const onPc = (p: any) => { try { console.log('[LK][viewer] participantConnected:', p?.identity); } catch {} };
-      const onPd = (p: any) => { try { console.log('[LK][viewer] participantDisconnected:', p?.identity); } catch {} };
+      const force = () => setTick((x) => x + 1);
+      const onPc = (p: any) => { try { console.log('[LK][viewer] participantConnected:', p?.identity); } catch {} force(); };
+      const onPd = (p: any) => { try { console.log('[LK][viewer] participantDisconnected:', p?.identity); } catch {} force(); };
       const onPub = (pub: any, p: any) => {
         try {
           console.log('[LK][viewer] trackPublished:', { from: p?.identity, kind: pub?.kind, source: pub?.source, sid: pub?.trackSid });
@@ -98,24 +84,34 @@ function ExplicitVideoGrid({ onInteraction }: { onInteraction?: (payload: object
             console.log('[LK][viewer] explicitly subscribed to new video pub', pub?.trackSid);
           }
         } catch {}
+        rebuildFromRoom();
       };
-      const onSub = (track: any, pub: any, p: any) => { try { console.log('[LK][viewer] trackSubscribed:', { from: p?.identity, kind: track?.kind, sid: pub?.trackSid }); } catch {} };
+      const onSub = (track: any, pub: any, p: any) => {
+        try { console.log('[LK][viewer] trackSubscribed:', { from: p?.identity, kind: track?.kind, sid: pub?.trackSid }); } catch {}
+        try {
+          if (track?.kind === Track.Kind.Video) {
+            setVideoTracks((prev) => {
+              const exists = prev.some((v) => v.track.sid === track.sid || v.pub?.trackSid === pub?.trackSid);
+              return exists ? prev : [...prev, { pub, track } as any];
+            });
+          }
+        } catch {}
+        force();
+      };
       const onUnsub = (track: any, pub: any, p: any) => {
         try {
           console.log('[LK][viewer] trackUnsubscribed:', { from: p?.identity, kind: track?.kind, sid: pub?.trackSid });
-          // Proactively re-subscribe to avoid going blank if adaptive stream/dynacast paused it
           (pub as any)?.setSubscribed?.(true);
           console.log('[LK][viewer] re-subscribed to publication', pub?.trackSid);
         } catch (e) {
           console.warn('[LK][viewer] failed to re-subscribe on unsubscribe:', e);
         }
+        try {
+          setVideoTracks((prev) => prev.filter((v) => v.track.sid !== track?.sid && v.pub?.trackSid !== pub?.trackSid));
+        } catch {}
+        force();
       };
-      room.on(RoomEvent.ParticipantConnected, onPc);
-      room.on(RoomEvent.ParticipantDisconnected, onPd);
-      room.on(RoomEvent.TrackPublished, onPub);
-      room.on(RoomEvent.TrackSubscribed, onSub);
-      room.on(RoomEvent.TrackUnsubscribed, onUnsub);
-      const onData = (payload: Uint8Array, participant?: any, _?: any) => {
+      const onData = (payload: Uint8Array, participant?: any) => {
         try {
           const txt = new TextDecoder().decode(payload);
           const obj = JSON.parse(txt);
@@ -129,7 +125,14 @@ function ExplicitVideoGrid({ onInteraction }: { onInteraction?: (payload: object
           }
         } catch {}
       };
+      room.on(RoomEvent.ParticipantConnected, onPc);
+      room.on(RoomEvent.ParticipantDisconnected, onPd);
+      room.on(RoomEvent.TrackPublished, onPub);
+      room.on(RoomEvent.TrackSubscribed, onSub);
+      room.on(RoomEvent.TrackUnsubscribed, onUnsub);
       room.on(RoomEvent.DataReceived as any, onData);
+      // Seed from current room state at mount
+      rebuildFromRoom();
       return () => {
         room.off(RoomEvent.ParticipantConnected, onPc);
         room.off(RoomEvent.ParticipantDisconnected, onPd);
@@ -141,7 +144,7 @@ function ExplicitVideoGrid({ onInteraction }: { onInteraction?: (payload: object
     } catch {}
   }, [room]);
 
-  // After connect, disable adaptive stream & dynacast on this subscriber and enforce default subscription
+  // Disable adaptive stream & dynacast and enforce default subscription
   useEffect(() => {
     try {
       (room as any)?.setAdaptiveStream?.(false);
@@ -155,7 +158,7 @@ function ExplicitVideoGrid({ onInteraction }: { onInteraction?: (payload: object
   useEffect(() => {
     const t = setInterval(() => {
       try {
-        participants.forEach((p) => {
+        room.remoteParticipants.forEach((p) => {
           try {
             const pubs: any[] = Array.from(((p as any)?.trackPublications?.values?.() || []) as any);
             pubs.forEach((pub: any) => {
@@ -168,37 +171,36 @@ function ExplicitVideoGrid({ onInteraction }: { onInteraction?: (payload: object
       } catch {}
     }, 4000);
     return () => clearInterval(t);
-  }, [participants]);
+  }, [room]);
 
   useEffect(() => {
     try {
-      const infos = participants.map((p) => {
+      const infos: { id: string; vids: number }[] = [];
+      room.remoteParticipants.forEach((p) => {
         try {
-          const pubs: any[] = Array.from(((p as any)?.trackPublications?.values?.() || []) as any);
-          const vids = pubs.filter((pub: any) => pub?.kind === Track.Kind.Video).length;
-          return { id: (p as any)?.identity, vids };
+          const count = Array.from((p as any)?.trackPublications?.values?.() || []).filter((pub: any) => pub?.kind === Track.Kind.Video).length;
+          infos.push({ id: (p as any)?.identity, vids: count });
         } catch {
-          return { id: (p as any)?.identity, vids: 0 };
+          infos.push({ id: (p as any)?.identity, vids: 0 });
         }
       });
       console.log('[LK][viewer] participants:', infos);
     } catch {}
-  }, [participants]);
+  }, [room, tick, videoTracks.length]);
 
   useEffect(() => {
-    // Force subscribe to all video publications (best-effort)
+    // Force ensure subscribed and prefer high quality for any tracked video publications
     try {
-      (videoPubs as any[]).forEach((pub: any) => {
-        // Only RemoteTrackPublication supports setSubscribed/isSubscribed
-        if (typeof pub?.setSubscribed === 'function' && pub?.isSubscribed === false) {
-          try {
+      (videoTracks as any[]).forEach(({ pub }: any) => {
+        if (!pub) return;
+        try {
+          if (typeof pub?.setSubscribed === 'function' && pub?.isSubscribed === false) {
             pub.setSubscribed(true);
             console.log('[FLOW] Forcing subscribe to video publication', { sid: pub.trackSid, source: pub.source });
-          } catch (e) {
-            console.warn('[FLOW] Failed to force subscribe:', e);
           }
+        } catch (e) {
+          console.warn('[FLOW] Failed to force subscribe:', e);
         }
-        // Prefer highest quality layer if available
         try {
           if (typeof pub?.setVideoQuality === 'function') {
             pub.setVideoQuality(VideoQuality.HIGH);
@@ -206,30 +208,18 @@ function ExplicitVideoGrid({ onInteraction }: { onInteraction?: (payload: object
         } catch {}
       });
     } catch {}
-  }, [videoPubs]);
+  }, [videoTracks]);
 
-  // Wait gate: mark ready once at least one RemoteVideoTrack is present and not muted
+  // Wait gate: mark ready once at least one RemoteVideoTrack is present
   useEffect(() => {
-    const hasAny = (videoPubs as any[]).some((pub: any) => {
-      const t = pub?.track as RemoteVideoTrack | undefined;
-      return !!t && typeof t.attach === 'function' && (pub?.isMuted === false || t.isMuted === false);
-    });
+    const hasAny = videoTracks.length > 0;
     if (hasAny && !ready) setReady(true);
-  }, [videoPubs, ready]);
+  }, [videoTracks, ready]);
 
-  const videoPairs = useMemo(() => {
-    const pairs: { pub: any; track: RemoteVideoTrack }[] = [];
-    (videoPubs as any[]).forEach((pub: any) => {
-      const t = pub?.track as any;
-      if (t && typeof t.attach === 'function' && (t.kind === 'video' || t.mediaStreamTrack?.kind === 'video')) {
-        pairs.push({ pub, track: t as RemoteVideoTrack });
-      }
-    });
-    return pairs;
-  }, [videoPubs]);
+  const videoPairs = videoTracks;
 
   if (!ready || videoPairs.length === 0) {
-    try { console.log('[FLOW] Waiting for remote video... pubs=', videoPubs.length); } catch {}
+    try { console.log('[FLOW] Waiting for remote video... pubs=', videoPairs.length); } catch {}
     return (
       <div className="w-full h-full flex items-center justify-center text-gray-300">
         Waiting for remote video...
@@ -241,15 +231,14 @@ function ExplicitVideoGrid({ onInteraction }: { onInteraction?: (payload: object
   return (
     <div className="w-full h-full min-h-0 grid grid-cols-1 auto-rows-fr gap-2 overflow-hidden">
       {videoPairs.map(({ pub, track }, idx) => (
-        <VideoRenderer key={track.sid || `vid-${idx}`} track={track} pub={pub} onInteraction={onInteraction} captureSize={captureSize || undefined} />
+        <VideoRenderer key={track.sid || `vid-${idx}`} room={room} track={track} pub={pub} onInteraction={onInteraction} captureSize={captureSize || undefined} />
       ))}
     </div>
   );
 }
 
-function VideoRenderer({ track, pub, onInteraction, captureSize }: { track: RemoteVideoTrack, pub: any, onInteraction?: (payload: object) => void | Promise<void>, captureSize?: { w: number; h: number } }) {
+function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room: Room; track: RemoteVideoTrack, pub: any, onInteraction?: (payload: object) => void | Promise<void>, captureSize?: { w: number; h: number } }) {
   const ref = React.useRef<HTMLVideoElement>(null);
-  const room = useRoomContext();
   const pendingRef = React.useRef<object[]>([]);
   const flushingRef = React.useRef<boolean>(false);
   useEffect(() => {

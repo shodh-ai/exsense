@@ -529,7 +529,8 @@ export default function Session() {
     } = useLiveKitSession(
         shouldInitializeLiveKit ? lkRoomName : '',
         shouldInitializeLiveKit ? lkUserName : '',
-        (courseId as string) || undefined
+        (courseId as string) || undefined,
+        { spawnAgent: false, spawnBrowser: true }
     );
 
     // Dynamic VNC session state (initialized empty; populated by API)

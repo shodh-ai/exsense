@@ -40,6 +40,7 @@ interface SessionContentProps {
     setActiveView: (view: ViewKey) => void;
     componentButtons: ButtonConfig[];
 
+    room?: Room;
     livekitUrl: string;
     livekitToken: string;
     isConnected: boolean;
@@ -49,7 +50,7 @@ interface SessionContentProps {
     sendBrowserInteraction: (payload: object) => Promise<void>;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, livekitUrl, livekitToken, isConnected, diagramDefinition, isDiagramGenerating, onDiagramUpdate, sendBrowserInteraction }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, diagramDefinition, isDiagramGenerating, onDiagramUpdate, sendBrowserInteraction }: SessionContentProps) {
     return (
         <div className='w-full h-full flex flex-col'>
             <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
@@ -78,8 +79,8 @@ function SessionContent({ activeView, setActiveView, componentButtons, livekitUr
                     {!isDiagramGenerating && <ExcalidrawWrapper />}
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
-                    {livekitUrl && livekitToken ? (
-                        <LiveKitViewer url={livekitUrl} token={livekitToken} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                    {room ? (
+                        <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-300">Connecting to LiveKit...</div>
                     )}
@@ -249,6 +250,7 @@ export default function Session() {
                         activeView={activeView} 
                         setActiveView={setActiveView} 
                         componentButtons={componentButtons} 
+                        room={room}
                         livekitUrl={livekitUrl}
                         livekitToken={livekitToken}
                         isConnected={isConnected}
@@ -261,6 +263,9 @@ export default function Session() {
                     {hasSuggestions && (
                         <SuggestedResponses onSelect={selectSuggestedResponse} />
                     )}
+
+                    {/* Re-introduced Footer to restore mic and session controls */}
+                    <Footer room={room} agentIdentity={agentIdentity || undefined} />
                 </div>
                 
                 {isConnected && (
