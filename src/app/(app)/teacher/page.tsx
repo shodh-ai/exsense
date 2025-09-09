@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
+import { Room } from 'livekit-client';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
@@ -94,6 +95,7 @@ interface SessionContentProps {
     activeView: ReturnType<typeof useSessionStore.getState>['activeView'];
     imprintingMode: ReturnType<typeof useSessionStore.getState>['imprinting_mode'];
     componentButtons: ButtonConfig[];
+    room?: Room;
     livekitUrl: string;
     livekitToken: string;
     isConnected: boolean;
@@ -111,6 +113,7 @@ function SessionContent({
     activeView,
     imprintingMode,
     componentButtons,
+    room,
     livekitUrl,
     livekitToken,
     isConnected,
@@ -159,8 +162,8 @@ function SessionContent({
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
                     <div className="w-full h-full flex flex-col md:flex-row gap-4">
                         <div className="flex-1">
-                            {livekitUrl && livekitToken ? (
-                                <LiveKitViewer url={livekitUrl} token={livekitToken} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                            {room ? (
+                                <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
                                     Connecting to LiveKit...
@@ -525,6 +528,7 @@ export default function Session() {
         livekitUrl,
         livekitToken,
         isConnected,
+        room,
         sendBrowserInteraction,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? lkRoomName : '',
@@ -1417,6 +1421,7 @@ export default function Session() {
                                         activeView={activeView}
                                         imprintingMode={imprinting_mode}
                                         componentButtons={componentButtons}
+                                        room={room}
                                         livekitUrl={overrideLkUrl || livekitUrl}
                                         livekitToken={overrideLkToken || livekitToken}
                                         isConnected={isConnected}
