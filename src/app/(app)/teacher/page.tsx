@@ -476,7 +476,9 @@ const ConceptualFooter = ({ onFinishClick, isFinishDisabled, onShowMeClick, isSh
 
 export default function Session() {
     // --- MOCK BACKEND FLAG ---
-    const MOCK_BACKEND = true;
+    const MOCK_BACKEND = (process.env.NEXT_PUBLIC_MOCK_BACKEND ?? 'false') === 'true';
+    // eslint-disable-next-line no-console
+    console.log('[TeacherPage] INIT', { MOCK_BACKEND, now: new Date().toISOString() });
 
     const { activeView, setActiveView, imprinting_mode, setImprintingMode, currentLO, setCurrentLO, imprintingPhase, setImprintingPhase, curriculumDraft, setCurriculumDraft } = useSessionStore();
     const [isIntroActive, setIsIntroActive] = useState(false);
@@ -534,9 +536,17 @@ export default function Session() {
     } = useLiveKitSession(
         shouldInitializeLiveKit ? lkRoomName : '',
         shouldInitializeLiveKit ? lkUserName : '',
-        (courseId as string) || undefined,
-        { spawnAgent: false, spawnBrowser: true }
+        (courseId as string) || undefined
     );
+
+    useEffect(() => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] LiveKit hook ready', { shouldInitializeLiveKit, lkRoomName, lkUserName, livekitUrl, tokenPresent: !!livekitToken });
+    }, [shouldInitializeLiveKit, lkRoomName, lkUserName, livekitUrl, livekitToken]);
+    useEffect(() => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] LiveKit connection state changed', { isConnected, hasRoom: !!room });
+    }, [isConnected, room]);
 
     // VNC session management removed (LiveKit-only)
 
@@ -545,7 +555,11 @@ export default function Session() {
     // Helper to send actions to browser pod over LiveKit data channel
     const sendBrowser = React.useCallback(async (action: string, parameters: Record<string, unknown> = {}) => {
         try {
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] sendBrowser →', { action, parameters });
             await sendBrowserInteraction({ action, ...parameters });
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] sendBrowser ✓', { action });
         } catch (e) {
             // eslint-disable-next-line no-console
             console.warn('[TeacherPage] sendBrowser failed', e);
@@ -562,11 +576,15 @@ export default function Session() {
     // VNC auto-create and cache restore removed
 
     const handleSelectPractical = () => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] UI: Select Practical');
         setImprintingMode('WORKFLOW');
         setActiveView('vnc');
     };
 
     const handleSelectConceptual = () => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] UI: Select Conceptual');
         setImprintingMode('DEBRIEF_CONCEPTUAL');
         setActiveView('excalidraw');
         setIsConceptualStarted(false);
@@ -626,13 +644,21 @@ export default function Session() {
         try {
             if (!isRecording) {
                 setStatusMessage('Start recording to capture and persist screenshots.');
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] captureScreenshot: ignored (not recording)');
                 return;
             }
             setStatusMessage('Capturing screenshot...');
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] captureScreenshot → request');
             await sendBrowser('screenshot');
             setStatusMessage('Manual screenshot captured.');
             setTimeToNextScreenshot(screenshotIntervalSec);
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] captureScreenshot ✓');
         } catch (e: any) {
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] captureScreenshot ✗', e);
             setStatusMessage(`Screenshot failed: ${e?.message || e}`);
         }
     };
@@ -712,6 +738,8 @@ export default function Session() {
         if (!user?.id || !seedText.trim()) return;
         try {
             setStatusMessage('Submitting seed...');
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] submitSeed →', { expert_id: user.id, session_id: roomName, curriculumId });
             await submitSeed({ expert_id: user.id, session_id: roomName, curriculum_id: String(curriculumId), content: seedText });
             setStatusMessage('Seed submitted.');
             setSeedText('');
@@ -722,7 +750,7 @@ export default function Session() {
         if (!user?.id) return;
         try {
             // eslint-disable-next-line no-console
-            console.log('[TeacherPage] handleStartRecording: begin', { activeView });
+            console.log('[TeacherPage] handleStartRecording: begin', { activeView, screenshotIntervalSec });
             setSubmitMessage(null);
             setSubmitError(null);
             setImprintingMode('WORKFLOW');
@@ -764,6 +792,8 @@ export default function Session() {
     const handleVncInteraction = (interaction: { action: string; x: number; y: number }) => {
         if (!isRecording) return;
         // Send a click through the LiveKit data channel
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] onInteraction(click) →', interaction);
         void sendBrowser('click', { x: interaction.x, y: interaction.y });
     };
 
@@ -831,6 +861,8 @@ export default function Session() {
     };
 
     const handleStopRecording = async () => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] handleStopRecording: begin');
         if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
         try {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -840,6 +872,8 @@ export default function Session() {
         } catch (err) { console.warn('Stop recording warning:', err); }
         setIsRecording(false);
         setTimeToNextScreenshot(null);
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] handleStopRecording: done');
     };
     
     const handleTogglePauseResume = () => {
@@ -852,6 +886,8 @@ export default function Session() {
             recordingIntervalRef.current = setInterval(() => {
                 setRecordingDuration(prev => prev + 1);
             }, 1000);
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleTogglePauseResume: resumed');
         } else {
             // Pause local mic and instruct pod to pause
             mediaRecorderRef.current.pause();
@@ -860,6 +896,8 @@ export default function Session() {
             if (recordingIntervalRef.current) {
                 clearInterval(recordingIntervalRef.current);
             }
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleTogglePauseResume: paused');
         }
     };
 
@@ -870,6 +908,10 @@ export default function Session() {
             setTimeToNextScreenshot((prev) => {
                 if (prev == null) return screenshotIntervalSec;
                 const next = prev - 1;
+                if (next <= 1) {
+                    // eslint-disable-next-line no-console
+                    console.log('[TeacherPage] T-minus next periodic screenshot', { next });
+                }
                 return next <= 0 ? screenshotIntervalSec : next;
             });
         }, 1000);
@@ -877,6 +919,8 @@ export default function Session() {
     }, [isRecording, screenshotIntervalSec]);
 
     const handleSubmitEpisode = async () => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] handleSubmitEpisode: begin', { MOCK_BACKEND, isRecording, stagedAssetsCount: stagedAssets.length, currentLO });
         setSubmitMessage(null);
         setSubmitError(null);
         setIsSubmitting(true);
@@ -894,6 +938,8 @@ export default function Session() {
                 await new Promise(r => setTimeout(r, 1000));
                 setStatusMessage('Submitting episode (Mocked)...');
                 await new Promise(r => setTimeout(r, 2000));
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] handleSubmitEpisode: MOCK flow');
                 const fakeResponse = {
                     action: 'SPEAK_AND_INITIATE_DEBRIEF',
                     text: "Great question! On the real axis, the root locus exists between an odd number of poles and zeros. Count the total number of poles and zeros to the right of any point on the real axis. If it's odd, that section is part of the root locus."
@@ -921,18 +967,47 @@ export default function Session() {
             }
 
             // Real backend flow
-            // Convert recorded audio (webm/ogg) to WAV Data URL
+            // Prepare audio: upload via HTTP to get an asset_id (avoid sending audio over LiveKit data channel)
             const blob = audioBlobRef.current;
-            const audio_b64: string = blob ? await convertBlobToWavDataURL(blob) : '';
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleSubmitEpisode: audio prepared', { blobPresent: !!blob, blobSize: blob?.size });
+
+            // Upload audio first (staging), then send only a small payload over LiveKit
+            let audioAssetId: string | null = null;
+            if (blob && user?.id) {
+                try {
+                    setStatusMessage('Uploading audio narration...');
+                    const audioFile = new File([blob], 'narration.wav', { type: 'audio/wav' });
+                    const assetInfo = await stageAsset({
+                        expert_id: user.id,
+                        session_id: roomName,
+                        curriculum_id: String(curriculumId),
+                        file: audioFile,
+                    });
+                    audioAssetId = assetInfo.asset_id;
+                    // eslint-disable-next-line no-console
+                    console.log('[TeacherPage] Audio uploaded, asset_id:', audioAssetId);
+                } catch (e) {
+                    // eslint-disable-next-line no-console
+                    console.warn('[TeacherPage] Audio upload failed (continuing without audio asset):', e);
+                }
+            }
 
             // In LiveKit flow, instruct the browser pod to stop and submit payload to imprinter.
             setStatusMessage('Submitting episode via browser pod...');
             try {
+                // Merge any previously staged assets with the new audio asset reference (if any)
+                const staged_assets_compact = [
+                    ...stagedAssets,
+                    ...(audioAssetId ? [{ asset_id: audioAssetId, filename: 'narration.wav', role: 'AUDIO_NARRATION' }] : []),
+                ];
+
                 const payload: Record<string, unknown> = {
+                    expert_id: user?.id || 'expert',
                     session_id: roomName,
                     curriculum_id: String(curriculumId),
-                    audio_b64,
-                    staged_assets: stagedAssets,
+                    // Do NOT include audio_b64 in data-channel payload
+                    staged_assets: staged_assets_compact,
                     current_lo: currentLO || undefined,
                     narration: 'Expert narration from episode.',
                     imprinting_mode: imprinting_mode,
@@ -941,12 +1016,44 @@ export default function Session() {
                 if (isShowMeRecording && showMeQuestionRef.current) {
                     (payload as any).in_response_to_question = showMeQuestionRef.current;
                 }
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] handleSubmitEpisode → sendBrowser(stop_recording)', { keys: Object.keys(payload) });
                 await sendBrowser('stop_recording', payload);
                 setSubmitMessage('Submitted. Processing on server...');
                 setStatusMessage('Episode submitted. AI is analyzing...');
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] handleSubmitEpisode ✓ submitted via pod');
             } catch (postErr: any) {
                 setSubmitError(postErr?.message || 'Failed to submit via pod');
                 setStatusMessage('Submit failed.');
+                // eslint-disable-next-line no-console
+                console.error('[TeacherPage] handleSubmitEpisode ✗', postErr);
+                // Optional direct fallback to imprinter if pod submission fails
+                const DIRECT_FALLBACK = (process.env.NEXT_PUBLIC_TEACHER_DIRECT_SUBMIT_IF_POD_FAILS ?? 'true') === 'true';
+                if (DIRECT_FALLBACK) {
+                    try {
+                        // eslint-disable-next-line no-console
+                        console.warn('[TeacherPage] Falling back to direct imprinter submission');
+                        const audio_b64: string = blob ? await convertBlobToWavDataURL(blob) : '';
+                        const directPayload = {
+                            expert_id: user?.id || 'expert',
+                            session_id: roomName,
+                            curriculum_id: String(curriculumId),
+                            narration: 'Expert narration from episode.',
+                            audio_b64,
+                            expert_actions: [], // No local action capture in Teacher; rely on audio and staged assets
+                            current_lo: currentLO || undefined,
+                            staged_assets: stagedAssets,
+                            in_response_to_question: (isShowMeRecording && showMeQuestionRef.current) ? showMeQuestionRef.current : undefined,
+                        };
+                        const resp = await submitImprintingEpisode(directPayload as any);
+                        setSubmitMessage('Submitted directly. Processing on server...');
+                        setStatusMessage('Episode submitted (direct). AI is analyzing...');
+                        console.log('[TeacherPage] Direct submit ✓', { keys: Object.keys(resp || {}) });
+                    } catch (directErr: any) {
+                        console.error('[TeacherPage] Direct submit ✗', directErr);
+                    }
+                }
             }
 
             // Reset buffers/state after submit
@@ -959,8 +1066,12 @@ export default function Session() {
             showMeQuestionRef.current = null;
         } catch (err: any) {
             setSubmitError(err?.message || 'Failed to submit');
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] handleSubmitEpisode catch ✗', err);
         } finally {
             setIsSubmitting(false);
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleSubmitEpisode: end');
         }
     };
 
@@ -986,14 +1097,22 @@ export default function Session() {
     const executeFinishSession = async () => {
         try {
             setIsFinishModalOpen(false);
-            if (isRecording) {
-                await handleStopRecording();
-                await new Promise((r) => setTimeout(r, 150));
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] executeFinishSession: begin', { isRecording, hasAudioBlob: !!audioBlobRef.current, stagedAssets: stagedAssets.length });
+            if (isRecording || audioBlobRef.current) {
+                // If we have something to submit (either still recording or we have captured audio), submit it.
+                await handleSubmitEpisode();
+            } else {
+                // If nothing to submit, just ensure local mic is stopped
+                if (isRecording) await handleStopRecording();
             }
         } catch (e: any) {
             setSubmitError(e?.message || 'Failed to finish session');
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] executeFinishSession ✗', e);
         } finally {
-            // no-op
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] executeFinishSession: end');
         }
     };
 

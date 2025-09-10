@@ -17,17 +17,35 @@ export async function submitImprintingEpisode(payload: {
   staged_assets?: any[];
   in_response_to_question?: string;
 }) {
-  const response = await fetch(`${IMPRINTER_URL}/session/imprint_episode`, {
+  const url = `${IMPRINTER_URL}/session/imprint_episode`;
+  // eslint-disable-next-line no-console
+  console.log('[imprinterService] submitImprintingEpisode →', {
+    url,
+    payloadKeys: Object.keys(payload || {}),
+    hasAudio: !!payload?.audio_b64,
+    expertActionsCount: Array.isArray(payload?.expert_actions) ? payload.expert_actions.length : 0,
+  });
+  const body = JSON.stringify({
+    ...payload,
+    // Force debrief start on episode submission
+    imprinting_mode: 'DEBRIEF_PRACTICAL',
+  });
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ...payload,
-      // Force debrief start on episode submission
-      imprinting_mode: 'DEBRIEF_PRACTICAL',
-    }),
+    body,
   });
-  if (!response.ok) throw new Error(`Failed to submit episode (${response.status})`);
-  return response.json();
+  if (!response.ok) {
+    let errorText = '';
+    try { errorText = await response.text(); } catch {}
+    // eslint-disable-next-line no-console
+    console.error('[imprinterService] submitImprintingEpisode ✗', { status: response.status, errorText });
+    throw new Error(`Failed to submit episode (${response.status})`);
+  }
+  const json = await response.json();
+  // eslint-disable-next-line no-console
+  console.log('[imprinterService] submitImprintingEpisode ✓', { status: response.status, keys: Object.keys(json || {}) });
+  return json;
 }
 
 export async function conversationalTurn(payload: {
