@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useLayoutEffect } from 'react';
 import { Track, RemoteVideoTrack, TrackPublication, VideoQuality, RoomEvent, ConnectionState, Room, RemoteParticipant } from 'livekit-client';
 
 interface LiveKitViewerProps {
@@ -467,8 +467,8 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
       autoPlay
       playsInline
       muted
-      className="w-full h-full bg-black rounded border-2 border-green-500 shadow-lg cursor-pointer"
-      style={{ objectFit: 'cover', zIndex: 20, position: 'relative' }}
+      className="w-full h-full bg-black rounded border-2 border-green-500 shadow-lg cursor-pointer object-contain"
+      style={{ zIndex: 20, position: 'relative' }}
       onMouseDown={() => { try { ref.current?.focus(); } catch {} }}
       onClick={handleMouseClick}
       onKeyDown={handleKeyDown}

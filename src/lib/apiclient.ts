@@ -35,9 +35,16 @@ export const createApiClient = ({ getToken }: ApiClientOptions) => {
             headers.set('Authorization', `Bearer ${token}`);
         }
 
-        const fullUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL}${path}`;
+        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+        if (!baseUrl) {
+            // Fail fast with a descriptive error rather than calling /undefined/...
+            const msg = 'NEXT_PUBLIC_API_BASE_URL is not defined. Create exsense/.env.local and set NEXT_PUBLIC_API_BASE_URL (e.g., http://localhost:3001).';
+            console.error(msg);
+            throw new Error(msg);
+        }
+        const fullUrl = `${baseUrl}${path}`;
         console.log('🔧 API Request Debug:', {
-            baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL,
+            baseUrl,
             path,
             fullUrl,
             method
