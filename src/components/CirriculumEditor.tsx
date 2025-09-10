@@ -1,7 +1,6 @@
 "use client";
 
 import Link from 'next/link';
-// Import the new modal component
 import ConfirmationModal from '@/components/ConfirmationModal';
 import { SearchIcon, XIcon, ChevronLeftIcon } from "lucide-react";
 import React, { JSX, useEffect, useState } from "react";
@@ -12,7 +11,7 @@ import { Button } from "@/components/button";
 import { Input } from "@/components/input";
 import { CurriculumSection, SectionData } from "@/components/CurriculumSection";
 import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+
 import { useApiService } from "@/lib/api";
 import { useCreateCourse } from "@/hooks/useApi";
 
@@ -32,6 +31,8 @@ type CirriculumEditorProps = {
   initialDescription?: string;
   onFinalize?: (data: { title:string; description:string; sections: SectionData[] }) => Promise<void> | void;
   finalizeLabel?: string;
+  // --- CHANGE 1: Add a new optional prop for the course ID ---
+  courseId?: string; 
 };
 
 const CirriculumEditor = ({
@@ -40,6 +41,8 @@ const CirriculumEditor = ({
   initialDescription,
   onFinalize,
   finalizeLabel,
+  // --- CHANGE 2: Receive the new courseId prop ---
+  courseId,
 }: CirriculumEditorProps): JSX.Element => {
   const router = useRouter();
   const api = useApiService();
@@ -50,7 +53,6 @@ const CirriculumEditor = ({
   const [submitting, setSubmitting] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
 
-  // State for the confirmation modal
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [sectionIdToDelete, setSectionIdToDelete] = useState<string | null>(null);
 
@@ -86,17 +88,14 @@ const CirriculumEditor = ({
     setSections(currentSections => [...currentSections, newSection]);
   };
 
-  // This function now just opens the modal
   const handleRequestDelete = (idToDelete: string) => {
     if (sections.length <= 1) {
-      // Prevents deleting the last section
       return;
     }
     setSectionIdToDelete(idToDelete);
     setIsDeleteModalOpen(true);
   };
 
-  // This function performs the actual deletion after confirmation
   const confirmDeleteSection = () => {
     if (!sectionIdToDelete) return;
     setSections(currentSections => currentSections.filter(section => section.id !== sectionIdToDelete));
@@ -130,10 +129,10 @@ const CirriculumEditor = ({
         await onFinalize({ title, description, sections });
       } else {
         const created: any = await createCourse.mutateAsync({ title, description: description || undefined });
-        const courseId: string | undefined = created?.id;
-        if (!courseId) throw new Error('Course created, but no ID returned');
+        const newCourseId: string | undefined = created?.id;
+        if (!newCourseId) throw new Error('Course created, but no ID returned');
         for (const s of sections) {
-          const lesson = await api.createLesson(courseId, {
+          const lesson = await api.createLesson(newCourseId, {
             title: (s.title && s.title.trim()) || `Section`,
             description: s.description.trim() || undefined,
             content: JSON.stringify({ scope: s.scope ?? "" }),
@@ -148,7 +147,7 @@ const CirriculumEditor = ({
             } as any);
           }
         }
-        router.push(`/teacher?courseId=${encodeURIComponent(courseId)}`);
+        router.push(`/teacher?courseId=${encodeURIComponent(newCourseId)}`);
       }
     } catch (e: any) {
       alert(e?.message || 'Failed to finalize course');
@@ -157,11 +156,14 @@ const CirriculumEditor = ({
     }
   };
 
+  const courseOverviewUrl = courseId 
+    ? `/course/${courseId}` 
+    : '/teacher/courses/new/details-form';
+
   return (
     <>
       <Sphere/>
       <div className="w-full h-[90%] bg-transparent flex flex-col relative">
-        {/* Render the modal component here */}
         <ConfirmationModal
           isOpen={isDeleteModalOpen}
           onClose={() => setIsDeleteModalOpen(false)}
@@ -181,28 +183,23 @@ const CirriculumEditor = ({
                         <ChevronLeftIcon className="w-6 h-6" />
                     </Link>
                     <nav className="flex items-center text-sm" aria-label="Breadcrumb">
-                        <Link href="/teacher-dash" className="text-gray-500 hover:text-gray-800 hover:underline">
-                            Dashboard
-                        </Link>
+                        <Link href="/teacher-dash" className="text-gray-500 hover:text-gray-800 hover:underline">Dashboard</Link>
                         <span className="mx-2 text-gray-400">•</span>
                         <span className="font-medium text-gray-800">Curriculum Editor</span>
                     </nav>
                 </div>
                 <div className="flex flex-col items-start gap-6 relative self-stretch w-full pb-4">
-                    <div className="relative self-stretch font-updated-title-2 font-[18px] font-bold">
-                        Curriculum Editor
-                    </div>
+                    <div className="relative self-stretch font-updated-title-2 font-[18px] font-bold">Curriculum Editor</div>
                     <div className="flex flex-wrap gap-[8px] w-full">
-                        <Button variant="outline" className="flex-1 h-[50px] md:flex-initial md:w-auto px-7 py-4 rounded-[600px] border-[#566fe9] text-[#566fe9] hover:bg-[#566fe9] hover:text-white">
-                            Course Map
+                        <Button variant="outline" className="flex-1 h-[50px] md:flex-initial md:w-auto px-7 py-4 rounded-[600px] border-[#566fe9] text-[#566fe9] hover:bg-[#566fe9] hover:text-white">Course Map</Button>
+                        
+                        {/* The Course Overview Button now uses a Link component and our dynamic URL */}
+                        <Button asChild variant="outline" className="flex-1 h-[50px] md:flex-initial md:w-auto px-7 py-4 rounded-[600px] border-[#566fe9] text-[#566fe9] hover:bg-[#566fe9] hover:text-white">
+                            <Link href={courseOverviewUrl}>Course Overview</Link>
                         </Button>
+
                         <div className="w-full order-last md:w-auto md:flex-1 md:order-none flex h-[50px] items-center pl-5 pr-0 py-1.5 relative bg-white rounded-[600px] border border-solid border-[#c7ccf8]">
-                            <Input
-                                placeholder="Search for specific module"
-                                className="border-0 bg-transparent p-0 h-auto flex-grow placeholder:text-[#8187a0] focus-outline-none"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
+                            <Input placeholder="Search for specific module" className="border-0 bg-transparent p-0 h-auto flex-grow placeholder:text-[#8187a0] focus-outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                             <Button size="icon" className={`rounded-full flex-shrink-0 p-2.5 mr-1 h-[38px] w-[38px] transition-colors ${searchQuery ? "bg-[#566fe9]" : "bg-[#e6e8ff]"}`}>
                                 <SearchIcon className={`w-5 h-5 transition-colors ${searchQuery ? "text-white" : "text-[#566fe9]"}`}/>
                             </Button>
@@ -221,23 +218,17 @@ const CirriculumEditor = ({
                             key={section.id}
                             section={section}
                             onUpdate={handleUpdateSection}
-                            // Pass the new request function to the onDelete prop
                             onDelete={handleRequestDelete}
                             titleError={index === 0 ? titleError : null}
                         />
                     ))}
-                    <Button
-                        onClick={handleAddSection}
-                        className="w-full h-auto px-7 py-4 bg-[#566fe9] hover:bg-[#4a5fd1] rounded-[600px] transition-colors"
-                        disabled={submitting}
-                    >
+                    <Button onClick={handleAddSection} className="w-full h-auto px-7 py-4 bg-[#566fe9] hover:bg-[#4a5fd1] rounded-[600px] transition-colors" disabled={submitting}>
                         <span className="text-white">Add new section</span>
                     </Button>
                 </div>
             </div>
         </div>
       </div>
-      <Footer/>
     </>
   );
 };

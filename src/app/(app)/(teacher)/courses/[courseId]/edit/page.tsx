@@ -6,6 +6,7 @@ import CirriculumEditor from "@/components/CirriculumEditor";
 import { SectionData } from "@/components/CurriculumSection";
 import { useApiService } from "@/lib/api";
 import { useCourse, useLessons } from "@/hooks/useApi";
+import Footer from "@/components/Footer";
 
 export default function EditCoursePage() {
   const { courseId } = useParams<{ courseId: string }>();
@@ -88,12 +89,15 @@ export default function EditCoursePage() {
   }
 
   return (
-    <CirriculumEditor
+    <><CirriculumEditor
       initialSections={initialSections || []}
       initialTitle={course?.title || ""}
       initialDescription={course?.description || ""}
       onFinalize={handleUpdateCourse}
       finalizeLabel={isSaving ? "Saving..." : "Save Changes"}
-    />
+      courseId={courseId} />
+      <div className="fixed bottom-0 left-0 right-0">
+        <Footer />
+      </div></>
   );
 }

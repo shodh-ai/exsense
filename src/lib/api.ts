@@ -8,6 +8,7 @@ import { useAuth } from '@clerk/nextjs';
 export interface Teacher {
   name?: string;
   email?: string;
+  title?: string;
   bio?: string;
 }
 

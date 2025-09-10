@@ -110,7 +110,7 @@ const TeacherDashboard = (): JSX.Element => {
               {coursesError && <p className="text-red-500">Error loading courses.</p>}
               
               {!coursesLoading && !coursesError && courses.map((course: any) => (
-                <Link key={course.id} href={`/courses/${course.id}`} className="block">
+                <Link key={course.id} href={`/courses/${course.id}/edit`} className="block">
                   <Card className="border border-[#566fe966] rounded-xl bg-white overflow-hidden hover:shadow-md transition-shadow">
                     <CardContent className="p-0">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
