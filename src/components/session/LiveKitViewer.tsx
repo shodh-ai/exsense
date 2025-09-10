@@ -239,6 +239,62 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
 
 function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room: Room; track: RemoteVideoTrack, pub: any, onInteraction?: (payload: object) => void | Promise<void>, captureSize?: { w: number; h: number } }) {
   const ref = React.useRef<HTMLVideoElement>(null);
+  const [dimensions, setDimensions] = useState({
+    intrinsicWidth: 0,
+    intrinsicHeight: 0,
+    displayedWidth: 0,
+    displayedHeight: 0,
+  });
+
+  const [scale, setScale] = useState({ x: 1, y: 1 });
+
+  const handleLoadedMetadata = () => {
+    if (ref.current) {
+      setDimensions(prev => ({
+        ...prev,
+        intrinsicWidth: ref.current.videoWidth,
+        intrinsicHeight: ref.current.videoHeight,
+      }));
+    }
+  };
+
+  useLayoutEffect(() => {
+    const updateDimensions = () => {
+      if (ref.current) {
+        const { width, height } = ref.current.getBoundingClientRect();
+        setDimensions(prev => ({
+          ...prev,
+          displayedWidth: width,
+          displayedHeight: height,
+        }));
+      }
+    };
+
+    updateDimensions();
+
+    const resizeObserver = new ResizeObserver(() => {
+        updateDimensions();
+    });
+
+    if (ref.current) {
+        resizeObserver.observe(ref.current);
+    }
+
+    return () => {
+        if (ref.current) {
+            resizeObserver.unobserve(ref.current);
+        }
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (dimensions.intrinsicWidth > 0 && dimensions.displayedWidth > 0) {
+      const scaleX = dimensions.displayedWidth / dimensions.intrinsicWidth;
+      const scaleY = dimensions.displayedHeight / dimensions.intrinsicHeight;
+      setScale({ x: scaleX, y: scaleY });
+    }
+  }, [dimensions]);
+  
   const pendingRef = React.useRef<object[]>([]);
   const flushingRef = React.useRef<boolean>(false);
   useEffect(() => {
@@ -411,12 +467,13 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
       autoPlay
       playsInline
       muted
-      className="w-full h-full bg-black rounded border-2 border-green-500 shadow-lg cursor-crosshair"
+      className="w-full h-full bg-black rounded border-2 border-green-500 shadow-lg cursor-pointer"
       style={{ objectFit: 'cover', zIndex: 20, position: 'relative' }}
       onMouseDown={() => { try { ref.current?.focus(); } catch {} }}
       onClick={handleMouseClick}
       onKeyDown={handleKeyDown}
       onWheel={handleScroll}
+      onLoadedMetadata={handleLoadedMetadata}
       tabIndex={0}
     />
   );
