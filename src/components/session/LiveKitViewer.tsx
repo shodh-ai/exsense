@@ -241,6 +241,13 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
   const ref = React.useRef<HTMLVideoElement>(null);
   const pendingRef = React.useRef<object[]>([]);
   const flushingRef = React.useRef<boolean>(false);
+  // Track modifier key state locally so we can send combined shortcuts like Ctrl+V, Meta+C, Shift+Arrow, etc.
+  const modifiersRef = React.useRef<{ Control: boolean; Shift: boolean; Alt: boolean; Meta: boolean }>({
+    Control: false,
+    Shift: false,
+    Alt: false,
+    Meta: false,
+  });
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -383,15 +390,46 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
 
   const handleKeyDown = async (event: React.KeyboardEvent<HTMLVideoElement>) => {
     try {
-      try { console.log('[Interaction] keydown event', event.key); } catch {}
+      const key = event.key;
+      // If it's a modifier, update state and do not send yet
+      if (key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') {
+        (modifiersRef.current as any)[key] = true;
+        event.preventDefault();
+        return;
+      }
+
+      // Determine active modifiers
+      const activeModifiers = Object.entries(modifiersRef.current)
+        .filter(([, isActive]) => isActive)
+        .map(([k]) => k);
+
+      try { console.log(`[Interaction] keydown: '${key}', modifiers: [${activeModifiers.join(', ')}]`); } catch {}
       event.preventDefault();
-      const payload = (event.key.length === 1)
-        ? { action: 'type', text: event.key }
-        : { action: 'keypress', key: event.key };
+
+      // If any modifiers are held, always send as keypress with modifiers
+      if (activeModifiers.length > 0) {
+        const payload = { action: 'keypress', key, modifiers: activeModifiers } as any;
+        await publishOrQueue(payload);
+        return;
+      }
+
+      // No modifiers: preserve existing behavior (type for single characters, keypress otherwise)
+      const payload = (key.length === 1)
+        ? { action: 'type', text: key }
+        : { action: 'keypress', key };
       await publishOrQueue(payload);
     } catch (e) {
       console.warn('[Interaction] keydown handler failed:', e);
     }
+  };
+
+  // Key up handler to reset modifier state
+  const handleKeyUp = (event: React.KeyboardEvent<HTMLVideoElement>) => {
+    const key = event.key;
+    if (key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') {
+      (modifiersRef.current as any)[key] = false;
+    }
+    event.preventDefault();
   };
 
   const handleScroll = async (event: React.WheelEvent<HTMLVideoElement>) => {
@@ -416,6 +454,7 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
       onMouseDown={() => { try { ref.current?.focus(); } catch {} }}
       onClick={handleMouseClick}
       onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
       onWheel={handleScroll}
       tabIndex={0}
     />

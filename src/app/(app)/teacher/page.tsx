@@ -274,6 +274,7 @@ interface TeacherFooterProps {
     onIncreaseTimer: () => void;
     screenshotIntervalSec: number;
     onSaveScriptClick?: () => void;
+    onVSCodeClick?: () => void;
     isRecording: boolean;
     isPaused: boolean;
     recordingDuration: number;
@@ -293,6 +294,7 @@ const TeacherFooter = ({
     onIncreaseTimer, 
     screenshotIntervalSec, 
     onSaveScriptClick,
+    onVSCodeClick,
     isRecording,
     isPaused,
     recordingDuration,
@@ -344,6 +346,13 @@ const TeacherFooter = ({
                         className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
                     >
                         <img src="/Code.svg" alt="Save Script" className="w-6 h-6" />
+                    </button>
+                    <button
+                        onClick={onVSCodeClick}
+                        title="Switch to VS Code Environment"
+                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
+                    >
+                        <img src="/vscode.svg" alt="Switch to VS Code" className="w-6 h-6" />
                     </button>
                     <UploadButton
                         isVisible={true}
@@ -486,6 +495,8 @@ export default function Session() {
     const { user, isSignedIn, isLoaded } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
+    // --- NEW: Track active environment for recording/imprinting ---
+    const [imprintingEnvironment, setImprintingEnvironment] = useState<'browser' | 'vscode'>('browser');
     const SESSION_DEBUG = false;
     const DEV_BYPASS = true;
     // Disable legacy VNC session management; we use LiveKit data channel to control the browser pod
@@ -760,7 +771,7 @@ export default function Session() {
             setStagedAssets([]);
             setIsPaused(false);
             // In LiveKit flow, instruct the browser pod to start recording via data channel
-            await sendBrowser('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec });
+            await sendBrowser('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec, environment: imprintingEnvironment });
             setTimeToNextScreenshot(screenshotIntervalSec);
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1011,7 +1022,9 @@ export default function Session() {
                     current_lo: currentLO || undefined,
                     narration: 'Expert narration from episode.',
                     imprinting_mode: imprinting_mode,
-                    imprinting_environment: 'browser',
+                    // Use selected environment for both keys (backend + browser_manager)
+                    imprinting_environment: imprintingEnvironment,
+                    environment: imprintingEnvironment,
                 };
                 if (isShowMeRecording && showMeQuestionRef.current) {
                     (payload as any).in_response_to_question = showMeQuestionRef.current;
@@ -1126,6 +1139,18 @@ export default function Session() {
         setScreenshotIntervalSec(prev => prev + 5);
     };
 
+    // --- NEW: VS Code environment switch ---
+    const handleSwitchToVSCode = () => {
+        // 1) Set environment for subsequent recording/submission
+        setImprintingEnvironment('vscode');
+        // 2) Navigate browser pod to code-server
+        void sendBrowser('navigate', { url: 'http://localhost:4600' });
+        // 3) Feedback
+        setStatusMessage('Switched to VS Code environment.');
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] UI: Switched to VS Code. Subsequent recordings will capture VS Code actions.');
+    };
+
 
     if (!isLoaded) return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
     if (isIntroActive) return <IntroPage onAnimationComplete={handleIntroComplete} />;
@@ -1215,6 +1240,7 @@ export default function Session() {
                                     onIncreaseTimer={handleIncreaseTimer}
                                     screenshotIntervalSec={screenshotIntervalSec}
                                     onSaveScriptClick={handleSaveSetupText}
+                                    onVSCodeClick={handleSwitchToVSCode}
                                     isRecording={isRecording}
                                     isPaused={isPaused}
                                     recordingDuration={recordingDuration}
