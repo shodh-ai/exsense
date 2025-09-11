@@ -598,7 +598,7 @@ export default function Session() {
         console.log('[TeacherPage] UI: Select Conceptual');
         setImprintingMode('DEBRIEF_CONCEPTUAL');
         setActiveView('excalidraw');
-        setIsConceptualStarted(false);
+        setConceptualStarted(false);
         setIsShowMeRecording(false);
     };
 
@@ -738,8 +738,12 @@ export default function Session() {
     const handleReviewComplete = () => setImprintingPhase('LO_SELECTION');
     const handleLoSelected = (loName: string) => { setCurrentLO(loName); setImprintingPhase('LIVE_IMPRINTING'); };
 
-    const [currentDebrief, setCurrentDebrief] = useState<DebriefMessage | null>(null);
-    const [isConceptualStarted, setIsConceptualStarted] = useState<boolean>(false);
+    // Debrief message now comes from global store so LiveKit updates can re-render UI
+    const currentDebrief = useSessionStore((s) => s.debriefMessage);
+    const setDebriefMessage = useSessionStore((s) => s.setDebriefMessage);
+    // Conceptual started flag also comes from store (enables Show Me after debrief arrives)
+    const conceptualStarted = useSessionStore((s) => s.conceptualStarted);
+    const setConceptualStarted = useSessionStore((s) => s.setConceptualStarted);
     const [topicInput, setTopicInput] = useState<string>('');
     const [seedText, setSeedText] = useState<string>('');
     const topicInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -828,7 +832,7 @@ export default function Session() {
             const newDebrief = {
                 text: nextResponse !== currentQuestion ? nextResponse : "Can you elaborate on that further?"
             };
-            setCurrentDebrief(newDebrief);
+            setDebriefMessage(newDebrief);
             setStatusMessage('AI replied (Mocked).');
         } else {
             try {
@@ -840,17 +844,17 @@ export default function Session() {
                     current_lo: currentLO || undefined
                 });
                 const aiText = resp?.text || 'Got it. Let\'s continue.';
-                setCurrentDebrief({ text: aiText });
+                setDebriefMessage({ text: aiText });
                 setStatusMessage('AI replied.');
                 setIsStartAllowed(!(aiText && /\?/.test(aiText)));
             } catch (e: any) {
-                setCurrentDebrief({ text: `Sorry, I encountered an error. ${e?.message}` });
+                setDebriefMessage({ text: `Sorry, I encountered an error. ${e?.message}` });
             }
         }
     };
 
     const handleShowMe = async () => {
-        if (imprinting_mode !== 'DEBRIEF_CONCEPTUAL' || !isConceptualStarted) return;
+        if (imprinting_mode !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted) return;
         const lastQ = currentDebrief?.text || '';
         if (!lastQ) return;
         const msg = (topicInput || '').trim();
@@ -966,10 +970,10 @@ export default function Session() {
                         hypothesis = aiText.substring(0, lastSentenceEnd + 1);
                         question = aiText.substring(lastSentenceEnd + 2).trim();
                     }
-                    setCurrentDebrief({ hypothesis, text: question });
+                    setDebriefMessage({ hypothesis, text: question });
                     setImprintingMode('DEBRIEF_CONCEPTUAL');
                     setActiveView('excalidraw');
-                    setIsConceptualStarted(true);
+                    setConceptualStarted(true);
                     setIsStartAllowed(false);
                     setStatusMessage('AI has a question for you (Mocked).');
                     setTimeout(() => topicInputRef.current?.focus(), 0);
@@ -1223,7 +1227,7 @@ export default function Session() {
                                     onTogglePauseResume={handleTogglePauseResume}
                                     onSubmitEpisode={handleSubmitEpisode}
                                     onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !isConceptualStarted || isRecording}
+                                    isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted || isRecording}
                                     onFinalizeTopicClick={handleFinalizeTopic}
                                     isFinalizeDisabled={!currentLO || isFinalizingLO}
                                     onFinishClick={handleFinishClick}
@@ -1234,7 +1238,7 @@ export default function Session() {
                                     onFinishClick={handleFinishClick}
                                     isFinishDisabled={isSubmitting}
                                     onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={!isConceptualStarted || isRecording}
+                                    isShowMeDisabled={!conceptualStarted || isRecording}
                                 />
                                 )}
                             </>

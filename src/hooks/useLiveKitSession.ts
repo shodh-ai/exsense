@@ -964,6 +964,22 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         try {
             const data = JSON.parse(new TextDecoder().decode(payload));
             console.log('[DataReceived] Packet from', participant.identity, { kind, topic, data });
+
+            // --- Handle AI debrief question relayed by the browser pod ---
+            if (data?.type === 'ai_debrief_question' && typeof data?.text === 'string' && data.text.length > 0) {
+                console.log('[FLOW] Received AI debrief question from pod:', data.text);
+                try {
+                    const { setDebriefMessage, setImprintingMode, setActiveView, setConceptualStarted } = useSessionStore.getState();
+                    setDebriefMessage({ text: data.text });
+                    setImprintingMode('DEBRIEF_CONCEPTUAL');
+                    setActiveView('excalidraw');
+                    setConceptualStarted(true);
+                    console.log('[FLOW] Store updated for debrief; UI will re-render.');
+                } catch (e) {
+                    console.warn('[FLOW] Failed to apply debrief update to store:', e);
+                }
+                return; // Stop further processing for this packet
+            }
             if (data.type === 'agent_ready' && roomInstance.localParticipant) {
                 console.log(`[FLOW] Agent ready signal received from ${participant.identity}`);
                 setAgentIdentity(participant.identity); // Store the agent identity
