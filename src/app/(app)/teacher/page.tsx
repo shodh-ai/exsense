@@ -1206,32 +1206,7 @@ export default function Session() {
                                         topicInputRef={topicInputRef}
                                         sendBrowserInteraction={sendBrowserInteraction}
                                     />
-                                    {imprinting_mode === 'WORKFLOW' && (
-                                      <div className={`fixed bottom-0=100 left-0 right-0 z-50 ${isFinishModalOpen ? 'hidden' : ''}`}>
-                                        <div className="mx-auto w-full md:w-[90%] lg:w-[70%] px-3 pb-3">
-                                            <div className="bg-[#0F1226]/90 border border-[#2A2F4A] backdrop-blur-md rounded-t-xl p-3 text-white">
-                                                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                                                    <div className="flex flex-wrap gap-2 items-center">
-                                                        <div className="ml-2 flex items-start gap-2">
-                                                            <textarea value={setupActionsText} onChange={(e) => setSetupActionsText(e.target.value)} placeholder='Paste setup actions JSON array...' className="bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1 w-64 h-16 text-xs" />
-                                                        </div>
-                                                        <input ref={fileInputRef} type="file" onChange={handleAssetUpload} className="hidden" />
-                                                        {isShowMeRecording && (<span title={showMeQuestionRef.current || 'Show Me demo active'} className="ml-2 inline-flex items-center gap-1 rounded-full border border-indigo-400/70 bg-indigo-600/20 px-2 py-1 text-[11px] text-indigo-200"><span className="inline-block h-2 w-2 rounded-full bg-indigo-300 animate-pulse" />Show Me demo active</span>)}
-                                                    </div>
-                                                    <div className="text-xs text-gray-300 space-y-1 md:text-right">
-                                                        <div><span className="text-gray-400">Mic:</span> {isRecording ? 'Recording' : 'Idle'}</div>
-                                                        <div><span className="text-gray-400">Packets:</span> {packetsCount}</div>
-                                                        {/* VNC Action WS status removed */}
-                                                        {statusMessage && <div className="text-sky-300">{statusMessage}</div>}
-                                                        {submitMessage && <div className="text-emerald-300">{submitMessage}</div>}
-                                                        {submitError && <div className="text-red-300">{submitError}</div>}
-                                                        {stagedAssets.length > 0 && (<div className="mt-2 text-left"><div className="text-gray-400">Staged:</div><ul className="mt-1 max-h-24 overflow-y-auto space-y-1">{stagedAssets.map((a, i) => (<li key={i} className="flex items-center justify-between gap-2 text-[11px] bg-[#15183A] border border-[#2A2F4A] rounded px-2 py-1"><div className="truncate"><span className="text-white">{a.filename}</span><span className="text-gray-400"> · {a.role}</span></div><button onClick={() => handleRemoveStagedAsset(i)} className="text-red-300 hover:text-red-200" disabled={isSubmitting}>x</button></li>))}</ul></div>)}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                      </div>
-                                    )}
+                                    
                                 </div>
                                 {imprinting_mode === 'WORKFLOW' ? (
                                 <TeacherFooter
