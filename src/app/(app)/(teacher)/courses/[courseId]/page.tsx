@@ -39,25 +39,21 @@ const CourseAnalyticsSection = ({ details, courseId, unresolvedDoubts }: { detai
       <div className="flex flex-col gap-6"><h2 className=" font-bold font-[Plus Jakarta Sans] text-[20px] text-[#394169]">Course Analytics</h2><div className="flex flex-col gap-6 md:grid md:grid-cols-3 md:gap-x-[120px] md:gap-y-8">{details.map((detail) => (<div key={detail.label} className="flex items-center gap-3"><div className="p-3 bg-[#566fe91a] rounded-xl"><div className="w-7 h-7 relative"><img className="absolute inset-0 m-auto" alt={detail.label} src={detail.icon} /></div></div><div className="flex flex-col gap-[3px]"><div className="text-sm font-medium text-[#8187a0]">{detail.label}</div><div className="text-base text-[#394169]">{detail.value}</div></div></div>))}</div></div>
       <div className="flex flex-col gap-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-    {/* This button now clearly says "Edit Curriculum" and links to the editor */}
-    <Button asChild variant="outline" className="w-full rounded-[100px] h-[50px] px-12 py-3 font-semibold text-[#566fe9] border border-[#566fe9] bg-white sm:px-20">
-        <Link href={`/courses/${courseId}/edit`}>Edit Curriculum</Link>
-    </Button>
-
-    {/* THIS IS THE NEW BUTTON linking to our new settings page */}
+  
     <Button asChild variant="outline" className="w-full rounded-[100px] h-[50px] px-12 py-3 font-semibold text-[#566fe9] border border-[#566fe9] bg-white sm:px-20">
         <Link href={`/courses/${courseId}/settings`}>Course Settings</Link>
     </Button>
-</div>
-<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-    <Button className="w-full rounded-[100px] h-[50px] px-12 py-3 font-semibold text-[#566fe9] border border-[#566fe9] bg-white sm:px-20">
-        View Enrolled Students
-    </Button>
+
+
+    <Button asChild className="w-full rounded-[100px] h-[50px] px-12 py-3 font-semibold text-[#566fe9] border border-[#566fe9] bg-white sm:px-20">
+                <Link href={`/courses/${courseId}/enrollments`}>View Enrolled Students</Link>
+            </Button>
+    </div>
     <Button className="w-full rounded-[100px] h-[50px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20">
         View {unresolvedDoubts} Unresolved Doubts
     </Button>
 </div>
-      </div>
+      {/* </div> */}
     </section>
 );
 const CourseDetailsSection = ({ details }: { details: CourseDetail[] }) => (

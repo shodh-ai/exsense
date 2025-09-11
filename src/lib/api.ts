@@ -2,45 +2,37 @@
 import { createApiClient } from './apiclient';
 import { useAuth } from '@clerk/nextjs';
 
-// --- NEW/MODIFIED: Expanded type definitions for your backend API ---
-
-// New supporting type for the teacher object
+// --- TYPE DEFINITIONS ---
 export interface Teacher {
   name?: string;
   email?: string;
   title?: string;
   bio?: string;
 }
-
-// New type for a single review
 export interface Review {
   id: string;
   rating: number;
   comment: string;
-  createdAt: string; // Should be an ISO date string from the backend
+  createdAt: string;
   user: {
     name: string;
     avatarUrl?: string;
   };
 }
-
-// New type for a single FAQ item
 export interface Faq {
   id: string;
   question: string;
   answer: string;
 }
 export interface CourseAnalytics {
-  averageTestScore?: number;  // as a percentage
-  averageTimeSpent?: string;  // e.g., "3h 42m"
-  completionRate?: number;    // as a percentage
+  averageTestScore?: number;
+  averageTimeSpent?: string;
+  completionRate?: number;
   unsolvedDoubts?: number;
-  accuracyRate?: number;      // as a percentage
-  satisfactionLevel?: number; // e.g., 4.3
+  accuracyRate?: number;
+  satisfactionLevel?: number;
   satisfactionReviews?: number;
 }
-
-// Main Course interface, updated to include all dynamic data
 export interface Course {
   id: string;
   title: string;
@@ -49,13 +41,11 @@ export interface Course {
   updatedAt: string;
   enrollmentCount?: number;
   lessonCount?: number;
-  teacher?: Teacher; // Uses the new Teacher type
-
-  // --- ADDED DYNAMIC FIELDS ---
+  teacher?: Teacher;
   imageUrl?: string;
   tags?: string[];
   difficulty?: string;
-  duration?: string; // e.g., "8 hrs 21 mins"
+  duration?: string;
   language?: string;
   skills?: string[];
   learningOutcomes?: string[];
@@ -63,9 +53,6 @@ export interface Course {
   faqs?: Faq[];
   analytics?: CourseAnalytics;
 }
-
-// --- EXISTING TYPES (UNCHANGED) ---
-
 export interface Enrollment {
   id: string;
   courseId: string;
@@ -73,7 +60,6 @@ export interface Enrollment {
   enrolledAt: string;
   status: 'ACTIVE' | 'COMPLETED' | 'SUSPENDED';
 }
-
 export interface Lesson {
   id: string;
   courseId: string;
@@ -84,7 +70,6 @@ export interface Lesson {
   createdAt: string;
   updatedAt?: string;
 }
-
 export interface LessonContent {
   id: string;
   lessonId: string;
@@ -95,15 +80,13 @@ export interface LessonContent {
   data?: any;
   order?: number;
 }
-
 export interface ProfileStat {
   icon: string;
   label: string;
   value: string;
 }
 
-
-// --- Main API service class (UNCHANGED) ---
+// --- Main API service class ---
 export class ApiService {
   private client: ReturnType<typeof createApiClient>;
 
@@ -112,155 +95,69 @@ export class ApiService {
   }
 
   // Courses API
-  async getCourses(): Promise<Course[]> {
-    return this.client.get('/api/courses');
-  }
-
-  async getCourse(id: string): Promise<Course> {
-    return this.client.get(`/api/courses/${id}`);
-  }
-
-  async createCourse(course: Partial<Course>): Promise<Course> {
-    return this.client.post('/api/courses', course);
-  }
-
-  async updateCourse(id: string, course: Partial<Course>): Promise<Course> {
-    return this.client.put(`/api/courses/${id}`, course as any);
-  }
-
-  async getMyCourses(): Promise<Course[]> {
-    return this.client.get('/api/courses/teacher/me');
-  }
+  async getCourses(): Promise<Course[]> { return this.client.get('/api/courses'); }
+  async getCourse(id: string): Promise<Course> { return this.client.get(`/api/courses/${id}`); }
+  async createCourse(course: Partial<Course>): Promise<Course> { return this.client.post('/api/courses', course); }
+  async updateCourse(id: string, course: Partial<Course>): Promise<Course> { return this.client.put(`/api/courses/${id}`, course as any); }
+  async getMyCourses(): Promise<Course[]> { return this.client.get('/api/courses/teacher/me'); }
 
   // Enrollments API
-  async getEnrollments(): Promise<Enrollment[]> {
-    return this.client.get('/api/enrollments');
-  }
-  
+  async getEnrollments(): Promise<Enrollment[]> { return this.client.get('/api/enrollments'); }
   async getTeacherAnalytics(): Promise<any> { 
-    // Prefer a teacher-scoped endpoint. If it's missing or forbidden, let the caller handle nulls.
-    try {
-      return await this.client.get('/api/teacher/me/analytics');
-    } catch (err: any) {
-      // If backend hasn't implemented the teacher analytics endpoint yet or access is forbidden,
-      // return null so UI can gracefully degrade without surfacing admin-only 403s.
+    try { return await this.client.get('/api/teacher/me/analytics'); }
+    catch (err: any) {
       const status = err?.status as number | undefined;
-      if (status === 404 || status === 401 || status === 403) {
-        return null;
-      }
+      if (status === 404 || status === 401 || status === 403) return null;
       throw err;
     }
   }
-
-  async enrollInCourse(courseId: string): Promise<Enrollment> {
-    return this.client.post('/api/enrollments', { courseId });
+  async enrollInCourse(courseId: string): Promise<Enrollment> { return this.client.post('/api/enrollments', { courseId }); }
+  async getMyEnrollments(): Promise<Enrollment[] | { enrollments: Enrollment[] }> { return this.client.get('/api/enrollments/student/me'); }
+  async getUserEnrollments(userId: string): Promise<Enrollment[]> { return this.client.get(`/api/enrollments/user/${userId}`); }
+  
+  // --- THIS IS THE NEWLY ADDED, CORRECT METHOD ---
+  async getCourseEnrollments(courseId: string): Promise<Enrollment[]> {
+    return this.client.get(`/api/courses/${courseId}/enrollments`);
   }
+  // --- END OF NEW METHOD ---
 
-  async getMyEnrollments(): Promise<Enrollment[] | { enrollments: Enrollment[] }> {
-    return this.client.get('/api/enrollments/student/me');
-  }
-
-  async getUserEnrollments(userId: string): Promise<Enrollment[]> {
-    return this.client.get(`/api/enrollments/user/${userId}`);
-  }
-
-  async getProfileStats(): Promise<ProfileStat[]> {
-    return this.client.get('/api/users/me/profile-stats');
-  }
-
-async getCurriculum(id: string): Promise<any> { 
-  return this.client.get(`/api/curriculums/${id}`);
-}
+  async getProfileStats(): Promise<ProfileStat[]> { return this.client.get('/api/users/me/profile-stats'); }
+  async getCurriculum(id: string): Promise<any> { return this.client.get(`/api/curriculums/${id}`); }
 
   // Lessons API
-  async getLessons(courseId: string): Promise<Lesson[]> {
-    return this.client.get(`/api/courses/${courseId}/lessons`);
-  }
-
-  async getLesson(id: string): Promise<Lesson> {
-    return this.client.get(`/api/lessons/${id}`);
-  }
-
-  async createLesson(
-    courseId: string,
-    data: { title: string; description?: string | null; content?: string | null; order?: number }
-  ): Promise<Lesson> {
-    return this.client.post(`/api/courses/${courseId}/lessons`, data);
-  }
-
-  async deleteLesson(lessonId: string): Promise<{ success?: boolean }> {
-    return this.client.delete(`/api/lessons/${lessonId}`);
-  }
-
-  async reorderLessons(courseId: string, orderedLessonIds: string[]): Promise<void> {
-    return this.client.patch(`/api/courses/${courseId}/lessons/reorder`, { orderedLessonIds } as any);
-  }
+  async getLessons(courseId: string): Promise<Lesson[]> { return this.client.get(`/api/courses/${courseId}/lessons`); }
+  async getLesson(id: string): Promise<Lesson> { return this.client.get(`/api/lessons/${id}`); }
+  async createLesson(courseId: string, data: { title: string; description?: string | null; content?: string | null; order?: number }): Promise<Lesson> { return this.client.post(`/api/courses/${courseId}/lessons`, data); }
+  async deleteLesson(lessonId: string): Promise<{ success?: boolean }> { return this.client.delete(`/api/lessons/${lessonId}`); }
+  async reorderLessons(courseId: string, orderedLessonIds: string[]): Promise<void> { return this.client.patch(`/api/courses/${courseId}/lessons/reorder`, { orderedLessonIds } as any); }
 
   // Lesson Contents API
-  async getLessonContents(lessonId: string): Promise<LessonContent[]> {
-    return this.client.get(`/api/lessons/${lessonId}/contents`);
-  }
-
-  async getLessonContent(id: string): Promise<LessonContent> {
-    return this.client.get(`/api/lesson-contents/${id}`);
-  }
-
-  async addLessonContent(lessonId: string, data: any): Promise<LessonContent> {
-    return this.client.post(`/api/lessons/${lessonId}/contents`, data);
-  }
-
-  async deleteLessonContent(contentId: string): Promise<void> {
-    return this.client.delete(`/api/lesson-contents/${contentId}`);
-  }
+  async getLessonContents(lessonId: string): Promise<LessonContent[]> { return this.client.get(`/api/lessons/${lessonId}/contents`); }
+  async getLessonContent(id: string): Promise<LessonContent> { return this.client.get(`/api/lesson-contents/${id}`); }
+  async addLessonContent(lessonId: string, data: any): Promise<LessonContent> { return this.client.post(`/api/lessons/${lessonId}/contents`, data); }
+  async deleteLessonContent(contentId: string): Promise<void> { return this.client.delete(`/api/lesson-contents/${contentId}`); }
 
   // BRUM API (AI/Memory system)
-  async getBrumData(): Promise<any> {
-    return this.client.get('/api/brum');
-  }
-
-  async createBrumSession(sessionData: any): Promise<any> {
-    return this.client.post('/api/brum/sessions', sessionData);
-  }
+  async getBrumData(): Promise<any> { return this.client.get('/api/brum'); }
+  async createBrumSession(sessionData: any): Promise<any> { return this.client.post('/api/brum/sessions', sessionData); }
 
   // Reports API
-  async getReports(): Promise<any> {
-    return this.client.get('/api/reports');
-  }
-
-  async getUserProgress(userId: string): Promise<any> {
-    return this.client.get(`/api/reports/progress/${userId}`);
-  }
+  async getReports(): Promise<any> { return this.client.get('/api/reports'); }
+  async getUserProgress(userId: string): Promise<any> { return this.client.get(`/api/reports/progress/${userId}`); }
 
   // Health Check
-  async healthCheck(): Promise<{ status: string; timestamp: string; service: string }> {
-    return this.client.get('/health');
-  }
+  async healthCheck(): Promise<{ status: string; timestamp: string; service: string }> { return this.client.get('/health'); }
 
   // Admin API
-  async getAdminUsers(): Promise<any[]> {
-    return this.client.get('/api/admin/users');
-  }
-
-  async enableUser(userId: string): Promise<{ id: string; isDisabled: boolean }> {
-    return this.client.patch(`/api/admin/users/${userId}/enable`, {} as any);
-  }
-
-  async disableUser(userId: string): Promise<{ id: string; isDisabled: boolean }> {
-    return this.client.patch(`/api/admin/users/${userId}/disable`, {} as any);
-  }
-
-  async getAdminCourses(): Promise<any[]> {
-    return this.client.get('/api/admin/courses');
-  }
-
-  async getAdminAnalyticsOverview(): Promise<{ users: number; courses: number; enrollments: number; lessons: number }> {
-    return this.client.get('/api/admin/analytics/overview');
-  }
+  async getAdminUsers(): Promise<any[]> { return this.client.get('/api/admin/users'); }
+  async enableUser(userId: string): Promise<{ id: string; isDisabled: boolean }> { return this.client.patch(`/api/admin/users/${userId}/enable`, {} as any); }
+  async disableUser(userId: string): Promise<{ id: string; isDisabled: boolean }> { return this.client.patch(`/api/admin/users/${userId}/disable`, {} as any); }
+  async getAdminCourses(): Promise<any[]> { return this.client.get('/api/admin/courses'); }
+  async getAdminAnalyticsOverview(): Promise<{ users: number; courses: number; enrollments: number; lessons: number }> { return this.client.get('/api/admin/analytics/overview'); }
 }
 
-// Custom hook for using the API service (UNCHANGED)
+// Custom hook for using the API service
 export const useApiService = () => {
   const { getToken } = useAuth();
-  
   return new ApiService(getToken);
 };

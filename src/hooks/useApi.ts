@@ -1,4 +1,3 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApiService, Course, Enrollment, Lesson, LessonContent } from '@/lib/api';
 import { toast } from 'sonner';
@@ -12,6 +11,8 @@ export const queryKeys = {
   enrollments: ['enrollments'] as const,
   myEnrollments: ['enrollments', 'me'] as const,
   userEnrollments: (userId: string) => ['enrollments', 'user', userId] as const,
+  // --- THIS KEY IS ADDED ---
+  courseEnrollments: (courseId: string) => ['enrollments', 'course', courseId] as const,
   lessons: (courseId: string) => ['lessons', 'course', courseId] as const,
   lesson: (id: string) => ['lessons', id] as const,
   lessonContents: (lessonId: string) => ['lesson-contents', 'lesson', lessonId] as const,
@@ -19,7 +20,7 @@ export const queryKeys = {
   brumData: ['brum'] as const,
   reports: ['reports'] as const,
   userProgress: (userId: string) => ['reports', 'progress', userId] as const,
-  profileStats: ['profile-stats'] as const, // <-- ADDED KEY
+  profileStats: ['profile-stats'] as const,
   adminUsers: ['admin', 'users'] as const,
   adminCourses: ['admin', 'courses'] as const,
   adminAnalytics: ['admin', 'analytics', 'overview'] as const,
@@ -168,6 +169,24 @@ export const useUserEnrollments = (userId: string) => {
   });
 };
 
+// --- THIS IS THE NEW, CORRECT HOOK FOR YOUR PAGE ---
+/**
+ * Fetches all student enrollments for a specific course.
+ * @param courseId The ID of the course to fetch enrollments for.
+ */
+export const useCourseEnrollments = (courseId: string) => {
+  const apiService = useApiService();
+  
+  return useQuery({
+    queryKey: queryKeys.courseEnrollments(courseId),
+    // This now correctly calls the `getCourseEnrollments` method from your ApiService
+    queryFn: () => apiService.getCourseEnrollments(courseId),
+    enabled: !!courseId, // Only run the query if a courseId is provided
+    staleTime: 2 * 60 * 1000,
+  });
+};
+// --- END OF NEW HOOK ---
+
 export const useEnrollInCourse = () => {
   const apiService = useApiService();
   const queryClient = useQueryClient();
@@ -202,7 +221,6 @@ export const useMyEnrollments = (options?: { enabled?: boolean }) => {
 };
 
 // ===== LESSONS HOOKS =====
-// ... (keep all lesson hooks)
 export const useLessons = (courseId: string) => {
   const apiService = useApiService();
   
@@ -270,9 +288,7 @@ export const useLesson = (id: string) => {
   });
 };
 
-
 // ===== LESSON CONTENTS HOOKS =====
-// ... (keep all lesson content hooks)
 export const useLessonContents = (lessonId: string) => {
   const apiService = useApiService();
   
@@ -325,9 +341,7 @@ export const useLessonContent = (id: string) => {
   });
 };
 
-
 // ===== BRUM/AI HOOKS =====
-// ... (keep brum hooks)
 export const useBrumData = () => {
   const apiService = useApiService();
   
@@ -355,7 +369,6 @@ export const useCreateBrumSession = () => {
 };
 
 // ===== REPORTS HOOKS =====
-// ... (keep reports hooks)
 export const useReports = () => {
   const apiService = useApiService();
   
@@ -377,7 +390,7 @@ export const useUserProgress = (userId: string) => {
   });
 };
 
-// --- ADD THE NEW HOOK HERE ---
+// --- Profile Stats Hook ---
 export const useProfileStats = () => {
   const apiService = useApiService();
   const { isSignedIn } = useAuth();
@@ -392,7 +405,6 @@ export const useProfileStats = () => {
 };
 
 // ===== HEALTH CHECK HOOK =====
-// ... (keep health check and admin hooks)
 export const useHealthCheck = () => {
   const apiService = useApiService();
   

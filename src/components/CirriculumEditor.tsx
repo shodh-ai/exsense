@@ -157,8 +157,8 @@ const CirriculumEditor = ({
   };
 
   const courseOverviewUrl = courseId 
-    ? `/course/${courseId}` 
-    : '/teacher/courses/new/details-form';
+  ? `/courses/${courseId}` 
+  : '/courses/new/details-form';
 
   return (
     <>
