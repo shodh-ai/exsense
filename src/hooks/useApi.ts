@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useApiService, Course, Enrollment, Lesson, LessonContent } from '@/lib/api';
+import { useApiService, Course, Enrollment, Lesson, LessonContent, StudentProfile } from '@/lib/api';
 import { toast } from 'sonner';
 import { useAuth } from '@clerk/nextjs';
 
@@ -11,8 +11,8 @@ export const queryKeys = {
   enrollments: ['enrollments'] as const,
   myEnrollments: ['enrollments', 'me'] as const,
   userEnrollments: (userId: string) => ['enrollments', 'user', userId] as const,
-  // --- THIS KEY IS ADDED ---
   courseEnrollments: (courseId: string) => ['enrollments', 'course', courseId] as const,
+  studentProfile: (studentId: string) => ['users', 'profile', studentId] as const,
   lessons: (courseId: string) => ['lessons', 'course', courseId] as const,
   lesson: (id: string) => ['lessons', id] as const,
   lessonContents: (lessonId: string) => ['lesson-contents', 'lesson', lessonId] as const,
@@ -51,14 +51,13 @@ export const useTeacherAnalytics = () => {
         return await apiService.getTeacherAnalytics();
       } catch (err: any) {
         const status = err?.status as number | undefined;
-        // Gracefully degrade for unauthorized/forbidden
         if (status === 401 || status === 403) {
           return null;
         }
         throw err;
       }
     },
-    staleTime: 5 * 60 * 1000, // Analytics can be cached for 5 minutes
+    staleTime: 5 * 60 * 1000,
     retry: (failureCount, error: any) => {
       const status = error?.status as number | undefined;
       if (status === 401 || status === 403) return false;
@@ -91,6 +90,7 @@ export const useTeacherCourses = () => {
     },
   });
 };
+
 export const useUpdateCourse = () => {
   const apiService = useApiService();
   const queryClient = useQueryClient();
@@ -99,7 +99,6 @@ export const useUpdateCourse = () => {
     mutationFn: ({ courseId, courseData }: { courseId: string, courseData: any }) => 
       apiService.updateCourse(courseId, courseData),
     onSuccess: (updatedCourse) => {
-      // Invalidate the course query to refetch fresh data
       queryClient.invalidateQueries({ queryKey: queryKeys.course(updatedCourse.id) });
       toast.success('Course updated successfully!');
     },
@@ -119,6 +118,7 @@ export const useCourse = (id: string, options?: { enabled?: boolean }) => {
     staleTime: 5 * 60 * 1000,
   });
 };
+
 export const useCurriculum = (id: string) => {
   const apiService = useApiService();
   
@@ -169,23 +169,16 @@ export const useUserEnrollments = (userId: string) => {
   });
 };
 
-// --- THIS IS THE NEW, CORRECT HOOK FOR YOUR PAGE ---
-/**
- * Fetches all student enrollments for a specific course.
- * @param courseId The ID of the course to fetch enrollments for.
- */
 export const useCourseEnrollments = (courseId: string) => {
   const apiService = useApiService();
   
   return useQuery({
     queryKey: queryKeys.courseEnrollments(courseId),
-    // This now correctly calls the `getCourseEnrollments` method from your ApiService
     queryFn: () => apiService.getCourseEnrollments(courseId),
-    enabled: !!courseId, // Only run the query if a courseId is provided
+    enabled: !!courseId,
     staleTime: 2 * 60 * 1000,
   });
 };
-// --- END OF NEW HOOK ---
 
 export const useEnrollInCourse = () => {
   const apiService = useApiService();
@@ -193,16 +186,16 @@ export const useEnrollInCourse = () => {
   
   return useMutation({
     mutationFn: (courseId: string) => apiService.enrollInCourse(courseId),
-    onSuccess: (enrollment: Enrollment) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.enrollments });
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.myEnrollments });
-      queryClient.invalidateQueries({ 
-        queryKey: queryKeys.userEnrollments(enrollment.userId) 
-      });
       toast.success('Successfully enrolled in course!');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to enroll: ${error.message}`);
+      if (error.message.includes('already enrolled')) {
+        toast.info('You are already enrolled in this course.');
+      } else {
+        toast.error(`Failed to enroll: ${error.message}`);
+      }
     },
   });
 };
@@ -219,6 +212,19 @@ export const useMyEnrollments = (options?: { enabled?: boolean }) => {
     enabled: options?.enabled ?? true,
   });
 };
+
+// ===== STUDENT PROFILE HOOK =====
+export const useStudentProfile = (studentId: string) => {
+  const apiService = useApiService();
+  return useQuery<StudentProfile>({
+    queryKey: queryKeys.studentProfile(studentId),
+    queryFn: () => apiService.getStudentProfile(studentId),
+    enabled: !!studentId,
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
+  });
+};
+
 
 // ===== LESSONS HOOKS =====
 export const useLessons = (courseId: string) => {
@@ -296,7 +302,7 @@ export const useLessonContents = (lessonId: string) => {
     queryKey: queryKeys.lessonContents(lessonId),
     queryFn: () => apiService.getLessonContents(lessonId),
     enabled: !!lessonId,
-    staleTime: 15 * 60 * 1000, // 15 minutes
+    staleTime: 15 * 60 * 1000,
   });
 };
 
@@ -348,7 +354,7 @@ export const useBrumData = () => {
   return useQuery({
     queryKey: queryKeys.brumData,
     queryFn: () => apiService.getBrumData(),
-    staleTime: 1 * 60 * 1000, // 1 minute (more dynamic data)
+    staleTime: 1 * 60 * 1000,
   });
 };
 
@@ -411,9 +417,9 @@ export const useHealthCheck = () => {
   return useQuery({
     queryKey: ['health'],
     queryFn: () => apiService.healthCheck(),
-    staleTime: 30 * 1000, // 30 seconds
+    staleTime: 30 * 1000,
     retry: 1,
-    refetchInterval: 60 * 1000, // Check every minute
+    refetchInterval: 60 * 1000,
   });
 };
 
