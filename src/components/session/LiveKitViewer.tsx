@@ -381,10 +381,41 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
       // Clamp to [0, vidW/H]
       scaledX = Math.max(0, Math.min(vidW - 1, scaledX));
       scaledY = Math.max(0, Math.min(vidH - 1, scaledY));
-      const payload = { action: 'click', x: scaledX, y: scaledY };
+      const payload = { action: 'click', x: scaledX, y: scaledY, button: 'left' };
       await publishOrQueue(payload);
     } catch (e) {
       console.warn('[Interaction] click handler failed:', e);
+    }
+  };
+
+  // Intercept browser context menu and forward as a right-click to the pod
+  const handleContextMenu = async (event: React.MouseEvent<HTMLVideoElement>) => {
+    try {
+      // Prevent local browser video context menu
+      event.preventDefault();
+      try { console.log('[Interaction] contextmenu (right-click)'); } catch {}
+      const video = ref.current;
+      if (!video) return;
+      const rect = video.getBoundingClientRect();
+      const clientW = video.clientWidth;
+      const clientH = video.clientHeight;
+      const vidW = captureSize?.w || video.videoWidth || clientW;
+      const vidH = captureSize?.h || video.videoHeight || clientH;
+      const scale = Math.max(clientW / vidW, clientH / vidH);
+      const displayW = vidW * scale;
+      const displayH = vidH * scale;
+      const cropX = Math.max(0, (displayW - clientW) / 2);
+      const cropY = Math.max(0, (displayH - clientH) / 2);
+      const localX = (event.clientX - rect.left) + cropX;
+      const localY = (event.clientY - rect.top) + cropY;
+      let scaledX = Math.round(localX / scale);
+      let scaledY = Math.round(localY / scale);
+      scaledX = Math.max(0, Math.min(vidW - 1, scaledX));
+      scaledY = Math.max(0, Math.min(vidH - 1, scaledY));
+      const payload = { action: 'click', x: scaledX, y: scaledY, button: 'right' } as const;
+      await publishOrQueue(payload);
+    } catch (e) {
+      console.warn('[Interaction] right-click handler failed:', e);
     }
   };
 
@@ -453,6 +484,7 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
       style={{ objectFit: 'cover', zIndex: 20, position: 'relative' }}
       onMouseDown={() => { try { ref.current?.focus(); } catch {} }}
       onClick={handleMouseClick}
+      onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
       onWheel={handleScroll}

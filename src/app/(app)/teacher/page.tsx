@@ -275,6 +275,7 @@ interface TeacherFooterProps {
     screenshotIntervalSec: number;
     onSaveScriptClick?: () => void;
     onVSCodeClick?: () => void;
+    onPasteClick?: () => void;
     isRecording: boolean;
     isPaused: boolean;
     recordingDuration: number;
@@ -295,6 +296,7 @@ const TeacherFooter = ({
     screenshotIntervalSec, 
     onSaveScriptClick,
     onVSCodeClick,
+    onPasteClick,
     isRecording,
     isPaused,
     recordingDuration,
@@ -346,6 +348,13 @@ const TeacherFooter = ({
                         className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
                     >
                         <img src="/Code.svg" alt="Save Script" className="w-6 h-6" />
+                    </button>
+                    <button
+                        onClick={onPasteClick}
+                        title="Paste from your clipboard into the session"
+                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
+                    >
+                        <img src="/clipboard-paste.svg" alt="Paste from Clipboard" className="w-6 h-6" />
                     </button>
                     <button
                         onClick={onVSCodeClick}
@@ -1155,6 +1164,27 @@ export default function Session() {
         console.log('[TeacherPage] UI: Switched to VS Code. Subsequent recordings will capture VS Code actions.');
     };
 
+    // Paste text from local clipboard into the remote session
+    const handlePasteFromLocal = async () => {
+        try {
+            const clipboardText = await navigator.clipboard.readText();
+            if (clipboardText) {
+                setStatusMessage('Pasting from clipboard...');
+                await sendBrowser('paste_from_local', { text: clipboardText });
+                setStatusMessage('Pasted content into session.');
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] Pasted text from local clipboard into pod.');
+            } else {
+                setStatusMessage('Your clipboard is empty.');
+            }
+        } catch (err: any) {
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] Clipboard read failed:', err);
+            setStatusMessage('Could not access clipboard. Please grant permission in your browser.');
+            setSubmitError(`Clipboard Error: ${err?.message || String(err)}`);
+        }
+    };
+
 
     if (!isLoaded) return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
     if (isIntroActive) return <IntroPage onAnimationComplete={handleIntroComplete} />;
@@ -1219,6 +1249,7 @@ export default function Session() {
                                     onIncreaseTimer={handleIncreaseTimer}
                                     screenshotIntervalSec={screenshotIntervalSec}
                                     onSaveScriptClick={handleSaveSetupText}
+                                    onPasteClick={handlePasteFromLocal}
                                     onVSCodeClick={handleSwitchToVSCode}
                                     isRecording={isRecording}
                                     isPaused={isPaused}
