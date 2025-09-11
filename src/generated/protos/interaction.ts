@@ -121,8 +121,11 @@ export enum ClientUIActionType {
   /** UPLOAD_FILE_TO_JUPYTER - Upload a file to Jupyter notebook environment */
   UPLOAD_FILE_TO_JUPYTER = 62,
   HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION = 63,
+  EXCALIDRAW_CLEAR_CANVAS = 64,
   /** SUGGESTED_RESPONSES - Suggested responses (quick replies) list */
   SUGGESTED_RESPONSES = 65,
+  EXCALIDRAW_HIGHLIGHT_ELEMENTS = 66,
+  EXCALIDRAW_FOCUS_ON_ELEMENTS = 67,
   UNRECOGNIZED = -1,
 }
 
@@ -305,9 +308,18 @@ export function clientUIActionTypeFromJSON(object: any): ClientUIActionType {
     case 63:
     case "HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION":
       return ClientUIActionType.HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION;
+    case 64:
+    case "EXCALIDRAW_CLEAR_CANVAS":
+      return ClientUIActionType.EXCALIDRAW_CLEAR_CANVAS;
     case 65:
     case "SUGGESTED_RESPONSES":
       return ClientUIActionType.SUGGESTED_RESPONSES;
+    case 66:
+    case "EXCALIDRAW_HIGHLIGHT_ELEMENTS":
+      return ClientUIActionType.EXCALIDRAW_HIGHLIGHT_ELEMENTS;
+    case 67:
+    case "EXCALIDRAW_FOCUS_ON_ELEMENTS":
+      return ClientUIActionType.EXCALIDRAW_FOCUS_ON_ELEMENTS;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -435,8 +447,14 @@ export function clientUIActionTypeToJSON(object: ClientUIActionType): string {
       return "UPLOAD_FILE_TO_JUPYTER";
     case ClientUIActionType.HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION:
       return "HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION";
+    case ClientUIActionType.EXCALIDRAW_CLEAR_CANVAS:
+      return "EXCALIDRAW_CLEAR_CANVAS";
     case ClientUIActionType.SUGGESTED_RESPONSES:
       return "SUGGESTED_RESPONSES";
+    case ClientUIActionType.EXCALIDRAW_HIGHLIGHT_ELEMENTS:
+      return "EXCALIDRAW_HIGHLIGHT_ELEMENTS";
+    case ClientUIActionType.EXCALIDRAW_FOCUS_ON_ELEMENTS:
+      return "EXCALIDRAW_FOCUS_ON_ELEMENTS";
     case ClientUIActionType.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

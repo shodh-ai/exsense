@@ -14,10 +14,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
 import SuggestedResponses from '@/components/session/SuggestedResponses';
 
-// --- MODIFICATION: Import BOTH converters (removed MermaidDirectRenderer import) ---
 import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw';
 
-const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
+const IntroPage = dynamic(() => import('@/components/session/IntroPage'), { ssr: false });
 const ExcalidrawWrapper = dynamic(() => import('@/components/session/ExcalidrawWrapper'), { ssr: false });
 const VncViewer = dynamic(() => import('@/components/session/VncViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
@@ -61,7 +60,6 @@ function SessionContent({ activeView, setActiveView, componentButtons, vncUrl, h
                 </div>
             </div>
 
-            {/* MODIFICATION: Added paddingBottom and proper overflow handling for scroll */}
             <div className="flex-1 w-full overflow-hidden" style={{ minHeight: 0, paddingBottom: '8.5rem' }}>
                 <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
                     {isDiagramGenerating && (
@@ -98,7 +96,6 @@ export default function Session() {
 
     const courseId = searchParams.get('courseId');
 
-    // --- MODIFICATION: The two-step conversion logic is restored ---
     useEffect(() => {
         const convertAndRender = async () => {
             if (diagramDefinition && diagramDefinition.trim()) {
@@ -200,33 +197,33 @@ export default function Session() {
             <SignedIn>
                 <Sphere />
                 <div className='flex flex-col w-screen h-screen'>
-                    <div className="flex-grow relative w-full h-0"> 
-                        <SessionContent 
-                            activeView={activeView} 
-                            setActiveView={setActiveView} 
-                            componentButtons={componentButtons} 
-                            vncUrl={vncViewerUrl} 
+                    <div className="flex-grow relative w-full h-0">
+                        <SessionContent
+                            activeView={activeView}
+                            setActiveView={setActiveView}
+                            componentButtons={componentButtons}
+                            vncUrl={vncViewerUrl}
                             handleVncInteraction={handleVncInteraction}
                             diagramDefinition={diagramDefinition}
                             isDiagramGenerating={generationStatus === 'streaming'}
                         />
                     </div>
-                
+
                     <Footer room={room} agentIdentity={agentIdentity || undefined} />
 
                     {hasSuggestions && (
                         <SuggestedResponses onSelect={selectSuggestedResponse} />
                     )}
                 </div>
-                
+
                 {isConnected && (
-                    <MessageDisplay 
+                    <MessageDisplay
                         transcriptionMessages={transcriptionMessages || []}
                         statusMessages={statusMessages || []}
                     />
                 )}
             </SignedIn>
-            
+
             <SignedOut>
                 <div className="w-full h-full flex items-center justify-center text-white">
                     <p>Redirecting to login...</p>

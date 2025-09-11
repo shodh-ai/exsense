@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -10,22 +9,27 @@ import { useAuth } from '@clerk/nextjs';
 import { useBrowserActionExecutor } from './useBrowserActionExecutor';
 import { transcriptEventEmitter } from '@/lib/TranscriptEventEmitter';
 
-// File: exsense/src/hooks/useLiveKitSession.ts
-
 const LIVEKIT_DEBUG = false;
 
-// Type declaration for Mermaid debug interface
+// --- START of MODIFICATION ---
+// Extend the global Window interface to let TypeScript know about our custom functions.
+// This prevents type errors when calling our globally exposed Excalidraw actions.
 declare global {
   interface Window {
     __mermaidDebug?: {
       setDiagram: (diagram: string) => void;
     };
+    __excalidrawActions?: {
+        getSceneElements: () => any[];
+        highlightElements: (elementIds: string[]) => void;
+        removeHighlighting: () => void;
+        focusOnElements: (elementIds: string[]) => void;
+    };
   }
 }
+// --- END of MODIFICATION ---
 
 
-// --- RPC UTILITIES ---
-// These helpers are essential for the hook's operation.
 function uint8ArrayToBase64(buffer: Uint8Array): string {
   let binary = '';
   const len = buffer.byteLength;
@@ -72,8 +76,6 @@ class LiveKitRpcAdapter implements Rpc {
     }
   }
 
-  // LiveKit RPC currently supports unary request/response. We emulate server-streaming
-  // by returning a single-emission Observable wrapping the unary result.
   serverStreamingRequest(service: string, method: string, data: Uint8Array): Observable<Uint8Array> {
     return new Observable<Uint8Array>((subscriber) => {
       this.request(service, method, data)
@@ -85,12 +87,10 @@ class LiveKitRpcAdapter implements Rpc {
     });
   }
 
-  // Not supported in current transport
   clientStreamingRequest(): Promise<Uint8Array> {
     return Promise.reject(new Error('clientStreamingRequest is not supported by LiveKitRpcAdapter'));
   }
 
-  // Not supported in current transport
   bidirectionalStreamingRequest(): Observable<Uint8Array> {
     return new Observable<Uint8Array>((subscriber) => {
       subscriber.error(new Error('bidirectionalStreamingRequest is not supported by LiveKitRpcAdapter'));
@@ -98,13 +98,11 @@ class LiveKitRpcAdapter implements Rpc {
   }
 }
 
-// A single room instance to survive React Strict Mode re-mounts.
 const roomInstance = new Room({
     adaptiveStream: true,
     dynacast: true,
 });
 
-// Main hook
 export interface UseLiveKitSessionReturn {
   isConnected: boolean;
   isLoading: boolean;
@@ -118,10 +116,7 @@ export interface UseLiveKitSessionReturn {
 }
 
 export function useLiveKitSession(roomName: string, userName: string, courseId?: string): UseLiveKitSessionReturn {
-  // --- CLERK AUTHENTICATION ---
   const { getToken, isSignedIn } = useAuth();
-  // VNC WebSocket URL for browser automation (action socket)
-  // Prefer NEXT_PUBLIC_VNC_URL; fall back to NEXT_PUBLIC_VNC_WEBSOCKET_URL; then localhost default (8765)
   const vncUrlPrimary = process.env.NEXT_PUBLIC_VNC_URL;
   const vncUrlFallback = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:8765';
   const vncUrl = vncUrlPrimary || vncUrlFallback;
@@ -130,36 +125,26 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   }
   const visualizerBaseUrl = process.env.NEXT_PUBLIC_VISUALIZER_URL;
   const { executeBrowserAction, disconnectVNC } = useBrowserActionExecutor(roomInstance, vncUrl);
-  
-  // --- ZUSTAND STORE ACTIONS ---
-  // Select only needed actions to avoid broad subscription re-renders
+
   const setActiveView = useSessionStore((s) => s.setActiveView);
   const setAgentStatusText = useSessionStore((s) => s.setAgentStatusText);
   const setIsAgentSpeaking = useSessionStore((s) => s.setIsAgentSpeaking);
-  const setIsMicEnabled = useSessionStore((s) => s.setIsMicEnabled); // mic control
+  const setIsMicEnabled = useSessionStore((s) => s.setIsMicEnabled);
   const setSuggestedResponses = useSessionStore((s) => s.setSuggestedResponses);
   const clearSuggestedResponses = useSessionStore((s) => s.clearSuggestedResponses);
 
-  // --- HOOK'S INTERNAL STATE ---
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [agentIdentity, setAgentIdentity] = useState<string | null>(null);
-  
-  // New state for UI display
+
   const [transcriptionMessages, setTranscriptionMessages] = useState<string[]>([]);
   const [statusMessages, setStatusMessages] = useState<string[]>([]);
-  
+
   const agentServiceClientRef = useRef<AgentInteractionClientImpl | null>(null);
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
 
-  // --- TOKEN FETCHING & CONNECTION LOGIC ---
   useEffect(() => {
-    // THIS IS YOUR PROVEN TOKEN-FETCHING LOGIC FROM `LiveKitSession.tsx`.
-    // It can be pasted here directly without changes. It will manage its own
-    // loading/error states and eventually call `roomInstance.connect(...)`.
-    // For this example, we'll represent it with a simplified version.
-    
     let mounted = true;
     const connectToRoom = async () => {
         if (LIVEKIT_DEBUG) console.log('useLiveKitSession - connectToRoom called:', { roomName, userName });
@@ -178,7 +163,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         setIsLoading(true);
         setConnectionError(null);
         try {
-            // Check Clerk authentication
             if (!isSignedIn) {
                 throw new Error('User not authenticated. Please login first.');
             }
@@ -204,30 +188,28 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                     curriculum_id: courseId,
                 }),
             });
-            
+
             console.log('Token fetch response status:', response.status);
             if (!response.ok) {
                 throw new Error(`Failed to fetch token: ${response.status} ${response.statusText}`);
             }
-            
+
             const data = await response.json();
             console.log('Token fetch response data:', data);
             if (!data.success) {
                 throw new Error('Token generation failed');
             }
-            
+
             const { studentToken: token, livekitUrl: wsUrl, roomName: actualRoomName } = data;
-            
-            // Update the room name with the one generated by the backend
+
             console.log(`[useLiveKitSession] Using backend-generated room: ${actualRoomName}`);
-            
+
             if (!token || !wsUrl) {
                 throw new Error('Invalid token response from backend');
             }
 
             await roomInstance.connect(wsUrl, token);
             if(mounted) {
-                // Connection success is handled by the event listeners below
             }
         } catch (error: unknown) {
             if (mounted) {
@@ -241,18 +223,60 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     return () => { mounted = false; };
   }, [roomName, userName, courseId, getToken, isSignedIn]);
 
-
-  // --- EVENT & RPC HANDLER LOGIC ---
   useEffect(() => {
     if (!roomInstance) return;
 
-    // The handler for commands coming FROM the agent TO the frontend
     const handlePerformUIAction = async (rpcData: RpcInvocationData): Promise<string> => {
       const request = AgentToClientUIActionRequest.decode(base64ToUint8Array(rpcData.payload as string));
       console.log(`[B2F RPC] Received action: ${ClientUIActionType[request.actionType]}`);
       
-      // --- THE BRIDGE FROM RPC TO ZUSTAND ---
-      if (request.actionType === ClientUIActionType.BROWSER_NAVIGATE) {
+      if (request.actionType === ClientUIActionType.EXCALIDRAW_HIGHLIGHT_ELEMENTS) {
+          console.log('[B2F RPC] Handling EXCALIDRAW_HIGHLIGHT_ELEMENTS');
+          const params = request.parameters || {};
+          const idsString = params.element_ids || '[]';
+          try {
+              const elementIds = JSON.parse(idsString);
+              if (Array.isArray(elementIds) && elementIds.length > 0) {
+                  if (window.__excalidrawActions?.highlightElements) {
+                      window.__excalidrawActions.highlightElements(elementIds);
+                      console.log(`[B2F RPC] Highlighted elements: ${elementIds.join(', ')}`);
+                  } else {
+                      console.warn('[B2F RPC] __excalidrawActions.highlightElements not available.');
+                  }
+              }
+          } catch(e) {
+              console.error('[B2F RPC] Failed to parse element_ids for highlighting:', idsString, e);
+          }
+      } else if (request.actionType === ClientUIActionType.EXCALIDRAW_FOCUS_ON_ELEMENTS) {
+          console.log('[B2F RPC] Handling EXCALIDRAW_FOCUS_ON_ELEMENTS');
+          const params = request.parameters || {};
+          const idsString = params.element_ids || '[]';
+          try {
+              const elementIds = JSON.parse(idsString);
+              if (Array.isArray(elementIds) && elementIds.length > 0) {
+                  if (window.__excalidrawActions?.focusOnElements) {
+                      window.__excalidrawActions.focusOnElements(elementIds);
+                      console.log(`[B2F RPC] Focusing on elements: ${elementIds.join(', ')}`);
+                  } else {
+                      console.warn('[B2F RPC] __excalidrawActions.focusOnElements not available.');
+                  }
+              }
+          } catch(e) {
+              console.error('[B2F RPC] Failed to parse element_ids for focusing:', idsString, e);
+          }
+      } else if (request.actionType === ClientUIActionType.EXCALIDRAW_CLEAR_CANVAS) {
+          console.log('[B2F RPC] Handling EXCALIDRAW_CLEAR_CANVAS');
+          if (typeof window !== 'undefined' && (window as any).__excalidrawDebug) {
+            try {
+              (window as any).__excalidrawDebug.clearCanvas();
+              console.log('[B2F RPC] Canvas cleared successfully');
+            } catch (error) {
+              console.error('[B2F RPC] Failed to clear canvas:', error);
+            }
+          } else {
+            console.warn('[B2F RPC] Excalidraw debug functions not available for canvas clear');
+          }
+      } else if (request.actionType === ClientUIActionType.BROWSER_NAVIGATE) {
         const url = request.parameters?.url;
         if (url) {
           executeBrowserAction({
@@ -262,21 +286,24 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         }
       } else if (request.actionType === ClientUIActionType.START_LISTENING_VISUAL) {
         setIsMicEnabled(true);
-        // Enable microphone so user can be heard
         if (roomInstance.localParticipant) {
           await roomInstance.localParticipant.setMicrophoneEnabled(true);
           const statusMsg = 'Microphone enabled - user can now speak';
           console.log(`[useLiveKitSession] ${statusMsg}`);
-          setStatusMessages(prev => [...prev.slice(-9), statusMsg]); // Keep last 10 status messages
+          setStatusMessages(prev => [...prev.slice(-9), statusMsg]);
+          
+          if (window.__excalidrawActions?.removeHighlighting) {
+            window.__excalidrawActions.removeHighlighting();
+            console.log('[useLiveKitSession] Cleared highlights on user input');
+          }
         }
       } else if (request.actionType === ClientUIActionType.STOP_LISTENING_VISUAL) {
         setIsMicEnabled(false);
-        // Disable microphone so user cannot be heard
         if (roomInstance.localParticipant) {
           await roomInstance.localParticipant.setMicrophoneEnabled(false);
           const statusMsg = 'Microphone disabled - user cannot be heard';
           console.log(`[useLiveKitSession] ${statusMsg}`);
-          setStatusMessages(prev => [...prev.slice(-9), statusMsg]); // Keep last 10 status messages
+          setStatusMessages(prev => [...prev.slice(-9), statusMsg]);
         }
       } else if (request.actionType === ClientUIActionType.JUPYTER_CLICK_PYODIDE) {
         console.log('[JUPYTER_CLICK_PYODIDE] Received jupyter_click_pyodide action');
@@ -313,27 +340,24 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         console.log('[SET_UI_STATE] ===== RECEIVED SET_UI_STATE ACTION =====');
         console.log('[SET_UI_STATE] Full request object:', request);
         console.log('[SET_UI_STATE] Current activeView:', useSessionStore.getState().activeView);
-        
-        // Note: Property name may need adjustment based on actual protobuf definition
+
         const params = (request as unknown as Record<string, unknown>).parameters;
         console.log('[SET_UI_STATE] Extracted params:', params);
-        
+
         if (params && typeof params === 'object') {
-          // Handle status text update
           if ('statusText' in params || 'status_text' in params) {
             const statusText = ((params as any).statusText || (params as any).status_text) as string;
             console.log('[SET_UI_STATE] Setting status text:', statusText);
             setAgentStatusText(statusText);
           }
-          
-          // Handle view switching
+
           if ('view' in params) {
             const viewParam = (params as any).view as string;
             console.log('[SET_UI_STATE] View parameter received:', viewParam);
-            
+
             if (viewParam) {
               let targetView: SessionView;
-              
+
               switch (viewParam) {
                 case 'vnc_browser':
                 case 'vnc':
@@ -358,7 +382,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                   console.log('[SET_UI_STATE] Available view options: vnc_browser, vnc, excalidraw, drawing, video, intro');
                   return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ requestId: rpcData.requestId, success: false })).finish());
               }
-              
+
               console.log(`[SET_UI_STATE] Switching view from ${useSessionStore.getState().activeView} to ${targetView}`);
               setActiveView(targetView);
               console.log('[SET_UI_STATE] setActiveView called successfully');
@@ -391,7 +415,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             console.error('[B2F RPC] Failed to set suggested responses in store:', e);
           }
         } else {
-          // --- Fallback: some agents send suggestions via request.parameters ---
           const params = (request as any).parameters || {};
           const parseMaybeJson = (v: unknown) => {
             if (typeof v === 'string') {
@@ -410,7 +433,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 suggestions = (candidate as any[]).map((s: any, idx: number) => ({ id: s.id || `s_${Date.now()}_${idx}` , text: s.text || String(s), reason: s.reason }));
               }
             } else if (typeof candidate === 'string') {
-              // Single string -> one suggestion
               suggestions = [{ id: `s_${Date.now()}_0`, text: candidate }];
             }
             if (suggestions.length > 0) {
@@ -427,24 +449,22 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             console.warn('[B2F RPC] SUGGESTED_RESPONSES payload missing or invalid, and no parsable parameters found:', { payload, params });
           }
         }
-      } else if ((request.actionType as number) === 64) { // EXCALIDRAW_CLEAR_CANVAS
+      } else if ((request.actionType as number) === 64) {
         console.log('[B2F RPC] Handling EXCALIDRAW_CLEAR_CANVAS');
-        // Clear canvas via debug functions if available
-        if (typeof window !== 'undefined' && window.__excalidrawDebug) {
+        if (typeof window !== 'undefined' && (window as any).__excalidrawDebug) {
           try {
-            window.__excalidrawDebug.clearCanvas();
-            console.log('[B2F RPC] ✅ Canvas cleared successfully');
+            (window as any).__excalidrawDebug.clearCanvas();
+            console.log('[B2F RPC] Canvas cleared successfully');
           } catch (error) {
-            console.error('[B2F RPC] ❌ Failed to clear canvas:', error);
+            console.error('[B2F RPC] Failed to clear canvas:', error);
           }
         } else {
-          console.warn('[B2F RPC] ⚠️ Excalidraw debug functions not available for canvas clear');
+          console.warn('[B2F RPC] Excalidraw debug functions not available for canvas clear');
         }
-      } else if ((request.actionType as number) === 49) { // GENERATE_VISUALIZATION
+      } else if ((request.actionType as number) === 49) {
         console.log('[B2F RPC] Handling GENERATE_VISUALIZATION');
         try {
           const params = request.parameters || {} as any;
-          // Path A: Precomputed elements provided
           const elements = params.elements ? JSON.parse(params.elements) : null;
           if (elements && Array.isArray(elements)) {
             console.log(`[B2F RPC] Parsed ${elements.length} elements from RPC`);
@@ -454,26 +474,24 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
               setVisualizationData(elements);
             } else {
               console.warn('[B2F RPC] Store setVisualizationData not available, using direct method');
-              if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(elements);
-                window.__excalidrawDebug.setElements(excalidrawElements);
-                console.log('[B2F RPC] ✅ Direct visualization rendering completed');
+              if (typeof window !== 'undefined' && (window as any).__excalidrawDebug) {
+                const excalidrawElements = (window as any).__excalidrawDebug.convertSkeletonToExcalidraw(elements);
+                (window as any).__excalidrawDebug.setElements(excalidrawElements);
+                console.log('[B2F RPC] Direct visualization rendering completed');
               }
             }
           } else {
-          // Path B: Only prompt provided -> call Visualizer service from frontend
           const prompt = params.prompt as string | undefined;
           const topicContext = (params.topic_context as string | undefined) || '';
           if (!prompt) {
-            console.error('[B2F RPC] ❌ GENERATE_VISUALIZATION missing both elements and prompt');
+            console.error('[B2F RPC] GENERATE_VISUALIZATION missing both elements and prompt');
           } else {
             console.log('[B2F RPC] Optimistic UI: showing placeholder and calling Visualizer...');
-            // --- Optimistic UI: show placeholder immediately ---
             const placeholderSkeleton = [
               {
                 id: 'generating_placeholder',
                 type: 'text',
-                text: '🎨 Generating diagram...',
+                text: 'Generating diagram...',
                 x: 100,
                 y: 80,
                 width: 260,
@@ -486,9 +504,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
               const { setVisualizationData } = useSessionStore.getState();
               if (setVisualizationData) {
                 setVisualizationData(placeholderSkeleton as any);
-              } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(placeholderSkeleton);
-                window.__excalidrawDebug.setElements(excalidrawElements);
+              } else if (typeof window !== 'undefined' && (window as any).__excalidrawDebug) {
+                const excalidrawElements = (window as any).__excalidrawDebug.convertSkeletonToExcalidraw(placeholderSkeleton);
+                (window as any).__excalidrawDebug.setElements(excalidrawElements);
               }
             } catch (phErr) {
               console.warn('[B2F RPC] Placeholder render failed (non-fatal):', phErr);
@@ -510,18 +528,16 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 const decoder = new TextDecoder('utf-8');
                 let buffered = '';
                 let gotAny = false;
-                // Local accumulators for both store and direct Excalidraw path
                 const byId = new Map<string, any>();
                 const byKey = new Map<string, any>();
                 let ordered: any[] = [];
                 let localSkeleton: any[] = [];
-                // Clear placeholder before first element
                 try {
                   const { setVisualizationData } = useSessionStore.getState();
                   if (setVisualizationData) {
                     setVisualizationData([] as any);
-                  } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                    window.__excalidrawDebug.setElements([]);
+                  } else if (typeof window !== 'undefined' && (window as any).__excalidrawDebug) {
+                    (window as any).__excalidrawDebug.setElements([]);
                   }
                 } catch {}
 
@@ -530,8 +546,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                   if (done) break;
                   buffered += decoder.decode(value, { stream: true });
                   gotAny = true;
-                  
-                  // Update Mermaid diagram with accumulated text
+
                   try {
                     if (typeof window !== 'undefined' && window.__mermaidDebug) {
                       window.__mermaidDebug.setDiagram(buffered.trim());
@@ -544,7 +559,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                   console.warn('[B2F RPC] Streaming returned no elements, falling back to batch endpoint');
                   throw new Error('No streaming elements');
                 }
-                if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Streaming visualization completed');
+                if (LIVEKIT_DEBUG) console.log('[B2F RPC] Streaming visualization completed');
               } else {
                 throw new Error(`Streaming not available: status ${streamingResp.status}`);
               }
@@ -570,28 +585,27 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 const { setVisualizationData } = useSessionStore.getState();
                 if (setVisualizationData) {
                   setVisualizationData(returned);
-                } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                  const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(returned);
-                  window.__excalidrawDebug.setElements(excalidrawElements);
+                } else if (typeof window !== 'undefined' && (window as any).__excalidrawDebug) {
+                  const excalidrawElements = (window as any).__excalidrawDebug.convertSkeletonToExcalidraw(returned);
+                  (window as any).__excalidrawDebug.setElements(excalidrawElements);
                 }
-                if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Visualization generated via Visualizer service');
+                if (LIVEKIT_DEBUG) console.log('[B2F RPC] Visualization generated via Visualizer service');
               } catch (svcErr) {
-                console.error('[B2F RPC] ❌ Failed to call Visualizer service:', svcErr);
-                // Replace placeholder with an error message on failure
+                console.error('[B2F RPC] Failed to call Visualizer service:', svcErr);
                 try {
                   const errorSkeleton = [
                     {
                       id: 'generating_error',
                       type: 'text',
-                      text: '⚠️ Could not generate diagram.'
+                      text: 'Could not generate diagram.'
                     }
                   ];
                   const { setVisualizationData } = useSessionStore.getState();
                   if (setVisualizationData) {
                     setVisualizationData(errorSkeleton as any);
-                  } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                    const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(errorSkeleton);
-                    window.__excalidrawDebug.setElements(excalidrawElements);
+                  } else if (typeof window !== 'undefined' && (window as any).__excalidrawDebug) {
+                    const excalidrawElements = (window as any).__excalidrawDebug.convertSkeletonToExcalidraw(errorSkeleton);
+                    (window as any).__excalidrawDebug.setElements(excalidrawElements);
                   }
                 } catch (errRender) {
                   console.warn('[B2F RPC] Error placeholder render failed (non-fatal):', errRender);
@@ -599,7 +613,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
               }
             }
           }
-          // Close the outer `else` branch for when no precomputed elements are provided
         }
         } catch (error) {
           console.error('[B2F RPC] GENERATE_VISUALIZATION handler failed:', error);
@@ -607,31 +620,25 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       } else {
         if (LIVEKIT_DEBUG) console.log('[B2F RPC] Unknown action type:', request.actionType);
       }
-      
-      // We still need to return an acknowledgment
+
       const response = ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true });
       return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
     };
 
     const onConnected = async () => {
         setIsLoading(false);
-        // Set up microphone but keep it disabled by default
         try {
             if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Setting up microphone...');
-            
+
             if (roomInstance.localParticipant) {
-                // Enable microphone to set up the track
                 if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Enabling microphone to create track...');
                 await roomInstance.localParticipant.setMicrophoneEnabled(true);
-                
-                // Wait a moment for the track to be properly created
+
                 await new Promise(resolve => setTimeout(resolve, 100));
-                
-                // Now disable it so user can't be heard by default
+
                 if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Disabling microphone - user should not be heard by default');
                 await roomInstance.localParticipant.setMicrophoneEnabled(false);
-                
-                // Verify the actual state after disabling
+
                 const micTrack = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
                 const actualMicEnabled = micTrack ? !micTrack.isMuted : false;
                 if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Microphone setup complete - LiveKit mic state:', {
@@ -642,8 +649,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             }
         } catch (error: any) {
             console.error('[useLiveKitSession] Failed to setup microphone:', error);
-            
-            // Provide specific error messages based on the error type
+
             if (error.name === 'NotAllowedError' || error.message?.includes('Permission dismissed')) {
                 setConnectionError('Microphone access denied. Please click the microphone icon in your browser\'s address bar and allow microphone permissions, then refresh the page.');
             } else if (error.name === 'NotFoundError') {
@@ -654,84 +660,72 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 setConnectionError(`Failed to access microphone: ${error.message || 'Unknown error'}. Please check your microphone settings and refresh the page.`);
             }
         }
-        // We wait for the agent_ready signal before setting isConnected to true
     };
-    
+
     const onDisconnected = () => {
         setIsConnected(false);
         setIsLoading(false);
         agentServiceClientRef.current = null;
         disconnectVNC();
-        
-        // Clean up microphone track
+
         if (microphoneTrackRef.current) {
             microphoneTrackRef.current.stop();
             microphoneTrackRef.current = null;
         }
 
-        // Clear any lingering transcript bubble in the UI
         try { transcriptEventEmitter.emitTranscript(''); } catch {}
     };
 
-    // The handler for the agent's "I'm ready" signal
-    // Handler for audio tracks (agent voice output)
     const handleTrackSubscribed = (track: Track, publication: TrackPublication, participant: RemoteParticipant) => {
         if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Track subscribed:`, {
             kind: track.kind,
             source: publication.source,
             participant: participant.identity
         });
-        
+
         if (track.kind === Track.Kind.Audio) {
             if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Audio track received from agent ${participant.identity}`);
             const audioTrack = track as AudioTrack;
-            
-            // Attach the audio track to play agent voice
+
             const audioElement = audioTrack.attach();
             audioElement.autoplay = true;
             audioElement.volume = 1.0;
-            
-            // Add to DOM temporarily to ensure playback
+
             document.body.appendChild(audioElement);
-            
-            // Clean up when track ends
+
             track.on('ended', () => {
                 if (audioElement.parentNode) {
                     audioElement.parentNode.removeChild(audioElement);
                 }
             });
-            
+
             setIsAgentSpeaking(true);
         }
     };
-    
+
     const handleTrackUnsubscribed = (track: Track, publication: TrackPublication, participant: RemoteParticipant) => {
         if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Track unsubscribed:`, {
             kind: track.kind,
             source: publication.source,
             participant: participant.identity
         });
-        
+
         if (track.kind === Track.Kind.Audio) {
             setIsAgentSpeaking(false);
         }
     };
-    
-    // Handler for transcription data
+
     const handleTranscriptionReceived = (transcriptions: TranscriptionSegment[], participant?: Participant, publication?: TrackPublication) => {
         if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Transcription received:`, transcriptions);
-        
-        // Forward transcript text to global emitter and maintain legacy message list
+
         transcriptions.forEach(segment => {
             const text = segment.text?.trim();
             if (text) {
-                // Emit plain text for the avatar bubble UI
                 try { transcriptEventEmitter.emitTranscript(text); } catch {}
 
-                // Preserve speaker-tagged history for any consumers still using it
                 const speaker = participant?.identity || 'Unknown';
                 const message = `${speaker}: ${text}`;
-                setTranscriptionMessages(prev => [...prev.slice(-19), message]); // Keep last 20 messages
+                setTranscriptionMessages(prev => [...prev.slice(-19), message]);
             }
         });
     };
@@ -743,11 +737,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             console.log('[DataReceived] Packet from', participant.identity, { kind, topic, data });
             if (data.type === 'agent_ready' && roomInstance.localParticipant) {
                 console.log(`[useLiveKitSession] Agent ready signal received from ${participant.identity}`);
-                setAgentIdentity(participant.identity); // Store the agent identity
+                setAgentIdentity(participant.identity);
                 const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, participant.identity);
                 agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
-                
-                // Send confirmation RPC to agent to complete handshake
+
                 try {
                     console.log(`[useLiveKitSession] Sending confirmation RPC to agent...`);
                     const confirmationResponse = await roomInstance.localParticipant.performRpc({
@@ -761,25 +754,21 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                         })))
                     });
                     console.log(`[useLiveKitSession] Agent confirmation response:`, confirmationResponse);
-                    setIsConnected(true); // NOW we are fully connected and ready to interact
-                    
+                    setIsConnected(true);
+
                 } catch (rpcError) {
                     console.error(`[useLiveKitSession] Failed to send confirmation RPC to agent:`, rpcError);
-                    // Still set connected as the agent is ready, even if confirmation failed
                     setIsConnected(true);
                 }
             }
 
-            // Detect suggested responses sent via generic data channel messages
             try {
                 const deepFind = (obj: any): { items?: any; title?: string } | undefined => {
                     if (!obj || typeof obj !== 'object') return undefined;
-                    // direct
                     const meta = obj.metadata || obj.meta || obj;
                     if (meta && (meta.suggested_responses || meta.suggestedResponses)) {
                         return { items: meta.suggested_responses || meta.suggestedResponses, title: meta.title || meta.suggested_title };
                     }
-                    // search children
                     for (const key of Object.keys(obj)) {
                         const child = obj[key];
                         if (child && typeof child === 'object') {
@@ -827,7 +816,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             console.error("Failed to parse agent data packet:", error);
         }
     };
-    
+
     roomInstance.on(RoomEvent.Connected, onConnected);
     roomInstance.on(RoomEvent.Disconnected, onDisconnected);
     roomInstance.on(RoomEvent.DataReceived, handleDataReceived);
@@ -856,25 +845,43 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       roomInstance.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
       roomInstance.off(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
     };
-  }, [roomName, setIsMicEnabled, setAgentStatusText, setIsAgentSpeaking, setActiveView, setSuggestedResponses, userName]); // Add all dependencies
+  }, [roomName, setIsMicEnabled, setAgentStatusText, setIsAgentSpeaking, setActiveView, setSuggestedResponses, userName, disconnectVNC, executeBrowserAction]);
 
-
-  // --- API EXPOSED TO THE COMPONENTS ---
-  // This is the clean interface your UI components will use to talk to the agent.
   const startTask = useCallback(async (taskName: string, payload: object) => {
+    // --- START of MODIFICATION ---
+    // Added a check to remove highlights before proceeding with the new task.
+    // This ensures the UI is clean for the AI's next action.
+    if (window.__excalidrawActions?.removeHighlighting) {
+      window.__excalidrawActions.removeHighlighting();
+      console.log('[LiveKitSession] Cleared highlights before starting new task.');
+    }
+    // --- END of MODIFICATION ---
+
     if (!agentServiceClientRef.current) {
       setConnectionError("Cannot start task: Agent is not ready.");
       console.error("Agent is not ready, cannot start task.");
       return;
     }
     try {
+      let finalPayload: Record<string, any> = { ...payload };
+      if (window.__excalidrawActions?.getSceneElements) {
+        try {
+            const whiteboardState = window.__excalidrawActions.getSceneElements();
+            if (Array.isArray(whiteboardState) && whiteboardState.length > 0) {
+                finalPayload.whiteboard_state = whiteboardState;
+                console.log(`[F2B RPC] Attaching ${whiteboardState.length} whiteboard elements to task payload.`);
+            }
+        } catch (e) {
+            console.error("Failed to get whiteboard state:", e);
+        }
+      }
+
       console.log(`[F2B RPC] Starting task: ${taskName}`);
       const request = {
         taskName: taskName,
-        jsonPayload: JSON.stringify(payload),
+        jsonPayload: JSON.stringify(finalPayload),
       };
-      // InvokeAgentTask returns an Observable<AgentResponse> (server-streaming).
-      // Our transport currently yields a single response; await the first emission.
+      
       await firstValueFrom(agentServiceClientRef.current.InvokeAgentTask(request));
     } catch (e) {
       console.error("Failed to start agent task:", e);
@@ -882,7 +889,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, []);
 
-  // Convenience method for Suggested Responses selection
   const selectSuggestedResponse = useCallback(async (suggestion: { id: string; text: string; reason?: string }) => {
     try {
       await startTask('select_suggested_response', {
@@ -895,12 +901,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, [startTask, clearSuggestedResponses]);
 
-  return { 
-    isConnected, 
-    isLoading, 
-    connectionError, 
-    startTask, 
-    room: roomInstance, 
+  return {
+    isConnected,
+    isLoading,
+    connectionError,
+    startTask,
+    room: roomInstance,
     agentIdentity,
     transcriptionMessages,
     statusMessages,

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 
-const VISUALIZER_URL = process.env.NEXT_PUBLIC_VISUALIZER_URL || 'http://localhost:8080';
+const VISUALIZER_URL = process.env.NEXT_PUBLIC_VISUALIZER_URL || 'http://localhost:8000';
 
 // This component now takes two callbacks: one for the final code, one for the status.
 export interface MermaidDirectRendererProps {
