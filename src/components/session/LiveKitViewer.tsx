@@ -475,20 +475,27 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
   };
 
   return (
-    <video
-      ref={ref}
-      autoPlay
-      playsInline
-      muted
-      className="w-full h-full bg-black rounded border-2 border-green-500 shadow-lg cursor-crosshair"
-      style={{ objectFit: 'cover', zIndex: 20, position: 'relative' }}
-      onMouseDown={() => { try { ref.current?.focus(); } catch {} }}
-      onClick={handleMouseClick}
-      onContextMenu={handleContextMenu}
-      onKeyDown={handleKeyDown}
-      onKeyUp={handleKeyUp}
-      onWheel={handleScroll}
-      tabIndex={0}
-    />
+    // Outer container centers the content and supplies black bars
+    <div className="w-full h-full flex items-center justify-center bg-black">
+      {/* Inner container enforces a 16:9 aspect ratio */}
+      <div className="relative w-full h-auto max-w-full max-h-full" style={{ aspectRatio: '16 / 9' }}>
+        <video
+          ref={ref}
+          autoPlay
+          playsInline
+          muted
+          // Fill the aspect-ratio box; avoid distortion
+          className="absolute top-0 left-0 w-full h-full bg-black rounded shadow-lg cursor-crosshair"
+          style={{ objectFit: 'cover', zIndex: 20 }}
+          onMouseDown={() => { try { ref.current?.focus(); } catch {} }}
+          onClick={handleMouseClick}
+          onContextMenu={handleContextMenu}
+          onKeyDown={handleKeyDown}
+          onKeyUp={handleKeyUp}
+          onWheel={handleScroll}
+          tabIndex={0}
+        />
+      </div>
+    </div>
   );
 }
