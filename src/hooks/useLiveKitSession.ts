@@ -1,4 +1,4 @@
-
+//hooks the main one
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
@@ -13,6 +13,8 @@ import { transcriptEventEmitter } from '@/lib/TranscriptEventEmitter';
 // File: exsense/src/hooks/useLiveKitSession.ts
 
 const LIVEKIT_DEBUG = false;
+const SESSION_FLOW_DEBUG = true;
+const DELETE_ON_UNLOAD = (process.env.NEXT_PUBLIC_SESSION_DELETE_ON_UNLOAD || 'true').toLowerCase() === 'true';
 
 // Type declaration for Mermaid debug interface
 declare global {
@@ -43,6 +45,20 @@ function base64ToUint8Array(base64: string): Uint8Array {
     bytes[i] = binary_string.charCodeAt(i);
   }
   return bytes;
+}
+
+// Map an external session-manager status URL to our local Next.js proxy route to avoid CORS
+function toLocalStatusUrl(externalUrl: string): string {
+  try {
+    // If already relative, keep it
+    if (!/^https?:/i.test(externalUrl)) return externalUrl;
+    // Extract job id from .../status/<jobId>
+    const match = externalUrl.match(/\/status\/([^/?#]+)/);
+    if (match && match[1]) {
+      return `/api/sessions/status/${match[1]}`;
+    }
+  } catch {}
+  return externalUrl; // fallback
 }
 
 interface Rpc {
@@ -99,9 +115,10 @@ class LiveKitRpcAdapter implements Rpc {
 }
 
 // A single room instance to survive React Strict Mode re-mounts.
+// For reliability, disable adaptiveStream/dynacast so remote video is always delivered.
 const roomInstance = new Room({
-    adaptiveStream: true,
-    dynacast: true,
+    adaptiveStream: false,
+    dynacast: false,
 });
 
 // Main hook
@@ -115,21 +132,24 @@ export interface UseLiveKitSessionReturn {
   transcriptionMessages: string[];
   statusMessages: string[];
   selectSuggestedResponse: (suggestion: { id: string; text: string; reason?: string }) => Promise<void>;
+  livekitUrl: string;
+  livekitToken: string;
+  deleteSessionNow: () => Promise<void>;
+  sendBrowserInteraction: (payload: object) => Promise<void>;
+  sessionStatusUrl?: string | null;
+  sessionManagerSessionId?: string | null;
 }
 
-export function useLiveKitSession(roomName: string, userName: string, courseId?: string): UseLiveKitSessionReturn {
+export interface LiveKitSpawnOptions {
+  spawnAgent?: boolean;
+  spawnBrowser?: boolean;
+}
+
+export function useLiveKitSession(roomName: string, userName: string, courseId?: string, options?: LiveKitSpawnOptions): UseLiveKitSessionReturn {
   // --- CLERK AUTHENTICATION ---
   const { getToken, isSignedIn } = useAuth();
-  // VNC WebSocket URL for browser automation (action socket)
-  // Prefer NEXT_PUBLIC_VNC_URL; fall back to NEXT_PUBLIC_VNC_WEBSOCKET_URL; then localhost default (8765)
-  const vncUrlPrimary = process.env.NEXT_PUBLIC_VNC_URL;
-  const vncUrlFallback = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:8765';
-  const vncUrl = vncUrlPrimary || vncUrlFallback;
-  if (!vncUrlPrimary) {
-    console.warn('[useLiveKitSession] NEXT_PUBLIC_VNC_URL not set; using fallback:', vncUrl);
-  }
   const visualizerBaseUrl = process.env.NEXT_PUBLIC_VISUALIZER_URL;
-  const { executeBrowserAction, disconnectVNC } = useBrowserActionExecutor(roomInstance, vncUrl);
+  const { executeBrowserAction } = useBrowserActionExecutor(roomInstance);
   
   // --- ZUSTAND STORE ACTIONS ---
   // Select only needed actions to avoid broad subscription re-renders
@@ -145,6 +165,21 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const [isLoading, setIsLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [agentIdentity, setAgentIdentity] = useState<string | null>(null);
+  const [livekitUrl, setLivekitUrl] = useState<string>('');
+  const [livekitToken, setLivekitToken] = useState<string>('');
+  const [sessionStatusUrlState, setSessionStatusUrlState] = useState<string | null>(null);
+  const [sessionManagerSessionIdState, setSessionManagerSessionIdState] = useState<string | null>(null);
+  // Prevent duplicate connect/token fetch during Strict Mode/HMR
+  const connectStartedRef = useRef<boolean>(false);
+  // Track session-manager sessionId for cleanup (pod deletion)
+  const sessionIdRef = useRef<string | null>(null);
+  const sessionStatusUrlRef = useRef<string | null>(null);
+  // Ensure we only send the initial navigate once per session
+  const initialNavSentRef = useRef<boolean>(false);
+  // Expose a deletion helper that multiple event hooks can call
+  const sendDeleteNowRef = useRef<null | (() => Promise<void>)>(null);
+  // Track if we are actually unloading the page (not just React unmount/HMR)
+  const isUnloadingRef = useRef<boolean>(false);
   
   // New state for UI display
   const [transcriptionMessages, setTranscriptionMessages] = useState<string[]>([]);
@@ -152,6 +187,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   
   const agentServiceClientRef = useRef<AgentInteractionClientImpl | null>(null);
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
+
+  // LOG 1: Is the hook even running?
+  console.log('[DIAGNOSTIC] 1. useLiveKitSession hook has started.');
 
   // --- TOKEN FETCHING & CONNECTION LOGIC ---
   useEffect(() => {
@@ -162,6 +200,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     
     let mounted = true;
     const connectToRoom = async () => {
+        // LOG 2: Is the connect function being called?
+        console.log('[DIAGNOSTIC] 2. connectToRoom function called.');
         if (LIVEKIT_DEBUG) console.log('useLiveKitSession - connectToRoom called:', { roomName, userName });
         if (!roomName || !userName || !courseId) {
             if (LIVEKIT_DEBUG) console.log('Missing roomName, userName, or courseId, skipping connection');
@@ -173,11 +213,16 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             if (LIVEKIT_DEBUG) console.log('Room already connected/connecting, skipping');
             return;
         }
+        if (connectStartedRef.current) {
+            if (SESSION_FLOW_DEBUG) console.log('[FLOW] connectToRoom already started; skipping duplicate');
+            return;
+        }
 
         if (LIVEKIT_DEBUG) console.log('Starting LiveKit connection process');
         setIsLoading(true);
         setConnectionError(null);
         try {
+            connectStartedRef.current = true;
             // Check Clerk authentication
             if (!isSignedIn) {
                 throw new Error('User not authenticated. Please login first.');
@@ -187,13 +232,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             if (!clerkToken) {
                 throw new Error('Failed to get authentication token from Clerk.');
             }
+            if (SESSION_FLOW_DEBUG) console.log('[FLOW] Clerk auth OK, acquired session token');
 
             const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL;
             if (!tokenServiceUrl) {
                 throw new Error('Missing NEXT_PUBLIC_WEBRTC_TOKEN_URL');
             }
 
-            console.log(`Fetching LiveKit token from ${tokenServiceUrl}...`);
+            console.log(`[FLOW] Requesting token+room from ${tokenServiceUrl}/api/generate-room (courseId=${courseId})`);
             const response = await fetch(`${tokenServiceUrl}/api/generate-room`, {
                 method: 'POST',
                 headers: {
@@ -202,44 +248,216 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 },
                 body: JSON.stringify({
                     curriculum_id: courseId,
+                    // Default behavior: spawn both unless explicitly disabled by caller
+                    spawn_agent: options?.spawnAgent !== false,
+                    spawn_browser: options?.spawnBrowser !== false,
                 }),
             });
             
-            console.log('Token fetch response status:', response.status);
+            console.log('[FLOW] Token service response status:', response.status);
             if (!response.ok) {
                 throw new Error(`Failed to fetch token: ${response.status} ${response.statusText}`);
             }
             
             const data = await response.json();
-            console.log('Token fetch response data:', data);
+            // LOG 3: Did we get a valid token from our service?
+            console.log('[DIAGNOSTIC] 3. Token fetched successfully. Preparing to connect to LiveKit.');
+            console.log('[FLOW] Token service response data:', data);
             if (!data.success) {
                 throw new Error('Token generation failed');
             }
-            
+
             const { studentToken: token, livekitUrl: wsUrl, roomName: actualRoomName } = data;
+            // NEW: capture sessionId immediately if provided by token service
+            try {
+                const sid = (data.sessionId as string | null) || null;
+                if (sid && typeof sid === 'string' && sid.startsWith('sess-')) {
+                  sessionIdRef.current = sid;
+                  setSessionManagerSessionIdState(sid);
+                  if (SESSION_FLOW_DEBUG) console.log('[FLOW] Captured sessionId from token service response:', sid);
+                }
+            } catch {}
+            const sessionStatusUrl: string | undefined = (data.sessionStatusUrl as string | undefined) || undefined;
+            if (sessionStatusUrl) {
+              const proxied = toLocalStatusUrl(sessionStatusUrl);
+              sessionStatusUrlRef.current = proxied;
+              setSessionStatusUrlState(proxied);
+            }
             
             // Update the room name with the one generated by the backend
-            console.log(`[useLiveKitSession] Using backend-generated room: ${actualRoomName}`);
+            console.log(`[FLOW] Using backend-generated room: ${actualRoomName}`);
             
             if (!token || !wsUrl) {
                 throw new Error('Invalid token response from backend');
             }
 
+            // Save for UI components (e.g., LiveKitViewer)
+            setLivekitUrl(wsUrl);
+            setLivekitToken(token);
+            console.log(`[FLOW] Connecting to LiveKit at ${wsUrl} with issued token...`);
+            // LOG 4: Are we about to call the connect method?
+            console.log('[DIAGNOSTIC] 4. Calling roomInstance.connect() NOW.');
             await roomInstance.connect(wsUrl, token);
+            // LOG 5: Did the connect method complete without throwing an error?
+            console.log('[DIAGNOSTIC] 5. roomInstance.connect() has completed.');
+            try {
+                // Debug: expose room for console inspection and add event listeners
+                // You can inspect window.lkRoom.remoteParticipants in DevTools
+                // and see trackPublications when they arrive.
+                (window as any).lkRoom = roomInstance;
+                roomInstance.on('participantConnected', (p: any) => {
+                    try { console.log('[LK] participantConnected:', p?.identity); } catch {}
+                    try {
+                        p.on?.('trackSubscribed', (track: any, pub: any, participant: any) => {
+                            try { console.log('[LK] trackSubscribed:', { kind: track?.kind, sid: pub?.trackSid, from: participant?.identity }); } catch {}
+                        });
+                        p.on?.('trackPublished', (pub: any) => {
+                            try { console.log('[LK] trackPublished from', p?.identity, pub?.trackSid); } catch {}
+                        });
+                    } catch {}
+                });
+                // Attach listeners for already present participants
+                Array.from(roomInstance.remoteParticipants.values()).forEach((p: any) => {
+                    try {
+                        p.on?.('trackSubscribed', (track: any, pub: any, participant: any) => {
+                            try { console.log('[LK] trackSubscribed (existing p):', { kind: track?.kind, sid: pub?.trackSid, from: participant?.identity }); } catch {}
+                        });
+                    } catch {}
+                });
+            } catch {}
+            
+            // --- Capture sessionId for cleanup regardless of reconnect setting ---
+            if (sessionStatusUrl) {
+                // background task to fetch sessionId once READY (faster: immediate + 2s polling)
+                (async () => {
+                    try {
+                        const tryFetch = async () => {
+                            const statusUrl = sessionStatusUrlRef.current || sessionStatusUrl;
+                            const stResp = await fetch(statusUrl, { cache: 'no-store' });
+                            if (stResp.ok) {
+                                const st = await stResp.json();
+                                const sessId = st?.sessionId as string | undefined;
+                                if (sessId && sessId.startsWith('sess-')) {
+                                    sessionIdRef.current = sessId;
+                                    setSessionManagerSessionIdState(sessId);
+                                    if (SESSION_FLOW_DEBUG) console.log('[FLOW] Captured sessionId for cleanup:', sessId);
+                                    return true;
+                                  }
+                            }
+                            return false;
+                        };
+                        // Immediate attempt
+                        if (await tryFetch()) return;
+                        // Poll every 2s up to 60s
+                        const MAX_ATTEMPTS = 30;
+                        for (let i = 0; i < MAX_ATTEMPTS && mounted; i++) {
+                            await new Promise(r => setTimeout(r, 2000));
+                            if (await tryFetch()) return;
+                        }
+                    } catch (e) {
+                        console.warn('[FLOW] Could not capture sessionId for cleanup:', e);
+                    }
+                })();
+            }
+
+            // --- DEV OPTION A (gated): Poll session-manager and reconnect viewer to sess-<id> room when READY ---
+            const DEV_FORCE_RECONNECT = (process.env.NEXT_PUBLIC_LK_DEV_RECONNECT || '').toLowerCase() === 'true';
+            if (sessionStatusUrl && DEV_FORCE_RECONNECT) {
+                (async () => {
+                    try {
+                        const statusUrl = sessionStatusUrlRef.current || sessionStatusUrl;
+                        if (SESSION_FLOW_DEBUG) console.log('[FLOW] Polling session status URL:', statusUrl);
+                        // Give some time for the browser pod to join and publish to the initial room.
+                        // If a video track arrives, we will skip the dev reconnect.
+                        await new Promise(r => setTimeout(r, 12000));
+                        const MAX_ATTEMPTS = 24; // ~2 minutes @5s
+                        for (let i = 0; i < MAX_ATTEMPTS && mounted; i++) {
+                            const stResp = await fetch(statusUrl);
+                            if (!stResp.ok) {
+                                if (SESSION_FLOW_DEBUG) console.warn('[FLOW] Session status HTTP', stResp.status);
+                            } else {
+                                const st = await stResp.json();
+                                const status = st?.status as string | undefined;
+                                const sessId = st?.sessionId as string | undefined;
+                                if (SESSION_FLOW_DEBUG) console.log(`[FLOW] Session status attempt ${i+1}:`, status, sessId);
+                                if (status === 'READY' && sessId) {
+                                    // If we already have a remote video track, don't switch rooms.
+                                    try {
+                                        const anyVideo = Array.from(roomInstance.remoteParticipants.values()).some((p: RemoteParticipant) => {
+                                            return Array.from(p.trackPublications.values()).some((pub: TrackPublication) => {
+                                                return (pub.isSubscribed === true) || (!!pub.track);
+                                            });
+                                        });
+                                        if (anyVideo) {
+                                            if (SESSION_FLOW_DEBUG) console.log('[FLOW] Remote video already present; skipping dev reconnect');
+                                            break;
+                                        }
+                                    } catch (chkErr) {
+                                        console.warn('[FLOW] Could not check for remote video presence:', chkErr);
+                                    }
+                                    // Request a token for the session room
+                                    const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string;
+                                    const bearer = await getToken();
+                                    const devResp = await fetch(`${tokenServiceUrl}/api/dev/token-for-room`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {}),
+                                        },
+                                        body: JSON.stringify({ room_name: sessId })
+                                    });
+                                    if (!devResp.ok) {
+                                        console.error('[FLOW] token-for-room failed:', devResp.status, devResp.statusText);
+                                        break;
+                                    }
+                                    const devData = await devResp.json();
+                                    const newToken = devData?.studentToken as string | undefined;
+                                    const newUrl = devData?.livekitUrl as string | undefined;
+                                    if (!newToken || !newUrl) {
+                                        console.error('[FLOW] token-for-room missing fields');
+                                        break;
+                                    }
+                                    if (SESSION_FLOW_DEBUG) console.log(`[FLOW] Reconnecting viewer to session room: ${sessId}`);
+                                    try {
+                                        await roomInstance.disconnect();
+                                    } catch {}
+                                    // allow reconnect
+                                    connectStartedRef.current = false;
+                                    setLivekitUrl(newUrl);
+                                    setLivekitToken(newToken);
+                                    await roomInstance.connect(newUrl, newToken);
+                                    if (SESSION_FLOW_DEBUG) console.log('[FLOW] Viewer reconnected to session room');
+                                    break;
+                                }
+                                if (status === 'FAILED') {
+                                    console.error('[FLOW] Session-manager reported FAILED:', st?.error);
+                                    break;
+                                }
+                            }
+                            await new Promise(r => setTimeout(r, 5000));
+                        }
+                    } catch (err) {
+                        console.error('[FLOW] Error while polling/reconnecting to session room:', err);
+                    }
+                })();
+            }
             if(mounted) {
                 // Connection success is handled by the event listeners below
             }
         } catch (error: unknown) {
+            // LOG E: If anything fails in the try block
+            console.error('[DIAGNOSTIC] ERROR in connectToRoom:', error);
             if (mounted) {
                 setConnectionError(`Failed to connect: ${error instanceof Error ? error.message : String(error)}`);
                 setIsLoading(false);
+                connectStartedRef.current = false; // allow retry on error
             }
         }
     };
     connectToRoom();
 
     return () => { mounted = false; };
-  }, [roomName, userName, courseId, getToken, isSignedIn]);
+  }, [roomName, userName, courseId, options?.spawnAgent, options?.spawnBrowser, getToken, isSignedIn]);
 
 
   // --- EVENT & RPC HANDLER LOGIC ---
@@ -493,109 +711,85 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             } catch (phErr) {
               console.warn('[B2F RPC] Placeholder render failed (non-fatal):', phErr);
             }
-
-            console.log('[B2F RPC] Attempting streaming Visualizer service...');
+            // Call the non-streaming Visualizer endpoint and render when ready
             try {
               if (!visualizerBaseUrl) {
                 throw new Error('NEXT_PUBLIC_VISUALIZER_URL is not set');
               }
-              const streamingResp = await fetch(`${visualizerBaseUrl}/generate-diagram-stream`, {
+              // Prefer JSON endpoint for Excalidraw rendering
+              const resp = await fetch(`${visualizerBaseUrl}/generate-diagram`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
               });
-
-              if (streamingResp.ok && streamingResp.body) {
-                const reader = streamingResp.body.getReader();
-                const decoder = new TextDecoder('utf-8');
-                let buffered = '';
-                let gotAny = false;
-                // Local accumulators for both store and direct Excalidraw path
-                const byId = new Map<string, any>();
-                const byKey = new Map<string, any>();
-                let ordered: any[] = [];
-                let localSkeleton: any[] = [];
-                // Clear placeholder before first element
+              if (!resp.ok) {
+                throw new Error(`Visualizer service returned ${resp.status}`);
+              }
+              let returned: any[] = [];
+              try {
+                const contentType = resp.headers.get('content-type') || '';
+                if (contentType.includes('application/json')) {
+                  const diagramData = await resp.json();
+                  returned = Array.isArray(diagramData?.elements) ? diagramData.elements : [];
+                } else {
+                  // Likely Mermaid text. Read it as text and forward to Mermaid debug hook if present.
+                  const text = await resp.text();
+                  if (text && typeof window !== 'undefined' && (window as any).__mermaidDebug?.setDiagram) {
+                    try { (window as any).__mermaidDebug.setDiagram(text); } catch {}
+                  }
+                  // Then, try a follow-up JSON call to get skeleton elements for Excalidraw.
+                  const jsonResp = await fetch(`${visualizerBaseUrl}/generate-diagram`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
+                  });
+                  if (jsonResp.ok) {
+                    const jsonData = await jsonResp.json();
+                    returned = Array.isArray(jsonData?.elements) ? jsonData.elements : [];
+                  } else {
+                    console.warn('[B2F RPC] Mermaid stream received; JSON follow-up failed with', jsonResp.status);
+                  }
+                }
+              } catch (parseErr) {
+                // If JSON parsing failed due to Mermaid text
                 try {
-                  const { setVisualizationData } = useSessionStore.getState();
-                  if (setVisualizationData) {
-                    setVisualizationData([] as any);
-                  } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                    window.__excalidrawDebug.setElements([]);
+                  const text = await resp.text();
+                  if (text && typeof window !== 'undefined' && (window as any).__mermaidDebug?.setDiagram) {
+                    try { (window as any).__mermaidDebug.setDiagram(text); } catch {}
                   }
                 } catch {}
-
-                while (true) {
-                  const { value, done } = await reader.read();
-                  if (done) break;
-                  buffered += decoder.decode(value, { stream: true });
-                  gotAny = true;
-                  
-                  // Update Mermaid diagram with accumulated text
-                  try {
-                    if (typeof window !== 'undefined' && window.__mermaidDebug) {
-                      window.__mermaidDebug.setDiagram(buffered.trim());
-                    }
-                  } catch (mermaidErr) {
-                    console.warn('[B2F RPC] Mermaid update failed:', mermaidErr);
-                  }
-                }
-                if (!gotAny) {
-                  console.warn('[B2F RPC] Streaming returned no elements, falling back to batch endpoint');
-                  throw new Error('No streaming elements');
-                }
-                if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Streaming visualization completed');
-              } else {
-                throw new Error(`Streaming not available: status ${streamingResp.status}`);
               }
-            } catch (streamErr) {
-              console.warn('[B2F RPC] Streaming failed, falling back to non-streaming:', streamErr);
+              if (returned.length === 0) {
+                console.warn('[B2F RPC] Visualizer returned no elements');
+              }
+              const { setVisualizationData } = useSessionStore.getState();
+              if (setVisualizationData) {
+                setVisualizationData(returned);
+              } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
+                const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(returned);
+                window.__excalidrawDebug.setElements(excalidrawElements);
+              }
+              if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Visualization generated via Visualizer service');
+            } catch (svcErr) {
+              console.error('[B2F RPC] ❌ Failed to call Visualizer service:', svcErr);
+              // Replace placeholder with an error message on failure
               try {
-                if (!visualizerBaseUrl) {
-                  throw new Error('NEXT_PUBLIC_VISUALIZER_URL is not set');
-                }
-                const resp = await fetch(`${visualizerBaseUrl}/generate-diagram`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
-                });
-                if (!resp.ok) {
-                  throw new Error(`Visualizer service returned ${resp.status}`);
-                }
-                const diagramData = await resp.json();
-                const returned = Array.isArray(diagramData?.elements) ? diagramData.elements : [];
-                if (returned.length === 0) {
-                  console.warn('[B2F RPC] Visualizer returned no elements');
-                }
+                const errorSkeleton = [
+                  {
+                    id: 'generating_error',
+                    type: 'text',
+                    text: '⚠️ Could not generate diagram.'
+                  }
+                ];
                 const { setVisualizationData } = useSessionStore.getState();
                 if (setVisualizationData) {
-                  setVisualizationData(returned);
+                  setVisualizationData(errorSkeleton as any);
                 } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                  const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(returned);
+                  const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(errorSkeleton);
                   window.__excalidrawDebug.setElements(excalidrawElements);
                 }
-                if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Visualization generated via Visualizer service');
-              } catch (svcErr) {
-                console.error('[B2F RPC] ❌ Failed to call Visualizer service:', svcErr);
-                // Replace placeholder with an error message on failure
-                try {
-                  const errorSkeleton = [
-                    {
-                      id: 'generating_error',
-                      type: 'text',
-                      text: '⚠️ Could not generate diagram.'
-                    }
-                  ];
-                  const { setVisualizationData } = useSessionStore.getState();
-                  if (setVisualizationData) {
-                    setVisualizationData(errorSkeleton as any);
-                  } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                    const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(errorSkeleton);
-                    window.__excalidrawDebug.setElements(excalidrawElements);
-                  }
-                } catch (errRender) {
-                  console.warn('[B2F RPC] Error placeholder render failed (non-fatal):', errRender);
-                }
+              } catch (errRender) {
+                console.warn('[B2F RPC] Error placeholder render failed (non-fatal):', errRender);
               }
             }
           }
@@ -614,7 +808,24 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     };
 
     const onConnected = async () => {
+        // LOG 6: The final goal - did the event fire?
+        console.log('[DIAGNOSTIC] 6. The onConnected event handler has FIRED!');
+        console.log('[FLOW] LiveKit Connected');
         setIsLoading(false);
+        
+        if (roomInstance.localParticipant) {
+            try {
+                console.log("!!!!!!!!!! ATTEMPTING TO REGISTER RPC HANDLER NOW !!!!!!!!!!");
+                roomInstance.localParticipant.registerRpcMethod("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
+                console.log('[useLiveKitSession] Registered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
+            } catch (e) {
+                if (e instanceof RpcError && (e as any).message?.includes("already registered")) {
+                    console.warn("RPC method already registered. This is expected with React Strict Mode / HMR.");
+                } else {
+                    console.error("Failed to register client-side RPC handler:", e);
+                }
+            }
+        }
         // Set up microphone but keep it disabled by default
         try {
             if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Setting up microphone...');
@@ -658,19 +869,17 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     };
     
     const onDisconnected = () => {
+        console.log('[FLOW] LiveKit Disconnected');
         setIsConnected(false);
         setIsLoading(false);
         agentServiceClientRef.current = null;
-        disconnectVNC();
+        connectStartedRef.current = false; // allow reconnect after disconnect
         
         // Clean up microphone track
         if (microphoneTrackRef.current) {
             microphoneTrackRef.current.stop();
             microphoneTrackRef.current = null;
         }
-
-        // Clear any lingering transcript bubble in the UI
-        try { transcriptEventEmitter.emitTranscript(''); } catch {}
     };
 
     // The handler for the agent's "I'm ready" signal
@@ -690,9 +899,23 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             const audioElement = audioTrack.attach();
             audioElement.autoplay = true;
             audioElement.volume = 1.0;
+            audioElement.muted = false;
             
             // Add to DOM temporarily to ensure playback
             document.body.appendChild(audioElement);
+            
+            // Try to proactively start audio playback (best-effort; may be blocked until user gesture)
+            try { (roomInstance as any)?.startAudio?.(); } catch {}
+            try {
+                const p = audioElement.play();
+                if (p && typeof p.catch === 'function') {
+                    p.catch((e: any) => {
+                        console.warn('[FLOW] Agent audio autoplay may be blocked. Interact with the page to enable sound.', e);
+                    });
+                }
+            } catch (e) {
+                console.warn('[FLOW] Agent audio autoplay call failed (non-fatal):', e);
+            }
             
             // Clean up when track ends
             track.on('ended', () => {
@@ -741,15 +964,31 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         try {
             const data = JSON.parse(new TextDecoder().decode(payload));
             console.log('[DataReceived] Packet from', participant.identity, { kind, topic, data });
+
+            // --- Handle AI debrief question relayed by the browser pod ---
+            if (data?.type === 'ai_debrief_question' && typeof data?.text === 'string' && data.text.length > 0) {
+                console.log('[FLOW] Received AI debrief question from pod:', data.text);
+                try {
+                    const { setDebriefMessage, setImprintingMode, setActiveView, setConceptualStarted } = useSessionStore.getState();
+                    setDebriefMessage({ text: data.text });
+                    setImprintingMode('DEBRIEF_CONCEPTUAL');
+                    setActiveView('excalidraw');
+                    setConceptualStarted(true);
+                    console.log('[FLOW] Store updated for debrief; UI will re-render.');
+                } catch (e) {
+                    console.warn('[FLOW] Failed to apply debrief update to store:', e);
+                }
+                return; // Stop further processing for this packet
+            }
             if (data.type === 'agent_ready' && roomInstance.localParticipant) {
-                console.log(`[useLiveKitSession] Agent ready signal received from ${participant.identity}`);
+                console.log(`[FLOW] Agent ready signal received from ${participant.identity}`);
                 setAgentIdentity(participant.identity); // Store the agent identity
                 const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, participant.identity);
                 agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
                 
                 // Send confirmation RPC to agent to complete handshake
                 try {
-                    console.log(`[useLiveKitSession] Sending confirmation RPC to agent...`);
+                    console.log(`[FLOW] Sending confirmation RPC to agent...`);
                     const confirmationResponse = await roomInstance.localParticipant.performRpc({
                         destinationIdentity: participant.identity,
                         method: 'rox.interaction.AgentInteraction/TestPing',
@@ -760,13 +999,15 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                             roomName: roomName
                         })))
                     });
-                    console.log(`[useLiveKitSession] Agent confirmation response:`, confirmationResponse);
+                    console.log(`[FLOW] Agent confirmation response:`, confirmationResponse);
                     setIsConnected(true); // NOW we are fully connected and ready to interact
+                    console.log('[FLOW] Frontend ready (agent connected)');
                     
                 } catch (rpcError) {
-                    console.error(`[useLiveKitSession] Failed to send confirmation RPC to agent:`, rpcError);
+                    console.error(`[FLOW] Failed to send confirmation RPC to agent:`, rpcError);
                     // Still set connected as the agent is ready, even if confirmation failed
                     setIsConnected(true);
+                    console.log('[FLOW] Frontend ready (agent connected, handshake error ignored)');
                 }
             }
 
@@ -835,18 +1076,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     roomInstance.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
     roomInstance.on(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
 
-    if (roomInstance.localParticipant) {
-      try {
-        roomInstance.localParticipant.registerRpcMethod("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
-        console.log('[useLiveKitSession] Registered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
-      } catch (e) {
-        if (e instanceof RpcError && e.message.includes("already registered")) {
-            console.warn("RPC method already registered. This is expected with React Strict Mode / HMR.");
-        } else {
-            console.error("Failed to register client-side RPC handler:", e);
-        }
-      }
-    }
+    // RPC handler is registered inside onConnected to ensure localParticipant exists.
 
     return () => {
       roomInstance.off(RoomEvent.Connected, onConnected);
@@ -882,6 +1112,107 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, []);
 
+  // --- Kickstart: send an initial navigate over LiveKit DataChannel so the pod draws content ---
+  useEffect(() => {
+    if (!isConnected) return;
+    if (initialNavSentRef.current) return;
+    initialNavSentRef.current = true;
+    try {
+      const startUrl = process.env.NEXT_PUBLIC_BROWSER_START_URL || 'https://example.com';
+      const payload = JSON.stringify({ action: 'navigate', url: startUrl });
+      const bytes = new TextEncoder().encode(payload);
+      try {
+        roomInstance?.localParticipant?.publishData(bytes);
+        if (SESSION_FLOW_DEBUG) console.log('[FLOW] Sent initial navigate to', startUrl);
+      } catch (e) {
+        console.warn('[FLOW] Failed to publish initial navigate:', e);
+      }
+    } catch {}
+  }, [isConnected]);
+
+  // --- Deletion helper shared by multiple event hooks ---
+  useEffect(() => {
+    const sendDelete = async () => {
+      try {
+        let sessId = sessionIdRef.current;
+        if (!sessId) {
+          // Try to resolve sessionId synchronously from status URL if set
+          const statusUrl = sessionStatusUrlRef.current;
+          if (statusUrl) {
+            try {
+              const ctrl = new AbortController();
+              const t = setTimeout(() => ctrl.abort(), 1500);
+              const stResp = await fetch(statusUrl, { signal: ctrl.signal, cache: 'no-store' });
+              clearTimeout(t);
+              if (stResp.ok) {
+                const st = await stResp.json();
+                const id = st?.sessionId as string | undefined;
+                if (id && id.startsWith('sess-')) {
+                  sessId = id;
+                  sessionIdRef.current = id;
+                  if (SESSION_FLOW_DEBUG) console.log('[FLOW] Resolved sessionId during unload:', id);
+                }
+              }
+            } catch {}
+          }
+          // Poll for sessionId for 2 seconds
+          if (!sessId) {
+            for (let i = 0; i < 10; i++) {
+              await new Promise(resolve => setTimeout(resolve, 200));
+              sessId = sessionIdRef.current;
+              if (sessId) break;
+            }
+          }
+        }
+        if (!sessId) return;
+        // Use Next.js API proxy so we don't depend on external origin/CORS
+        const url = `/api/sessions/${sessId}?_method=DELETE`;
+        // Prefer keepalive fetch on unload
+        try {
+          await fetch(url, {
+            method: 'DELETE',
+            keepalive: true,
+            mode: 'cors',
+          });
+        } catch {
+          // fallback to sendBeacon
+          try {
+            if (typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
+              const blob = new Blob([], { type: 'text/plain' });
+              (navigator as any).sendBeacon(url, blob);
+            }
+          } catch {}
+        }
+        if (SESSION_FLOW_DEBUG) console.log('[FLOW] Sent session delete beacon for', sessId);
+      } catch (e) {
+        console.warn('[FLOW] Session delete beacon failed (non-fatal):', e);
+      }
+    };
+    // Expose for other effects
+    sendDeleteNowRef.current = () => sendDelete();
+    // Register only real unload events to avoid premature deletion
+    if (DELETE_ON_UNLOAD) {
+      const onUnload = () => { try { isUnloadingRef.current = true; void sendDelete(); } catch {} };
+      window.addEventListener('beforeunload', onUnload);
+      return () => {
+        window.removeEventListener('beforeunload', onUnload);
+        // Do NOT send delete on React unmount/HMR
+        if (isUnloadingRef.current) {
+          // In the narrow case cleanup runs during a real unload, deletion was already fired above
+        }
+      };
+    } else {
+      if (SESSION_FLOW_DEBUG) console.log('[FLOW] Auto-delete on unload is disabled via NEXT_PUBLIC_SESSION_DELETE_ON_UNLOAD');
+      return () => {};
+    }
+  }, []);
+
+  // --- Do NOT auto-delete on transient LiveKit disconnects ---
+  useEffect(() => {
+    // Keep this effect to ensure listeners are cleaned if added in future
+    return () => {};
+  }, []);
+
   // Convenience method for Suggested Responses selection
   const selectSuggestedResponse = useCallback(async (suggestion: { id: string; text: string; reason?: string }) => {
     try {
@@ -895,6 +1226,33 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, [startTask, clearSuggestedResponses]);
 
+  // Expose an imperative deletion helper so pages can terminate the pod when leaving route
+  const deleteSessionNow = useCallback(async () => {
+    try {
+      const fn = sendDeleteNowRef.current;
+      if (typeof fn === 'function') {
+        await fn();
+      }
+    } catch (e) {
+      if (SESSION_FLOW_DEBUG) console.warn('[FLOW] deleteSessionNow error (non-fatal):', e);
+    }
+  }, []);
+
+  // Publish arbitrary interaction payloads over LiveKit Data Channel to the browser bot
+  const sendBrowserInteraction = useCallback(async (payload: object) => {
+    try {
+      if (roomInstance.state !== ConnectionState.Connected) {
+        console.warn('[Interaction] Cannot send, room not connected');
+        return;
+      }
+      const json = JSON.stringify(payload);
+      const bytes = new TextEncoder().encode(json);
+      await roomInstance.localParticipant.publishData(bytes);
+    } catch (e) {
+      console.error('[Interaction] Failed to publish data:', e);
+    }
+  }, []);
+
   return { 
     isConnected, 
     isLoading, 
@@ -905,5 +1263,11 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     transcriptionMessages,
     statusMessages,
     selectSuggestedResponse,
+    livekitUrl,
+    livekitToken,
+    deleteSessionNow,
+    sendBrowserInteraction,
+    sessionStatusUrl: sessionStatusUrlState,
+    sessionManagerSessionId: sessionManagerSessionIdState,
   };
 }

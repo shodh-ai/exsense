@@ -25,6 +25,12 @@ export interface LearningObjective {
   concepts: Concept[];
 }
 
+// Debrief message structure used across the app
+export interface DebriefMessage {
+  hypothesis?: string;
+  text: string;
+}
+
 interface SessionState {
     // --- State Properties ---
     activeView: SessionView;
@@ -44,6 +50,8 @@ interface SessionState {
     // --- Imprinting / Session Controller State ---
     imprinting_mode: string;
     currentLO: string | null;
+    // When true, user is in conceptual debrief flow and allowed to "Show Me"
+    conceptualStarted: boolean;
 
     // --- New Imprinting Flow State ---
     imprintingPhase: ImprintingPhase;
@@ -67,10 +75,15 @@ interface SessionState {
     // --- Imprinting Actions ---
     setImprintingMode: (mode: string) => void;
     setCurrentLO: (lo: string | null) => void;
+    setConceptualStarted: (started: boolean) => void;
 
     // --- New Imprinting Flow Actions ---
     setImprintingPhase: (phase: ImprintingPhase) => void;
     setCurriculumDraft: (draft: LearningObjective[]) => void;
+
+    // --- Debrief message state ---
+    debriefMessage: DebriefMessage | null;
+    setDebriefMessage: (message: DebriefMessage | null) => void;
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -94,10 +107,13 @@ export const useSessionStore = create<SessionState>()(
             // --- Imprinting defaults ---
             imprinting_mode: 'DEBRIEF_CONCEPTUAL',
             currentLO: null,
+            conceptualStarted: false,
 
             // --- New Imprinting Flow defaults ---
             imprintingPhase: 'SEED_INPUT',
             curriculumDraft: [],
+            // --- Debrief message defaults ---
+            debriefMessage: null,
 
             // --- Actions Implementation ---
             setActiveView: (view) => set({ activeView: view }),
@@ -117,10 +133,13 @@ export const useSessionStore = create<SessionState>()(
             // --- Imprinting Actions ---
             setImprintingMode: (mode) => set({ imprinting_mode: mode }),
             setCurrentLO: (lo) => set({ currentLO: lo }),
+            setConceptualStarted: (started) => set({ conceptualStarted: started }),
 
             // --- New Imprinting Flow Actions ---
             setImprintingPhase: (phase) => set({ imprintingPhase: phase }),
             setCurriculumDraft: (draft) => set({ curriculumDraft: draft }),
+            // --- Debrief message action ---
+            setDebriefMessage: (message) => set({ debriefMessage: message }),
         }),
         { name: "SessionUIStore" }
     )

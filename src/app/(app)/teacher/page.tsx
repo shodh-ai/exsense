@@ -275,6 +275,7 @@ interface TeacherFooterProps {
     screenshotIntervalSec: number;
     onSaveScriptClick?: () => void;
     onVSCodeClick?: () => void;
+    onPasteClick?: () => void;
     isRecording: boolean;
     isPaused: boolean;
     recordingDuration: number;
@@ -295,6 +296,7 @@ const TeacherFooter = ({
     screenshotIntervalSec, 
     onSaveScriptClick,
     onVSCodeClick,
+    onPasteClick,
     isRecording,
     isPaused,
     recordingDuration,
@@ -346,6 +348,14 @@ const TeacherFooter = ({
                         className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
                     >
                         <img src="/Code.svg" alt="Save Script" className="w-6 h-6" />
+                    </button>
+                    <button
+
+                        onClick={onPasteClick}
+                        title="Paste from your clipboard into the session"
+                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
+                    >
+                        <img src="/clipboard-paste.svg" alt="Paste from Clipboard" className="w-6 h-6" />
                     </button>
                     <button
                         onClick={onVSCodeClick}
@@ -575,7 +585,7 @@ export default function Session() {
             // eslint-disable-next-line no-console
             console.warn('[TeacherPage] sendBrowser failed', e);
         }
-    }, [sendBrowserInteraction]);
+
 
     // --- Debug watchers for critical state --- (trimmed)
 
@@ -583,6 +593,7 @@ export default function Session() {
         // eslint-disable-next-line no-console
         console.log('[TeacherPage] activeView changed:', activeView);
     }, [activeView]);
+
 
     // VNC auto-create and cache restore removed
 
@@ -598,7 +609,7 @@ export default function Session() {
         console.log('[TeacherPage] UI: Select Conceptual');
         setImprintingMode('DEBRIEF_CONCEPTUAL');
         setActiveView('excalidraw');
-        setIsConceptualStarted(false);
+        setConceptualStarted(false);
         setIsShowMeRecording(false);
     };
 
@@ -738,8 +749,12 @@ export default function Session() {
     const handleReviewComplete = () => setImprintingPhase('LO_SELECTION');
     const handleLoSelected = (loName: string) => { setCurrentLO(loName); setImprintingPhase('LIVE_IMPRINTING'); };
 
-    const [currentDebrief, setCurrentDebrief] = useState<DebriefMessage | null>(null);
-    const [isConceptualStarted, setIsConceptualStarted] = useState<boolean>(false);
+    // Debrief message now comes from global store so LiveKit updates can re-render UI
+    const currentDebrief = useSessionStore((s) => s.debriefMessage);
+    const setDebriefMessage = useSessionStore((s) => s.setDebriefMessage);
+    // Conceptual started flag also comes from store (enables Show Me after debrief arrives)
+    const conceptualStarted = useSessionStore((s) => s.conceptualStarted);
+    const setConceptualStarted = useSessionStore((s) => s.setConceptualStarted);
     const [topicInput, setTopicInput] = useState<string>('');
     const [seedText, setSeedText] = useState<string>('');
     const topicInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -828,7 +843,7 @@ export default function Session() {
             const newDebrief = {
                 text: nextResponse !== currentQuestion ? nextResponse : "Can you elaborate on that further?"
             };
-            setCurrentDebrief(newDebrief);
+            setDebriefMessage(newDebrief);
             setStatusMessage('AI replied (Mocked).');
         } else {
             try {
@@ -840,17 +855,17 @@ export default function Session() {
                     current_lo: currentLO || undefined
                 });
                 const aiText = resp?.text || 'Got it. Let\'s continue.';
-                setCurrentDebrief({ text: aiText });
+                setDebriefMessage({ text: aiText });
                 setStatusMessage('AI replied.');
                 setIsStartAllowed(!(aiText && /\?/.test(aiText)));
             } catch (e: any) {
-                setCurrentDebrief({ text: `Sorry, I encountered an error. ${e?.message}` });
+                setDebriefMessage({ text: `Sorry, I encountered an error. ${e?.message}` });
             }
         }
     };
 
     const handleShowMe = async () => {
-        if (imprinting_mode !== 'DEBRIEF_CONCEPTUAL' || !isConceptualStarted) return;
+        if (imprinting_mode !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted) return;
         const lastQ = currentDebrief?.text || '';
         if (!lastQ) return;
         const msg = (topicInput || '').trim();
@@ -966,10 +981,10 @@ export default function Session() {
                         hypothesis = aiText.substring(0, lastSentenceEnd + 1);
                         question = aiText.substring(lastSentenceEnd + 2).trim();
                     }
-                    setCurrentDebrief({ hypothesis, text: question });
+                    setDebriefMessage({ hypothesis, text: question });
                     setImprintingMode('DEBRIEF_CONCEPTUAL');
                     setActiveView('excalidraw');
-                    setIsConceptualStarted(true);
+                    setConceptualStarted(true);
                     setIsStartAllowed(false);
                     setStatusMessage('AI has a question for you (Mocked).');
                     setTimeout(() => topicInputRef.current?.focus(), 0);
@@ -1152,6 +1167,29 @@ export default function Session() {
     };
 
 
+    // Paste text from local clipboard into the remote session
+    const handlePasteFromLocal = async () => {
+        try {
+            const clipboardText = await navigator.clipboard.readText();
+            if (clipboardText) {
+                setStatusMessage('Pasting from clipboard...');
+                await sendBrowser('paste_from_local', { text: clipboardText });
+                setStatusMessage('Pasted content into session.');
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] Pasted text from local clipboard into pod.');
+            } else {
+                setStatusMessage('Your clipboard is empty.');
+            }
+        } catch (err: any) {
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] Clipboard read failed:', err);
+            setStatusMessage('Could not access clipboard. Please grant permission in your browser.');
+            setSubmitError(`Clipboard Error: ${err?.message || String(err)}`);
+        }
+    };
+
+
+
     if (!isLoaded) return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
     if (isIntroActive) return <IntroPage onAnimationComplete={handleIntroComplete} />;
 
@@ -1215,6 +1253,7 @@ export default function Session() {
                                     onIncreaseTimer={handleIncreaseTimer}
                                     screenshotIntervalSec={screenshotIntervalSec}
                                     onSaveScriptClick={handleSaveSetupText}
+                                    onPasteClick={handlePasteFromLocal}
                                     onVSCodeClick={handleSwitchToVSCode}
                                     isRecording={isRecording}
                                     isPaused={isPaused}
@@ -1223,7 +1262,7 @@ export default function Session() {
                                     onTogglePauseResume={handleTogglePauseResume}
                                     onSubmitEpisode={handleSubmitEpisode}
                                     onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !isConceptualStarted || isRecording}
+                                    isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted || isRecording}
                                     onFinalizeTopicClick={handleFinalizeTopic}
                                     isFinalizeDisabled={!currentLO || isFinalizingLO}
                                     onFinishClick={handleFinishClick}
@@ -1234,7 +1273,7 @@ export default function Session() {
                                     onFinishClick={handleFinishClick}
                                     isFinishDisabled={isSubmitting}
                                     onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={!isConceptualStarted || isRecording}
+                                    isShowMeDisabled={!conceptualStarted || isRecording}
                                 />
                                 )}
                             </>
