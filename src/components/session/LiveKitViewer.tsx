@@ -1,6 +1,12 @@
 "use client";
-import React, { useEffect, useMemo, useState } from 'react';
-import { Track, RemoteVideoTrack, TrackPublication, VideoQuality, RoomEvent, ConnectionState, Room, RemoteParticipant } from 'livekit-client';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { Track, RemoteTrack, RemoteVideoTrack, RemoteTrackPublication, VideoQuality, RoomEvent, ConnectionState, Room, RemoteParticipant } from 'livekit-client';
+
+declare global {
+  interface Window {
+    lkRoom?: Room;
+  }
+}
 
 interface LiveKitViewerProps {
   room: Room; // REQUIRED existing Room instance, already connected by the hook
@@ -24,202 +30,134 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
   const [ready, setReady] = useState(false);
   const [captureSize, setCaptureSize] = useState<CaptureSize>(null);
   const [tick, setTick] = useState(0); // force re-render on room events
-  const [videoTracks, setVideoTracks] = useState<{ pub: any; track: RemoteVideoTrack }[]>([]);
+  const [videoTracks, setVideoTracks] = useState<{ pub: RemoteTrackPublication; track: RemoteVideoTrack }[]>([]);
 
-  // Expose the LiveKit room and a helper sender for DevTools-based testing
+  // Robust iterator for remote participant video publications across SDK variations
+  const eachVideoPublication = (p: RemoteParticipant, fn: (pub: RemoteTrackPublication) => void) => {
+    try {
+      p.trackPublications.forEach((pub) => {
+        if (pub?.kind === Track.Kind.Video) fn(pub);
+      });
+    } catch {}
+  };
+
+  // Expose the LiveKit room for DevTools-based testing
   useEffect(() => {
     try {
-      (window as any).lkRoom = room;
-      (window as any).lkSend = (obj: any) => {
-        try {
-          const bytes = new TextEncoder().encode(JSON.stringify(obj));
-          (room as any)?.localParticipant?.publishData?.(bytes, { reliable: true });
-          console.log('[DEV] lkSend published', obj);
-        } catch (e) {
-          console.warn('[DEV] lkSend failed', e);
-        }
-      };
-      console.log('[DEV] window.lkRoom and window.lkSend set');
+      window.lkRoom = room;
+      console.log('[DEV] window.lkRoom set');
     } catch {}
     return () => {
       try {
-        if ((window as any).lkRoom === room) delete (window as any).lkRoom;
-        if ((window as any).lkSend) delete (window as any).lkSend;
+        if (window.lkRoom === room) delete window.lkRoom;
       } catch {}
     };
   }, [room]);
 
   // Helper to rebuild videoTracks from current room state
   const rebuildFromRoom = () => {
-    const next: { pub: any; track: RemoteVideoTrack }[] = [];
-    try {
-      room.remoteParticipants.forEach((p: RemoteParticipant) => {
-        p.trackPublications.forEach((pub) => {
-          try {
-            if (pub?.kind === Track.Kind.Video) {
-              const t = pub.track as RemoteVideoTrack | undefined;
-              if (t && typeof t.attach === 'function') {
-                next.push({ pub, track: t });
-              }
-            }
-          } catch {}
-        });
+    const next: { pub: RemoteTrackPublication; track: RemoteVideoTrack }[] = [];
+    room.remoteParticipants.forEach((p: RemoteParticipant) => {
+      eachVideoPublication(p, (pub) => {
+        if (pub.kind === Track.Kind.Video) {
+          const track = pub.track as RemoteVideoTrack | undefined;
+          if (track && track.sid) {
+            next.push({ pub, track });
+          }
+        }
       });
-    } catch {}
+    });
     setVideoTracks(next);
   };
 
   useEffect(() => {
-    // Room-level diagnostics and force re-render on relevant events
-    try {
-      const force = () => setTick((x) => x + 1);
-      const onPc = (p: any) => { try { console.log('[LK][viewer] participantConnected:', p?.identity); } catch {} force(); };
-      const onPd = (p: any) => { try { console.log('[LK][viewer] participantDisconnected:', p?.identity); } catch {} force(); };
-      const onPub = (pub: any, p: any) => {
-        try {
-          console.log('[LK][viewer] trackPublished:', { from: p?.identity, kind: pub?.kind, source: pub?.source, sid: pub?.trackSid });
-          if (pub?.kind === Track.Kind.Video && typeof (pub as any)?.setSubscribed === 'function') {
-            (pub as any).setSubscribed(true);
-            if (typeof (pub as any)?.setVideoQuality === 'function') (pub as any).setVideoQuality(VideoQuality.HIGH);
-            console.log('[LK][viewer] explicitly subscribed to new video pub', pub?.trackSid);
-          }
-        } catch {}
-        rebuildFromRoom();
-      };
-      const onSub = (track: any, pub: any, p: any) => {
-        try { console.log('[LK][viewer] trackSubscribed:', { from: p?.identity, kind: track?.kind, sid: pub?.trackSid }); } catch {}
-        try {
-          if (track?.kind === Track.Kind.Video) {
-            setVideoTracks((prev) => {
-              const exists = prev.some((v) => v.track.sid === track.sid || v.pub?.trackSid === pub?.trackSid);
-              return exists ? prev : [...prev, { pub, track } as any];
-            });
-          }
-        } catch {}
-        force();
-      };
-      const onUnsub = (track: any, pub: any, p: any) => {
-        try {
-          console.log('[LK][viewer] trackUnsubscribed:', { from: p?.identity, kind: track?.kind, sid: pub?.trackSid });
-          (pub as any)?.setSubscribed?.(true);
-          console.log('[LK][viewer] re-subscribed to publication', pub?.trackSid);
-        } catch (e) {
-          console.warn('[LK][viewer] failed to re-subscribe on unsubscribe:', e);
-        }
-        try {
-          setVideoTracks((prev) => prev.filter((v) => v.track.sid !== track?.sid && v.pub?.trackSid !== pub?.trackSid));
-        } catch {}
-        force();
-      };
-      const onData = (payload: Uint8Array, participant?: any) => {
-        try {
-          const txt = new TextDecoder().decode(payload);
-          const obj = JSON.parse(txt);
-          if (obj && typeof obj === 'object') {
-            const w = Number(obj.width || obj.w);
-            const h = Number(obj.height || obj.h);
-            if (obj.type === 'meta' && Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
-              setCaptureSize({ w, h });
-              console.log('[LK][viewer] capture meta received', { w, h, from: participant?.identity });
+    const force = () => setTick((x) => x + 1);
+    const onSub = (track: RemoteTrack, pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+      if (track.kind === Track.Kind.Video) rebuildFromRoom();
+    };
+    const onUnsub = (track: RemoteTrack, pub: RemoteTrackPublication, participant: RemoteParticipant) => {
+      if (track.kind === Track.Kind.Video) rebuildFromRoom();
+    };
+    const onPub = (pub: RemoteTrackPublication) => {
+      if (pub.kind === Track.Kind.Video) {
+        pub.setSubscribed(true);
+        pub.setVideoQuality(VideoQuality.HIGH);
+      }
+    };
+
+    // Main data handler
+    const onData = async (payload: Uint8Array, participant?: RemoteParticipant) => {
+      try {
+        const txt = new TextDecoder().decode(payload);
+        const obj = JSON.parse(txt);
+        if (obj && typeof obj === 'object') {
+          // Handle remote clipboard content
+          if (obj.type === 'clipboard_content' && typeof obj.content === 'string') {
+            try {
+              await navigator.clipboard.writeText(obj.content);
+              console.log('[LK][viewer] Copied from remote to local clipboard.');
+            } catch (err) {
+              console.error('[LK][viewer] Failed to write to local clipboard:', err);
             }
           }
-        } catch {}
-      };
-      room.on(RoomEvent.ParticipantConnected, onPc);
-      room.on(RoomEvent.ParticipantDisconnected, onPd);
-      room.on(RoomEvent.TrackPublished, onPub);
-      room.on(RoomEvent.TrackSubscribed, onSub);
-      room.on(RoomEvent.TrackUnsubscribed, onUnsub);
-      room.on(RoomEvent.DataReceived as any, onData);
-      // Seed from current room state at mount
-      rebuildFromRoom();
-      return () => {
-        room.off(RoomEvent.ParticipantConnected, onPc);
-        room.off(RoomEvent.ParticipantDisconnected, onPd);
-        room.off(RoomEvent.TrackPublished, onPub);
-        room.off(RoomEvent.TrackSubscribed, onSub);
-        room.off(RoomEvent.TrackUnsubscribed, onUnsub);
-        room.off(RoomEvent.DataReceived as any, onData);
-      };
-    } catch {}
-  }, [room]);
+          // Handle capture metadata
+          const w = Number(obj.width || obj.w);
+          const h = Number(obj.height || obj.h);
+          if (obj.type === 'meta' && Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+            setCaptureSize({ w, h });
+            console.log('[LK][viewer] capture meta received', { w, h, from: participant?.identity });
+          }
+        }
+      } catch {}
+    };
 
-  // Disable adaptive stream & dynacast and enforce default subscription
-  useEffect(() => {
-    try {
-      (room as any)?.setAdaptiveStream?.(false);
-      (room as any)?.setDynacast?.(false);
-      (room as any)?.setDefaultSubscription?.(true);
-      console.log('[LK][viewer] disabled adaptiveStream/dynacast and enabled default subscription');
-    } catch {}
+    room.on(RoomEvent.ParticipantConnected, force);
+    room.on(RoomEvent.ParticipantDisconnected, force);
+    room.on(RoomEvent.TrackPublished, onPub);
+    room.on(RoomEvent.TrackSubscribed, onSub);
+    room.on(RoomEvent.TrackUnsubscribed, onUnsub);
+    room.on(RoomEvent.DataReceived, onData);
+
+    rebuildFromRoom();
+
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, force);
+      room.off(RoomEvent.ParticipantDisconnected, force);
+      room.off(RoomEvent.TrackPublished, onPub);
+      room.off(RoomEvent.TrackSubscribed, onSub);
+      room.off(RoomEvent.TrackUnsubscribed, onUnsub);
+      room.off(RoomEvent.DataReceived, onData);
+    };
   }, [room]);
 
   // Watchdog: periodically ensure we remain subscribed to remote video pubs
   useEffect(() => {
     const t = setInterval(() => {
-      try {
-        room.remoteParticipants.forEach((p) => {
-          try {
-            const pubs: any[] = Array.from(((p as any)?.trackPublications?.values?.() || []) as any);
-            pubs.forEach((pub: any) => {
-              if (pub?.kind === Track.Kind.Video && typeof pub?.setSubscribed === 'function' && pub?.isSubscribed === false) {
-                pub.setSubscribed(true);
-              }
-            });
-          } catch {}
+      room.remoteParticipants.forEach((p) => {
+        // Iterate robustly across SDK versions
+        eachVideoPublication(p as RemoteParticipant, (pub: RemoteTrackPublication) => {
+          if (!pub.isSubscribed) {
+            try { pub.setSubscribed(true); } catch {}
+          }
         });
-      } catch {}
+      });
     }, 4000);
     return () => clearInterval(t);
   }, [room]);
 
+  // Force high quality for any tracked video publications
   useEffect(() => {
-    try {
-      const infos: { id: string; vids: number }[] = [];
-      room.remoteParticipants.forEach((p) => {
-        try {
-          const count = Array.from((p as any)?.trackPublications?.values?.() || []).filter((pub: any) => pub?.kind === Track.Kind.Video).length;
-          infos.push({ id: (p as any)?.identity, vids: count });
-        } catch {
-          infos.push({ id: (p as any)?.identity, vids: 0 });
-        }
-      });
-      console.log('[LK][viewer] participants:', infos);
-    } catch {}
-  }, [room, tick, videoTracks.length]);
-
-  useEffect(() => {
-    // Force ensure subscribed and prefer high quality for any tracked video publications
-    try {
-      (videoTracks as any[]).forEach(({ pub }: any) => {
-        if (!pub) return;
-        try {
-          if (typeof pub?.setSubscribed === 'function' && pub?.isSubscribed === false) {
-            pub.setSubscribed(true);
-            console.log('[FLOW] Forcing subscribe to video publication', { sid: pub.trackSid, source: pub.source });
-          }
-        } catch (e) {
-          console.warn('[FLOW] Failed to force subscribe:', e);
-        }
-        try {
-          if (typeof pub?.setVideoQuality === 'function') {
-            pub.setVideoQuality(VideoQuality.HIGH);
-          }
-        } catch {}
-      });
-    } catch {}
+    videoTracks.forEach(({ pub }) => {
+      if (pub.kind === Track.Kind.Video) pub.setVideoQuality(VideoQuality.HIGH);
+    });
   }, [videoTracks]);
 
   // Wait gate: mark ready once at least one RemoteVideoTrack is present
   useEffect(() => {
-    const hasAny = videoTracks.length > 0;
-    if (hasAny && !ready) setReady(true);
+    if (videoTracks.length > 0 && !ready) setReady(true);
   }, [videoTracks, ready]);
 
-  const videoPairs = videoTracks;
-
-  if (!ready || videoPairs.length === 0) {
-    try { console.log('[FLOW] Waiting for remote video... pubs=', videoPairs.length); } catch {}
+  if (!ready || videoTracks.length === 0) {
     return (
       <div className="w-full h-full flex items-center justify-center text-gray-300">
         Waiting for remote video...
@@ -227,275 +165,213 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
     );
   }
 
-  try { console.log(`[FLOW] Rendering ${videoPairs.length} video track(s)`); } catch {}
   return (
     <div className="w-full h-full min-h-0 grid grid-cols-1 auto-rows-fr gap-2 overflow-hidden">
-      {videoPairs.map(({ pub, track }, idx) => (
-        <VideoRenderer key={track.sid || `vid-${idx}`} room={room} track={track} pub={pub} onInteraction={onInteraction} captureSize={captureSize || undefined} />
+      {videoTracks.map(({ pub, track }) => (
+        <VideoRenderer key={track.sid} room={room} track={track} pub={pub} onInteraction={onInteraction} captureSize={captureSize || undefined} />
       ))}
     </div>
   );
 }
 
-function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room: Room; track: RemoteVideoTrack, pub: any, onInteraction?: (payload: object) => void | Promise<void>, captureSize?: { w: number; h: number } }) {
-  const ref = React.useRef<HTMLVideoElement>(null);
-  const pendingRef = React.useRef<object[]>([]);
-  const flushingRef = React.useRef<boolean>(false);
-  // Track modifier key state locally so we can send combined shortcuts like Ctrl+V, Meta+C, Shift+Arrow, etc.
-  const modifiersRef = React.useRef<{ Control: boolean; Shift: boolean; Alt: boolean; Meta: boolean }>({
-    Control: false,
-    Shift: false,
-    Alt: false,
-    Meta: false,
+function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room: Room; track: RemoteVideoTrack, pub: RemoteTrackPublication, onInteraction?: (payload: object) => void | Promise<void>, captureSize?: { w: number; h: number } }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const pendingRef = useRef<object[]>([]);
+  const flushingRef = useRef<boolean>(false);
+  const modifiersRef = useRef<{ Control: boolean; Shift: boolean; Alt: boolean; Meta: boolean }>({
+    Control: false, Shift: false, Alt: false, Meta: false,
   });
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    try {
-      track.attach(el);
-      // Diagnostics for black screen: log actual video size once available
-      const onMeta = () => {
-        try {
-          console.log('[FLOW] <video> metadata:', { w: el.videoWidth, h: el.videoHeight, readyState: el.readyState });
-        } catch {}
-      };
-      const onPlaying = () => { try { console.log('[FLOW] <video> playing'); } catch {} };
-      const onLoadedData = () => { try { console.log('[FLOW] <video> loadeddata'); } catch {} };
-      el.addEventListener('loadedmetadata', onMeta);
-      el.addEventListener('playing', onPlaying);
-      el.addEventListener('loadeddata', onLoadedData);
 
-      // Fallback: if still 0x0 after 2s, toggle subscription and try manual srcObject
-      const t = setTimeout(() => {
-        try {
-          if (el.videoWidth === 0 || el.videoHeight === 0) {
-            console.warn('[FLOW] Video size 0x0 after timeout, toggling subscription');
-            if (typeof pub?.setSubscribed === 'function') {
-              pub.setSubscribed(false);
-              setTimeout(() => {
-                try {
-                  pub.setSubscribed(true);
-                  if (typeof pub?.setVideoQuality === 'function') pub.setVideoQuality(VideoQuality.HIGH);
-                } catch {}
-              }, 300);
-            }
-            // Manual srcObject attach as last resort
-            if (!el.srcObject && (track as any)?.mediaStreamTrack) {
-              const ms = new MediaStream();
-              ms.addTrack((track as any).mediaStreamTrack);
-              el.srcObject = ms;
-              // Attempt play
-              try { void el.play(); } catch {}
-            }
-          }
-        } catch {}
-      }, 2000);
-      return () => { clearTimeout(t); };
-    } catch (e) {
-      console.warn('[FLOW] attach failed:', e);
-    }
-    return () => {
-      try { track.detach(el); } catch {}
-      try {
-        el.removeEventListener('loadedmetadata', () => {});
-        el.removeEventListener('playing', () => {});
-        el.removeEventListener('loadeddata', () => {});
-      } catch {}
-    };
+  useEffect(() => {
+    const el = videoRef.current;
+    if (el) track.attach(el);
+    return () => { if (el) track.detach(el); };
   }, [track]);
 
-  // --- Interaction handlers ---
-  const publishOrQueue = async (payload: object) => {
-    const tryRoomSend = async () => {
-      if (!room || room.state !== ConnectionState.Connected) throw new Error('viewer room not connected');
+  const publishOrQueue = useCallback(async (payload: object) => {
+    if (room.state !== ConnectionState.Connected) {
+      if (onInteraction) await onInteraction(payload);
+      return;
+    }
+    try {
       const bytes = new TextEncoder().encode(JSON.stringify(payload));
       await room.localParticipant.publishData(bytes, { reliable: true });
-    };
-    try {
-      await tryRoomSend();
-      try { console.log('[Interaction][viewer-room] sent', payload); } catch {}
-      return;
     } catch (e) {
-      try {
-        if (onInteraction) {
-          await onInteraction(payload);
-          try { console.log('[Interaction][fallback-hook] sent', payload); } catch {}
-          return;
-        }
-      } catch {}
-      // Queue and start a flusher
+      console.warn('[Interaction] publishData failed, queuing:', e);
       pendingRef.current.push(payload);
-      try { console.log('[Interaction][queued]', payload, 'queue_len=', pendingRef.current.length); } catch {}
       if (!flushingRef.current) {
         flushingRef.current = true;
-        const flush = async () => {
-          if (!room || room.state !== ConnectionState.Connected) return;
-          const items = pendingRef.current.splice(0, pendingRef.current.length);
-          for (const p of items) {
-            try {
-              const bytes = new TextEncoder().encode(JSON.stringify(p));
-              await room.localParticipant.publishData(bytes);
-              try { console.log('[Interaction][flush] sent', p); } catch {}
-            } catch {
-              // put back and retry later
-              pendingRef.current.unshift(p);
-              try { console.warn('[Interaction][flush] failed; re-queued'); } catch {}
-              break;
-            }
-          }
-        };
-        const id = setInterval(async () => {
-          try { await flush(); } catch {}
-          if (pendingRef.current.length === 0 && room && room.state === ConnectionState.Connected) {
-            clearInterval(id);
+        const intervalId = setInterval(async () => {
+          if (room.state === ConnectionState.Connected && pendingRef.current.length > 0) {
+            const p = pendingRef.current.shift();
+            if (p) await publishOrQueue(p);
+          } else if (pendingRef.current.length === 0) {
+            clearInterval(intervalId);
             flushingRef.current = false;
           }
         }, 500);
       }
     }
-  };
+  }, [room, onInteraction]);
 
-  const handleMouseClick = async (event: React.MouseEvent<HTMLVideoElement>) => {
-    try {
-      try { console.log('[Interaction] click event'); } catch {}
-      const video = ref.current;
-      if (!video) return;
-      const rect = video.getBoundingClientRect();
-      const clientW = video.clientWidth;
-      const clientH = video.clientHeight;
-      const vidW = captureSize?.w || video.videoWidth || clientW;
-      const vidH = captureSize?.h || video.videoHeight || clientH;
-      // Using object-fit: cover => scale is the larger ratio, the image may be cropped.
-      const scale = Math.max(clientW / vidW, clientH / vidH);
-      const displayW = vidW * scale;
-      const displayH = vidH * scale;
-      // Amount cropped off on each axis
-      const cropX = Math.max(0, (displayW - clientW) / 2);
-      const cropY = Math.max(0, (displayH - clientH) / 2);
-      // Coordinates inside the scaled video space
-      const localX = (event.clientX - rect.left) + cropX;
-      const localY = (event.clientY - rect.top) + cropY;
-      // Map back to intrinsic video coordinates
-      let scaledX = Math.round(localX / scale);
-      let scaledY = Math.round(localY / scale);
-      // Clamp to [0, vidW/H]
-      scaledX = Math.max(0, Math.min(vidW - 1, scaledX));
-      scaledY = Math.max(0, Math.min(vidH - 1, scaledY));
-      const payload = { action: 'click', x: scaledX, y: scaledY, button: 'left' };
-      await publishOrQueue(payload);
-    } catch (e) {
-      console.warn('[Interaction] click handler failed:', e);
-    }
-  };
-
-  // Intercept browser context menu and forward as a right-click to the pod
-  const handleContextMenu = async (event: React.MouseEvent<HTMLVideoElement>) => {
-    try {
-      // Prevent local browser video context menu
-      event.preventDefault();
-      try { console.log('[Interaction] contextmenu (right-click)'); } catch {}
-      const video = ref.current;
-      if (!video) return;
-      const rect = video.getBoundingClientRect();
-      const clientW = video.clientWidth;
-      const clientH = video.clientHeight;
-      const vidW = captureSize?.w || video.videoWidth || clientW;
-      const vidH = captureSize?.h || video.videoHeight || clientH;
-      const scale = Math.max(clientW / vidW, clientH / vidH);
-      const displayW = vidW * scale;
-      const displayH = vidH * scale;
-      const cropX = Math.max(0, (displayW - clientW) / 2);
-      const cropY = Math.max(0, (displayH - clientH) / 2);
-      const localX = (event.clientX - rect.left) + cropX;
-      const localY = (event.clientY - rect.top) + cropY;
-      let scaledX = Math.round(localX / scale);
-      let scaledY = Math.round(localY / scale);
-      scaledX = Math.max(0, Math.min(vidW - 1, scaledX));
-      scaledY = Math.max(0, Math.min(vidH - 1, scaledY));
-      const payload = { action: 'click', x: scaledX, y: scaledY, button: 'right' } as const;
-      await publishOrQueue(payload);
-    } catch (e) {
-      console.warn('[Interaction] right-click handler failed:', e);
-    }
-  };
-
-  const handleKeyDown = async (event: React.KeyboardEvent<HTMLVideoElement>) => {
-    try {
-      const key = event.key;
-      // If it's a modifier, update state and do not send yet
-      if (key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') {
-        (modifiersRef.current as any)[key] = true;
-        event.preventDefault();
-        return;
+  // Effect for observing the container's size and reporting it to the backend
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (entries.length > 0) {
+        const { width, height } = entries[0].contentRect;
+        if (width > 0 && height > 0) {
+          publishOrQueue({ type: "resize", width: Math.round(width), height: Math.round(height) });
+        }
       }
+    });
+    resizeObserver.observe(container);
+    return () => resizeObserver.disconnect();
+  }, [publishOrQueue]);
 
-      // Determine active modifiers
-      const activeModifiers = Object.entries(modifiersRef.current)
+  const calculateCoords = (event: React.MouseEvent<HTMLDivElement>) => {
+    const video = videoRef.current;
+    if (!video) return null;
+
+    const videoRect = video.getBoundingClientRect();
+    // Intrinsic size of the decoded video as displayed by the <video> element
+    const intrinsicW = video.videoWidth || videoRect.width;
+    const intrinsicH = video.videoHeight || videoRect.height;
+
+    // Contain the intrinsic video inside the element to compute actual content rect
+    const scaleContain = Math.min(videoRect.width / intrinsicW, videoRect.height / intrinsicH);
+    const displayW = intrinsicW * scaleContain;
+    const displayH = intrinsicH * scaleContain;
+    const contentLeft = videoRect.left + (videoRect.width - displayW) / 2;
+    const contentTop = videoRect.top + (videoRect.height - displayH) / 2;
+
+    const localX = event.clientX - contentLeft;
+    const localY = event.clientY - contentTop;
+
+    // Ignore clicks outside the actual displayed content
+    if (localX < 0 || localY < 0 || localX > displayW || localY > displayH) return null;
+
+    // Map to intrinsic coordinates first
+    const intrinsicX = localX / scaleContain;
+    const intrinsicY = localY / scaleContain;
+
+    // Return intrinsic pixel coordinates; server expects CSS pixels which match intrinsic when device_scale_factor=1
+    const x = Math.floor(intrinsicX);
+    const y = Math.floor(intrinsicY);
+    return {
+      x: Math.max(0, Math.min(intrinsicW - 1, x)),
+      y: Math.max(0, Math.min(intrinsicH - 1, y)),
+    };
+  };
+
+  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const coords = calculateCoords(event);
+    try {
+      const video = videoRef.current;
+      const rect = video?.getBoundingClientRect();
+      const debug = {
+        coords,
+        client: { x: event.clientX, y: event.clientY },
+        videoRect: rect ? { w: rect.width, h: rect.height, left: rect.left, top: rect.top } : null,
+        intrinsic: video ? { w: video.videoWidth, h: video.videoHeight } : null,
+        capture: captureSize || null,
+      };
+      console.log("[CLICK DEBUG]", debug);
+    } catch {}
+    console.log("CLICKED", coords);
+    if (coords) {
+      publishOrQueue({ action: 'click', ...coords, button: 'left' });
+    }
+  };
+
+  const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const coords = calculateCoords(event);
+    if (coords) {
+      publishOrQueue({ action: 'click', ...coords, button: 'right' });
+    }
+  };
+
+  const handleKeyDown = async (event: React.KeyboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const key = event.key;
+
+    // Handle Copy & Paste first
+    const isPaste = (event.ctrlKey || event.metaKey) && key.toLowerCase() === 'v';
+    const isCopy = (event.ctrlKey || event.metaKey) && key.toLowerCase() === 'c';
+
+    if (isPaste) {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text) publishOrQueue({ type: 'paste', content: text });
+      } catch (err) {
+        console.error("Failed to read from local clipboard for paste:", err);
+      }
+      return;
+    }
+    
+    if (key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') {
+      modifiersRef.current[key as 'Control'|'Shift'|'Alt'|'Meta'] = true;
+      return;
+    }
+    
+    // Send standard key press
+    const activeModifiers = Object.entries(modifiersRef.current)
         .filter(([, isActive]) => isActive)
         .map(([k]) => k);
-
-      try { console.log(`[Interaction] keydown: '${key}', modifiers: [${activeModifiers.join(', ')}]`); } catch {}
-      event.preventDefault();
-
-      // If any modifiers are held, always send as keypress with modifiers
-      if (activeModifiers.length > 0) {
-        const payload = { action: 'keypress', key, modifiers: activeModifiers } as any;
-        await publishOrQueue(payload);
-        return;
-      }
-
-      // No modifiers: preserve existing behavior (type for single characters, keypress otherwise)
-      const payload = (key.length === 1)
+        
+    const payload = (key.length === 1 && activeModifiers.length === 0)
         ? { action: 'type', text: key }
-        : { action: 'keypress', key };
-      await publishOrQueue(payload);
-    } catch (e) {
-      console.warn('[Interaction] keydown handler failed:', e);
+        : { action: 'keypress', key, modifiers: activeModifiers };
+    await publishOrQueue(payload);
+
+    // If it was a copy command, request remote clipboard content
+    if (isCopy) {
+      setTimeout(() => {
+        publishOrQueue({ type: "get_clipboard" });
+      }, 100); 
     }
   };
 
-  // Key up handler to reset modifier state
-  const handleKeyUp = (event: React.KeyboardEvent<HTMLVideoElement>) => {
+  const handleKeyUp = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    event.preventDefault();
     const key = event.key;
     if (key === 'Control' || key === 'Shift' || key === 'Alt' || key === 'Meta') {
-      (modifiersRef.current as any)[key] = false;
+      modifiersRef.current[key as 'Control'|'Shift'|'Alt'|'Meta'] = false;
     }
-    event.preventDefault();
   };
 
-  const handleScroll = async (event: React.WheelEvent<HTMLVideoElement>) => {
-    try {
-      try { console.log('[Interaction] wheel event', { dx: event.deltaX, dy: event.deltaY }); } catch {}
-      event.preventDefault();
-      const payload = { action: 'scroll', dx: event.deltaX, dy: event.deltaY };
-      await publishOrQueue(payload);
-    } catch (e) {
-      console.warn('[Interaction] wheel handler failed:', e);
-    }
+  const handleScroll = (event: React.WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    publishOrQueue({ action: 'scroll', dx: event.deltaX, dy: event.deltaY });
   };
 
   return (
-    // Outer container centers the content and supplies black bars
-    <div className="w-full h-full flex items-center justify-center bg-black">
-      {/* Inner container enforces a 16:9 aspect ratio */}
-      <div className="relative w-full h-auto max-w-full max-h-full" style={{ aspectRatio: '16 / 9' }}>
-        <video
-          ref={ref}
-          autoPlay
-          playsInline
-          muted
-          // Fill the aspect-ratio box; avoid distortion
-          className="absolute top-0 left-0 w-full h-full bg-black rounded shadow-lg cursor-crosshair"
-          style={{ objectFit: 'cover', zIndex: 20 }}
-          onMouseDown={() => { try { ref.current?.focus(); } catch {} }}
-          onClick={handleMouseClick}
-          onContextMenu={handleContextMenu}
-          onKeyDown={handleKeyDown}
-          onKeyUp={handleKeyUp}
-          onWheel={handleScroll}
-          tabIndex={0}
-        />
-      </div>
+    <div
+      ref={containerRef}
+      className="w-full h-full flex items-center justify-center bg-black rounded shadow-lg cursor-crosshair"
+      style={{ outline: 'none', userSelect: 'none', WebkitUserSelect: 'none' }} // Hide focus ring & prevent selection
+      onClick={handleClick}
+      onContextMenu={handleContextMenu}
+      onKeyDown={handleKeyDown}
+      onKeyUp={handleKeyUp}
+      onWheel={handleScroll}
+      tabIndex={0} // Makes the div focusable
+    >
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
+        className="w-full h-full"
+        style={{ objectFit: 'contain', userSelect: 'none', WebkitUserSelect: 'none' }}
+      />
     </div>
   );
 }
