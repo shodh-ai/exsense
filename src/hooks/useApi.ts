@@ -119,16 +119,7 @@ export const useCourse = (id: string, options?: { enabled?: boolean }) => {
   });
 };
 
-export const useCurriculum = (id: string) => {
-  const apiService = useApiService();
-  
-  return useQuery({
-    queryKey: queryKeys.curriculum(id),
-    queryFn: () => apiService.getCurriculum(id),
-    enabled: !!id, 
-    staleTime: 5 * 60 * 1000, 
-  });
-};
+// Removed useCurriculum: backend does not implement /api/curriculums/:id in this version.
 
 export const useCreateCourse = () => {
   const apiService = useApiService();

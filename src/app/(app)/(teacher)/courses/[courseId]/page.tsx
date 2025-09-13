@@ -4,7 +4,7 @@ import { Star } from "lucide-react";
 import React, { JSX, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCourse } from "@/hooks/useApi"; // The hook to fetch course data
+import { useCourse, useLessons } from "@/hooks/useApi"; // The hooks to fetch course and lessons data
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, } from "@/components/accordion";
 import { Avatar, AvatarImage } from "@/components/avatar";
 import { Badge } from "@/components/badge";
@@ -83,6 +83,8 @@ export default function TeacherCoursePage(): JSX.Element {
 
   // Step 1: Fetch the course data using the ID from the URL
   const { data: course, isLoading, error } = useCourse(courseId);
+  // Also fetch lessons for this course to render per-LO actions
+  const { data: lessons, isLoading: lessonsLoading } = useLessons(courseId);
 
   // Step 2: Use useMemo to prepare data for sub-components, preventing re-renders.
   const courseAnalyticsDetails: CourseDetail[] = useMemo(() => {
@@ -131,6 +133,35 @@ export default function TeacherCoursePage(): JSX.Element {
               <CourseIntroduction tags={course.tags || []} title={course.title} description={course.description} />
               <CourseAnalyticsSection details={courseAnalyticsDetails} courseId={course.id} unresolvedDoubts={course.analytics?.unsolvedDoubts || 0} />
               <CourseDetailsSection details={courseDetails} />
+              {/* Lessons list with per-LO Imprinting CTA */}
+              <section className="flex flex-col gap-4">
+                <h2 className="text-xl font-bold text-[#394169]">Lessons</h2>
+                {lessonsLoading ? (
+                  <div className="text-sm text-[#8187a0]">Loading lessons...</div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {(lessons && lessons.length > 0) ? (
+                      lessons.map((lesson) => (
+                        <div key={lesson.id} className="flex items-center justify-between border border-[#c7ccf8] rounded-lg p-4 bg-white">
+                          <div className="flex flex-col">
+                            <div className="text-base font-semibold text-[#394169]">{lesson.title}</div>
+                            {lesson.description && (
+                              <div className="text-sm text-[#8187a0]">{lesson.description}</div>
+                            )}
+                          </div>
+                          <Button asChild className="rounded-[100px] h-[40px] px-5 bg-[#566fe9] text-white hover:bg-[#4a5fd1]">
+                            <Link href={`/teacher?courseId=${course.id}&lessonId=${lesson.id}&lessonTitle=${encodeURIComponent(lesson.title)}`}>
+                              Teach this Topic
+                            </Link>
+                          </Button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-[#8187a0]">No lessons created yet.</div>
+                    )}
+                  </div>
+                )}
+              </section>
               <WhatYouWillLearnSection skills={course.skills || []} outcomes={course.learningOutcomes || []} />
               <CourseMap />
               <TeacherProfileSection name={course.teacher?.name} title={course.teacher?.title} bio={course.teacher?.bio} />

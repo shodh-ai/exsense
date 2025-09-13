@@ -71,6 +71,7 @@ export default function NewCoursePage() {
           description: section.description?.trim(),
           order: i + 1,
           content: JSON.stringify({ scope: section.scope ?? "" }),
+          scope: section.scope ?? "",
         });
       }
       

@@ -74,6 +74,7 @@ export interface Lesson {
   title: string;
   description?: string | null;
   content?: string | null;
+  scope?: string | null;
   order?: number;
   createdAt: string;
   updatedAt?: string;
@@ -144,7 +145,8 @@ const createApiClient = ({ getToken }: ApiClientOptions) => {
             const message = errorData.message || `API request failed with status ${response.status}`;
             throw new ApiError(message, response.status, retryAfter, errorData);
         }
-        if (response.status === 201 || response.status === 204) { return null; }
+        // For 204, no body is expected; for 201, servers usually return the created entity
+        if (response.status === 204) { return null; }
         return response.json();
     };
     return {
@@ -194,10 +196,9 @@ export class ApiService {
   }
 
   // --- Curriculum & Lesson API ---
-  async getCurriculum(id: string): Promise<any> { return this.client.get(`/api/curriculums/${id}`); }
   async getLessons(courseId: string): Promise<Lesson[]> { return this.client.get(`/api/courses/${courseId}/lessons`); }
   async getLesson(id: string): Promise<Lesson> { return this.client.get(`/api/lessons/${id}`); }
-  async createLesson(courseId: string, data: { title: string; description?: string | null; content?: string | null; order?: number }): Promise<Lesson> { return this.client.post(`/api/courses/${courseId}/lessons`, data); }
+  async createLesson(courseId: string, data: { title: string; description?: string | null; content?: string | null; scope?: string | null; order?: number }): Promise<Lesson> { return this.client.post(`/api/courses/${courseId}/lessons`, data); }
   async deleteLesson(lessonId: string): Promise<{ success?: boolean }> { return this.client.delete(`/api/lessons/${lessonId}`); }
   async reorderLessons(courseId: string, orderedLessonIds: string[]): Promise<void> { return this.client.patch(`/api/courses/${courseId}/lessons/reorder`, { orderedLessonIds } as any); }
 

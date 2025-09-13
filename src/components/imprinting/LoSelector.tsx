@@ -22,6 +22,11 @@ export default function LoSelector({ learningObjectives, onSelect }: LoSelectorP
             >
               <div className="font-semibold">{lo.name}</div>
               {lo.description && <div className="text-sm text-slate-300 mt-1">{lo.description}</div>}
+              {lo.scope && (
+                <div className="text-xs text-slate-400 mt-2">
+                  <span className="opacity-80">Scope:</span> {lo.scope}
+                </div>
+              )}
             </button>
           ))
         ) : (

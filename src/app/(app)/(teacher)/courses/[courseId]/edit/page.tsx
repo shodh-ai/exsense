@@ -24,12 +24,15 @@ export default function EditCoursePage() {
   useEffect(() => {
     if (!lessonsLoading) {
       const formatted: SectionData[] = (lessons || []).map((lesson: any) => {
-        let scope = "";
-        try {
-          const parsed = lesson.content ? JSON.parse(lesson.content) : {};
-          scope = parsed?.scope ?? "";
-        } catch (_) {
-          scope = "";
+        // Prefer first-class scope, fallback to legacy content JSON
+        let scope = lesson.scope ?? "";
+        if (!scope) {
+          try {
+            const parsed = lesson.content ? JSON.parse(lesson.content) : {};
+            scope = parsed?.scope ?? "";
+          } catch (_) {
+            scope = "";
+          }
         }
         return {
           id: lesson.id,
@@ -63,13 +66,15 @@ export default function EditCoursePage() {
           title: s.title.trim() || `Section ${i + 1}`,
           description: s.description?.trim(),
           order: i + 1,
-          // Persist scope in content for compat, if your API supports it
+          // Persist scope both as first-class and in content for compatibility
           content: JSON.stringify({ scope: s.scope ?? "" }),
+          scope: s.scope ?? "",
         } as any);
       }
 
       alert("Course updated successfully!");
-      router.push(`/teacher/courses/${courseId}`);
+      // Route to existing course overview page
+      router.push(`/courses/${courseId}`);
     } catch (error) {
       console.error("Failed to update course:", error);
       alert(`Error: Could not update the course. ${(error as Error).message}`);

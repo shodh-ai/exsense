@@ -65,6 +65,29 @@ export async function conversationalTurn(payload: {
   return response.json();
 }
 
+// NEW: Conceptual conversational turn with audio
+export async function conversationalTurnAudio(payload: {
+  curriculum_id: string;
+  session_id: string;
+  imprinting_mode: 'DEBRIEF_CONCEPTUAL' | string;
+  latest_expert_audio_b64: string;
+  current_lo?: string;
+  in_response_to_question?: string;
+}) {
+  // Always post to /session/turn with audio fields; backend accepts latest_expert_audio_b64 or audio_b64
+  const body = JSON.stringify({
+    ...payload,
+    audio_b64: payload.latest_expert_audio_b64,
+  });
+  const response = await fetch(`${IMPRINTER_URL}/session/turn`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
+  if (!response.ok) throw new Error(`Conversational audio turn failed (${response.status})`);
+  return response.json();
+}
+
 export async function stageAsset(payload: {
   expert_id: string;
   session_id: string;

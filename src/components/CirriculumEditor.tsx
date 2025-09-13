@@ -136,6 +136,7 @@ const CirriculumEditor = ({
             title: (s.title && s.title.trim()) || `Section`,
             description: s.description.trim() || undefined,
             content: JSON.stringify({ scope: s.scope ?? "" }),
+            scope: s.scope ?? "",
           });
           for (const [j, m] of (s.modules || []).entries()) {
             await api.addLessonContent(lesson.id, {

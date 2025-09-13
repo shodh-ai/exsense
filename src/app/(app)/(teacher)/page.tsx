@@ -5,28 +5,27 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MicButton } from '@/components/MicButton';
 import { UploadButton } from '@/components/UploadButton';
 import { MessageButton } from '@/components/MessageButton';
-// MODIFICATION: Added Send icon for the new chat input and Minus icon for the timer
-import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Minus } from 'lucide-react';
+// MODIFICATION: Added Send icon for the new chat input
+import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic } from 'lucide-react';
 // Keep other existing imports
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { useSessionStore } from '@/lib/store';
-import { useBrowserActionExecutor } from '@/hooks/useBrowserActionExecutor';
-import { useBrowserInteractionSensor } from '@/hooks/useBrowserInteractionSensor';
+import { useLiveKitSession } from '@/hooks/useLiveKitSession';
+import { Room } from 'livekit-client';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
-import { submitImprintingEpisode, stageAsset, conversationalTurn, submitSeed, processSeedDocument, fetchCurriculumDraft, saveSetupScript, finalizeLO } from '@/lib/imprinterService';
+import { submitImprintingEpisode, stageAsset, conversationalTurn, conversationalTurnAudio, submitSeed, processSeedDocument, fetchCurriculumDraft, saveSetupScript, finalizeLO } from '@/lib/imprinterService';
 import SeedInput from '@/components/imprinting/SeedInput';
 import CurriculumEditor from '@/components/imprinting/CurriculumEditor';
 import LoSelector from '@/components/imprinting/LoSelector';
+// --- MODIFICATION: Import the new modal component ---
 import { SendModal } from '@/components/SendModal';
-// --- MODIFICATION: Import the new StatusPill component ---
-import { StatusPill } from '@/components/StatusPill';
 
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
-const VncViewer = dynamic(() => import('@/components/session/VncViewer'), { ssr: false });
+const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
 
 
@@ -43,9 +42,13 @@ interface ConceptualDebriefViewProps {
   onUserInput: (value: string) => void;
   onSubmit: () => void;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
+  // conceptual audio recording controls
+  onToggleRecording: () => void;
+  isRecording: boolean;
+  recordingDuration: number;
 }
 
-const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef }: ConceptualDebriefViewProps) => {
+const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef, onToggleRecording, isRecording, recordingDuration }: ConceptualDebriefViewProps) => {
   return (
     // MODIFICATION: Changed background to light, and default text to black
     <div className="w-full h-full flex flex-col justify-between items-center text-black bg-transparent p-4 md:p-8">
@@ -74,10 +77,20 @@ const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inpu
               className="w-full h-full bg-transparent focus:outline-none resize-none text-lg text-black placeholder-gray-500"
               placeholder="Define the in-scope and out-of-scope boundaries for this LO..."
             />
+            {/* Conceptual audio recorder button */}
+            <button onClick={onToggleRecording} className={`self-start p-3 rounded-md ${isRecording ? 'bg-red-600 hover:bg-red-500' : 'bg-[#566FE9] hover:bg-blue-500'} transition-colors`} title={isRecording ? 'Stop and send' : 'Record an audio answer'}>
+              {isRecording ? <Square className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}
+            </button>
             <button onClick={onSubmit} className="self-start p-3 rounded-md bg-blue-600 hover:bg-blue-500 transition-colors">
               <Send className="w-5 h-5 text-white" />
             </button>
           </div>
+          {isRecording && (
+            <div className="mt-2 text-sm text-[#566FE9] flex items-center gap-2">
+              <Timer className="w-4 h-4" />
+              <span>Recording... {String(Math.floor(recordingDuration / 60)).padStart(2, '0')}:{String(recordingDuration % 60).padStart(2, '0')}</span>
+            </div>
+          )}
       </div>
     </div>
   );
@@ -96,32 +109,42 @@ interface SessionContentProps {
     activeView: ReturnType<typeof useSessionStore.getState>['activeView'];
     imprintingMode: ReturnType<typeof useSessionStore.getState>['imprinting_mode'];
     componentButtons: ButtonConfig[];
-    vncUrl: string;
+    room?: Room;
+    livekitUrl: string;
+    livekitToken: string;
+    isConnected: boolean;
     controlPanel?: React.ReactNode;
-    vncOverlay?: React.ReactNode;
-    handleVncInteraction: (interaction: { action: string; x: number; y: number }) => void;
     // Props for the debrief view
     currentDebrief: DebriefMessage | null;
     topicInput: string;
     setTopicInput: (value: string) => void;
     handleSendConceptual: () => void;
     topicInputRef: React.RefObject<HTMLTextAreaElement | null>;
+    sendBrowserInteraction: (payload: object) => Promise<void>;
+    onToggleConceptualRecording: () => void;
+    isConceptualRecording: boolean;
+    conceptualRecordingDuration: number;
 }
 
 function SessionContent({
     activeView,
     imprintingMode,
     componentButtons,
-    vncUrl,
+    room,
+    livekitUrl,
+    livekitToken,
+    isConnected,
     controlPanel,
-    vncOverlay,
-    handleVncInteraction,
     // Destructure new props
     currentDebrief,
     topicInput,
     setTopicInput,
     handleSendConceptual,
-    topicInputRef
+    topicInputRef,
+    sendBrowserInteraction,
+    onToggleConceptualRecording,
+    isConceptualRecording,
+    conceptualRecordingDuration,
 }: SessionContentProps) {
     return (
         <div className='w-full h-[90%] flex flex-col items-center justify-between'>
@@ -154,12 +177,21 @@ function SessionContent({
                         onUserInput={setTopicInput}
                         onSubmit={handleSendConceptual}
                         inputRef={topicInputRef}
+                        onToggleRecording={onToggleConceptualRecording}
+                        isRecording={isConceptualRecording}
+                        recordingDuration={conceptualRecordingDuration}
                     />
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
                     <div className="w-full h-full flex flex-col md:flex-row gap-4">
                         <div className="flex-1">
-                            <VncViewer url={vncUrl} onInteraction={handleVncInteraction} overlay={vncOverlay} />
+                            {room ? (
+                                <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-300">
+                                    Connecting to LiveKit...
+                                </div>
+                            )}
                         </div>
                         {controlPanel && (
                             <div className="w-full md:w-[360px] md:min-w-[320px]">
@@ -263,9 +295,10 @@ interface TeacherFooterProps {
     onUploadClick?: () => void;
     onCaptureClick?: () => void;
     onIncreaseTimer: () => void;
-    onDecreaseTimer: () => void;
     screenshotIntervalSec: number;
     onSaveScriptClick?: () => void;
+    onVSCodeClick?: () => void;
+    onPasteClick?: () => void;
     isRecording: boolean;
     isPaused: boolean;
     recordingDuration: number;
@@ -282,10 +315,11 @@ interface TeacherFooterProps {
 const TeacherFooter = ({ 
     onUploadClick, 
     onCaptureClick, 
-    onIncreaseTimer,
-    onDecreaseTimer,
+    onIncreaseTimer, 
     screenshotIntervalSec, 
     onSaveScriptClick,
+    onVSCodeClick,
+    onPasteClick,
     isRecording,
     isPaused,
     recordingDuration,
@@ -312,18 +346,12 @@ const TeacherFooter = ({
                   className="absolute top-1/2 right-1/2 flex items-center gap-6" 
                   style={{ marginRight: '150px', transform: 'translateY(-50%)' }}
                 >
-                    <div className="w-[250px] h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] py-2 pr-2 pl-4 rounded-[600px]">
+                    <div className="w-[202px] h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] py-2 pr-2 pl-4 rounded-[600px]">
                         <div className='flex items-center gap-2'>
                            <Timer className="w-6 h-6 text-[#566FE9]" />
                            <span className="font-semibold text-sm text-[#566FE9] font-[500] text-[16px]">{formatTime(screenshotIntervalSec)}</span>
                         </div>
                         <div className='flex items-center gap-2'>
-                           <button 
-                                onClick={onDecreaseTimer}
-                                className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
-                           >
-                               <Minus className="w-5 h-5 text-[#566FE9]" />
-                           </button>
                            <button 
                                 onClick={onIncreaseTimer}
                                 className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
@@ -343,6 +371,20 @@ const TeacherFooter = ({
                         className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
                     >
                         <img src="/Code.svg" alt="Save Script" className="w-6 h-6" />
+                    </button>
+                    <button
+                        onClick={onPasteClick}
+                        title="Paste from your clipboard into the session"
+                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
+                    >
+                        <img src="/clipboard-paste.svg" alt="Paste from Clipboard" className="w-6 h-6" />
+                    </button>
+                    <button
+                        onClick={onVSCodeClick}
+                        title="Switch to VS Code Environment"
+                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
+                    >
+                        <img src="/vscode.svg" alt="Switch to VS Code" className="w-6 h-6" />
                     </button>
                     <UploadButton
                         isVisible={true}
@@ -475,7 +517,9 @@ const ConceptualFooter = ({ onFinishClick, isFinishDisabled, onShowMeClick, isSh
 
 export default function Session() {
     // --- MOCK BACKEND FLAG ---
-    const MOCK_BACKEND = false;
+    const MOCK_BACKEND = (process.env.NEXT_PUBLIC_MOCK_BACKEND ?? 'false') === 'true';
+    // eslint-disable-next-line no-console
+    console.log('[TeacherPage] INIT', { MOCK_BACKEND, now: new Date().toISOString() });
 
     const { activeView, setActiveView, imprinting_mode, setImprintingMode, currentLO, setCurrentLO, imprintingPhase, setImprintingPhase, curriculumDraft, setCurriculumDraft } = useSessionStore();
     const [isIntroActive, setIsIntroActive] = useState(false);
@@ -483,32 +527,38 @@ export default function Session() {
     const { user, isSignedIn, isLoaded } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
+    // --- NEW: Track active environment for recording/imprinting ---
+    const [imprintingEnvironment, setImprintingEnvironment] = useState<'browser' | 'vscode'>('browser');
     const SESSION_DEBUG = false;
     const DEV_BYPASS = true;
+    // Disable legacy VNC session management; we use LiveKit data channel to control the browser pod
+    const ENABLE_VNC = false;
     const courseId = searchParams.get('courseId');
     const courseTitle = searchParams.get('title');
-    const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
-    
-    // --- NEW STATE MANAGEMENT FOR STATUS PILL ---
-    const [pillMessage, setPillMessage] = useState<string>('Waiting for your input...');
-    const [pillType, setPillType] = useState<'ai' | 'notification'>('ai');
-    const pillTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const lessonId = searchParams.get('lessonId');
+    const lessonTitle = searchParams.get('lessonTitle');
 
-    // --- HELPER FUNCTION FOR TEMPORARY NOTIFICATIONS ---
-    const showNotification = (message: string, duration: number = 3000) => {
-        if (pillTimeoutRef.current) {
-            clearTimeout(pillTimeoutRef.current);
-        }
-        setPillMessage(message);
-        setPillType('notification');
-        pillTimeoutRef.current = setTimeout(() => {
-            setPillMessage('Waiting for your input...');
-            setPillType('ai');
-            pillTimeoutRef.current = null;
-        }, duration);
-    };
+
+    // --- MODIFICATION: Add state for the finish confirmation modal ---
+    const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
+
+
     
-    if (SESSION_DEBUG) console.log('Session page - Course details:', { courseId, courseTitle });
+    if (SESSION_DEBUG) console.log('Session page - Course details:', { courseId, courseTitle, lessonId, lessonTitle });
+
+    // If a specific lessonId is provided, auto-start live imprinting for that LO
+    useEffect(() => {
+        if (lessonId || lessonTitle) {
+            // Set the current LO from URL and jump directly to live imprinting phase
+            setCurrentLO(lessonTitle || lessonId || '');
+            setImprintingPhase('LIVE_IMPRINTING');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [lessonId, lessonTitle]);
+
+    // NOTE: Do not early-return here to avoid conditional hook calls. We will render a fallback later.
+    
+    // Add debugging for authentication state
 
     useEffect(() => {
         if (SESSION_DEBUG) console.log('Session page auth state:', { isLoaded, isSignedIn, userId: user?.id });
@@ -527,27 +577,72 @@ export default function Session() {
     }, [isLoaded, isSignedIn, router]);
 
     const roomName = user?.id ? `session-${user.id}` : `session-${Date.now()}`;
-    const vncViewerUrl = process.env.NEXT_PUBLIC_VNC_VIEWER_URL || 'ws://localhost:6901';
-    const vncActionUrl = process.env.NEXT_PUBLIC_VNC_WEBSOCKET_URL || 'ws://localhost:8765';
-    const sessionBubbleUrl = process.env.NEXT_PUBLIC_SESSION_BUBBLE_URL;
 
-    const [viewerUrl, setViewerUrl] = useState<string>(vncViewerUrl);
-    const [actionUrl, setActionUrl] = useState<string>(vncActionUrl);
-    const [viewerUrlInput, setViewerUrlInput] = useState<string>(vncViewerUrl);
-    const [actionUrlInput, setActionUrlInput] = useState<string>(vncActionUrl);
+    // LiveKit integration (replace VNC viewer on Teacher page)
+    const shouldInitializeLiveKit = (!!user?.id) && (DEV_BYPASS || (isLoaded && isSignedIn));
+    const lkRoomName = shouldInitializeLiveKit ? `session-${user?.id}` : '';
+    const lkUserName = shouldInitializeLiveKit ? (user?.emailAddresses?.[0]?.emailAddress || `user-${user?.id}`) : '';
+    const {
+        livekitUrl,
+        livekitToken,
+        isConnected,
+        room,
+        sendBrowserInteraction,
+    } = useLiveKitSession(
+        shouldInitializeLiveKit ? lkRoomName : '',
+        shouldInitializeLiveKit ? lkUserName : '',
+        (courseId as string) || undefined
+    );
 
-    const { isVNCConnected, disconnectVNC, executeBrowserAction, setOnVNCResponse, awaitVNCOpen } = useBrowserActionExecutor(null, actionUrl);
-    const { connectToVNCSensor, disconnectFromVNCSensor } = useBrowserInteractionSensor(null);
+    useEffect(() => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] LiveKit hook ready', { shouldInitializeLiveKit, lkRoomName, lkUserName, livekitUrl, tokenPresent: !!livekitToken });
+    }, [shouldInitializeLiveKit, lkRoomName, lkUserName, livekitUrl, livekitToken]);
+    useEffect(() => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] LiveKit connection state changed', { isConnected, hasRoom: !!room });
+    }, [isConnected, room]);
+
+    // VNC session management removed (LiveKit-only)
+
+    // Legacy VNC stubs removed
+
+    // Helper to send actions to browser pod over LiveKit data channel
+    const sendBrowser = React.useCallback(async (action: string, parameters: Record<string, unknown> = {}) => {
+        try {
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] sendBrowser →', { action, parameters });
+            await sendBrowserInteraction({ action, ...parameters });
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] sendBrowser ✓', { action });
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[TeacherPage] sendBrowser failed', e);
+        }
+    }, [sendBrowserInteraction]);
+
+    // --- Debug watchers for critical state --- (trimmed)
+
+    useEffect(() => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] activeView changed:', activeView);
+    }, [activeView]);
+
+    // VNC auto-create and cache restore removed
 
     const handleSelectPractical = () => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] UI: Select Practical');
         setImprintingMode('WORKFLOW');
         setActiveView('vnc');
     };
 
     const handleSelectConceptual = () => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] UI: Select Conceptual');
         setImprintingMode('DEBRIEF_CONCEPTUAL');
         setActiveView('excalidraw');
-        setIsConceptualStarted(false);
+        setConceptualStarted(false);
         setIsShowMeRecording(false);
     };
 
@@ -561,10 +656,10 @@ export default function Session() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSavingSetup, setIsSavingSetup] = useState(false);
     const [isFinalizingLO, setIsFinalizingLO] = useState(false);
+    const [statusMessage, setStatusMessage] = useState<string>('Session started. Waiting for initial prompt.');
     const [submitMessage, setSubmitMessage] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
-    
-    type VNCActionResponse = { action?: string } & Record<string, unknown>;
+    // const [isCreatingSession, setIsCreatingSession] = useState(false); // VNC: unused
     type RecordedPacket = { interaction_type?: string } & Record<string, unknown>;
 
     const packetsRef = useRef<RecordedPacket[]>([]);
@@ -584,6 +679,10 @@ export default function Session() {
 
     const curriculumId = courseId as string;
 
+    // VNC session helpers removed
+
+    // VNC cleanup removed
+
     const handleSeedSubmit = async (content: string) => {
         setImprintingPhase('SEED_PROCESSING');
         try {
@@ -596,19 +695,88 @@ export default function Session() {
         }
     };
 
+    // Conceptual audio recording: start/stop-and-send
+    const handleToggleConceptualRecording = async () => {
+        if (!isConceptualRecording) {
+            try {
+                setStatusMessage('Starting conceptual audio recording...');
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                conceptualAudioChunksRef.current = [];
+                recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) conceptualAudioChunksRef.current.push(e.data); };
+                recorder.start();
+                conceptualMediaRecorderRef.current = recorder;
+                setIsConceptualRecording(true);
+                setConceptualRecordingDuration(0);
+                if (conceptualRecordingIntervalRef.current) clearInterval(conceptualRecordingIntervalRef.current);
+                conceptualRecordingIntervalRef.current = setInterval(() => {
+                    setConceptualRecordingDuration((prev) => prev + 1);
+                }, 1000);
+            } catch (err: any) {
+                console.error('[TeacherPage] Conceptual recording start failed', err);
+                setSubmitError(err?.message || 'Failed to start conceptual recording');
+            }
+        } else {
+            try {
+                setStatusMessage('Stopping conceptual recording and sending...');
+                if (conceptualRecordingIntervalRef.current) clearInterval(conceptualRecordingIntervalRef.current);
+                if (conceptualMediaRecorderRef.current && conceptualMediaRecorderRef.current.state !== 'inactive') {
+                    // Stop and release mic
+                    const tracks = conceptualMediaRecorderRef.current.stream.getTracks();
+                    conceptualMediaRecorderRef.current.stop();
+                    tracks.forEach((t) => t.stop());
+                }
+                setIsConceptualRecording(false);
+                // Wait briefly to ensure dataavailable has flushed
+                await new Promise((r) => setTimeout(r, 150));
+                const blob = new Blob(conceptualAudioChunksRef.current, { type: 'audio/webm' });
+                const audio_b64 = await convertBlobToWavDataURL(blob);
+                conceptualAudioChunksRef.current = [];
+                // Submit to LangGraph via imprinter service
+                try {
+                    const resp = await conversationalTurnAudio({
+                        curriculum_id: String(curriculumId),
+                        session_id: roomName,
+                        imprinting_mode: 'DEBRIEF_CONCEPTUAL',
+                        latest_expert_audio_b64: audio_b64,
+                        current_lo: currentLO || undefined,
+                    });
+                    const aiText = resp?.text || 'Got it. Let\'s continue.';
+                    setDebriefMessage({ text: aiText });
+                    setConceptualStarted(true);
+                    setStatusMessage('AI replied to your audio answer.');
+                    setIsStartAllowed(!(aiText && /\?/.test(aiText)));
+                } catch (e: any) {
+                    console.error('[TeacherPage] Conceptual audio turn failed', e);
+                    setDebriefMessage({ text: `Sorry, I encountered an error processing your audio. ${e?.message || e}` });
+                }
+            } catch (err: any) {
+                console.error('[TeacherPage] Conceptual recording stop/send failed', err);
+                setSubmitError(err?.message || 'Failed to send conceptual audio');
+            }
+        }
+    };
+
     const handleCaptureScreenshot = async () => {
         try {
             if (!isRecording) {
-                showNotification('Start recording to capture screenshots.');
+                setStatusMessage('Start recording to capture and persist screenshots.');
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] captureScreenshot: ignored (not recording)');
                 return;
             }
-            setPillMessage('Capturing screenshot...');
-            await sendAndAwait('browser_screenshot', {}, 'screenshot');
-            showNotification('Screenshot sent');
+            setStatusMessage('Capturing screenshot...');
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] captureScreenshot → request');
+            await sendBrowser('screenshot');
+            setStatusMessage('Manual screenshot captured.');
             setTimeToNextScreenshot(screenshotIntervalSec);
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] captureScreenshot ✓');
         } catch (e: any) {
-             setSubmitError(`Screenshot failed: ${e?.message || e}`);
-             setPillMessage('Waiting for your input...');
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] captureScreenshot ✗', e);
+            setStatusMessage(`Screenshot failed: ${e?.message || e}`);
         }
     };
 
@@ -639,13 +807,12 @@ export default function Session() {
         setSubmitMessage(null);
         setSubmitError(null);
         try {
-            setPillMessage('Saving script...');
+            setStatusMessage('Saving setup script...');
             const resp = await saveSetupScript({ curriculum_id: String(curriculumId), lo_name: currentLO, actions });
-            showNotification('Setup script saved.');
             setSubmitMessage(resp?.message || `Setup script saved for ${currentLO}.`);
+            setStatusMessage('Setup script saved.');
         } catch (err: any) {
             setSubmitError(err?.message || 'Failed to save setup script');
-             setPillMessage('Waiting for your input...');
         } finally {
             setIsSavingSetup(false);
         }
@@ -662,14 +829,13 @@ export default function Session() {
         setSubmitMessage(null);
         setSubmitError(null);
         try {
-            setPillMessage(`Finalizing "${currentLO}"...`);
+            setStatusMessage(`Finalizing "${currentLO}"...`);
             const resp = await finalizeLO({ curriculum_id: String(curriculumId), lo_name: currentLO });
-            showNotification(`Topic "${currentLO}" finalized.`);
             setSubmitMessage(resp?.message || `Topic "${currentLO}" finalized.`);
+            setStatusMessage('Topic finalized.');
             setIsStartAllowed(true);
         } catch (err: any) {
             setSubmitError(err?.message || 'Failed to finalize topic');
-            setPillMessage('Waiting for your input...');
         } finally {
             setIsFinalizingLO(false);
         }
@@ -678,90 +844,51 @@ export default function Session() {
     const handleReviewComplete = () => setImprintingPhase('LO_SELECTION');
     const handleLoSelected = (loName: string) => { setCurrentLO(loName); setImprintingPhase('LIVE_IMPRINTING'); };
 
-    const [currentDebrief, setCurrentDebrief] = useState<DebriefMessage | null>(null);
-    const [isConceptualStarted, setIsConceptualStarted] = useState<boolean>(false);
+    // Debrief message now comes from global store so LiveKit updates can re-render UI
+    const currentDebrief = useSessionStore((s) => s.debriefMessage);
+    const setDebriefMessage = useSessionStore((s) => s.setDebriefMessage);
+    // Conceptual started flag also comes from store (enables Show Me after debrief arrives)
+    const conceptualStarted = useSessionStore((s) => s.conceptualStarted);
+    const setConceptualStarted = useSessionStore((s) => s.setConceptualStarted);
     const [topicInput, setTopicInput] = useState<string>('');
     const [seedText, setSeedText] = useState<string>('');
     const topicInputRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-    type PendingResolver = { id: string; expectAction: string; resolve: (resp: VNCActionResponse) => void; reject: (err: any) => void; timeoutId: any };
-    const pendingResolversRef = useRef<PendingResolver[]>([]);
-
-    useEffect(() => {
-        setOnVNCResponse((resp: VNCActionResponse) => {
-            try {
-                const idx = pendingResolversRef.current.findIndex(p => p.expectAction === resp?.action);
-                if (idx >= 0) {
-                    const [pending] = pendingResolversRef.current.splice(idx, 1);
-                    clearTimeout(pending.timeoutId);
-                    pending.resolve(resp);
-                }
-            } catch (e) { console.error('[TeacherPage] Error handling VNC response:', e); }
-        });
-    }, [setOnVNCResponse]);
-
-    const sendAndAwait = async (
-        tool_name: string,
-        parameters: Record<string, unknown>,
-        expectedAction?: string,
-        timeoutMs = 15000
-    ): Promise<VNCActionResponse> => {
-        const expectAction = expectedAction || tool_name;
-        return new Promise(async (resolve, reject) => {
-            const id = `${expectAction}-${Date.now()}`;
-            const timeoutId = setTimeout(() => {
-                const idx = pendingResolversRef.current.findIndex(p => p.id === id);
-                if (idx >= 0) pendingResolversRef.current.splice(idx, 1);
-                reject(new Error(`Timed out waiting for action '${expectAction}' response`));
-            }, timeoutMs);
-            pendingResolversRef.current.push({ id, expectAction, resolve, reject, timeoutId });
-            try {
-                await executeBrowserAction({ tool_name, parameters });
-            } catch (err) {
-                clearTimeout(timeoutId);
-                const idx = pendingResolversRef.current.findIndex(p => p.id === id);
-                if (idx >= 0) pendingResolversRef.current.splice(idx, 1);
-                reject(err);
-            }
-        });
-    };
+    // Conceptual side audio recording state
+    const conceptualMediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const conceptualAudioChunksRef = useRef<BlobPart[]>([]);
+    const [isConceptualRecording, setIsConceptualRecording] = useState<boolean>(false);
+    const [conceptualRecordingDuration, setConceptualRecordingDuration] = useState(0);
+    const conceptualRecordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const handleSubmitSeed = async () => {
         if (!user?.id || !seedText.trim()) return;
         try {
-            setPillMessage('Submitting seed...');
+            setStatusMessage('Submitting seed...');
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] submitSeed →', { expert_id: user.id, session_id: roomName, curriculumId });
             await submitSeed({ expert_id: user.id, session_id: roomName, curriculum_id: String(curriculumId), content: seedText });
-            showNotification('Seed submitted.');
+            setStatusMessage('Seed submitted.');
             setSeedText('');
-        } catch (e: any) { setSubmitError(`Seed submit failed: ${e?.message || e}`); }
+        } catch (e: any) { setStatusMessage(`Seed submit failed: ${e?.message || e}`); }
     };
 
     const handleStartRecording = async () => {
         if (!user?.id) return;
         try {
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleStartRecording: begin', { activeView, screenshotIntervalSec });
             setSubmitMessage(null);
             setSubmitError(null);
             setImprintingMode('WORKFLOW');
             setActiveView('vnc');
-            setPillMessage('Initializing...');
+            setStatusMessage('Initializing recording on server...');
             setPacketsCount(0);
             setStagedAssets([]);
             setIsPaused(false);
-
-            if (!MOCK_BACKEND) {
-                if (!isVNCConnected) {
-                     setPillMessage('Connecting to backend...');
-                    try {
-                        await awaitVNCOpen(15000);
-                    } catch (connErr: any) {
-                        setSubmitError(connErr?.message || 'Failed to connect to VNC backend');
-                        setIsRecording(false);
-                        return;
-                    }
-                }
-                await sendAndAwait('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec }, 'start_recording', 45000);
-            }
+            // In LiveKit flow, instruct the browser pod to start recording via data channel
+            await sendBrowser('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec, environment: imprintingEnvironment });
             setTimeToNextScreenshot(screenshotIntervalSec);
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -773,23 +900,29 @@ export default function Session() {
             mediaRecorderRef.current = recorder;
 
             setIsRecording(true);
-            showNotification('Demonstration started');
+            setStatusMessage('Recording...');
             
             setRecordingDuration(0);
             if(recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
             recordingIntervalRef.current = setInterval(() => {
                 setRecordingDuration(prev => prev + 1);
             }, 1000);
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleStartRecording: done');
         } catch (err: any) {
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] handleStartRecording: error', err);
             setSubmitError(err?.message || 'Failed to start recording');
             setIsRecording(false);
-            setPillMessage('Waiting for your input...');
         }
     };
 
     const handleVncInteraction = (interaction: { action: string; x: number; y: number }) => {
         if (!isRecording) return;
-        executeBrowserAction({ tool_name: 'browser_click', parameters: { x: interaction.x, y: interaction.y } });
+        // Send a click through the LiveKit data channel
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] onInteraction(click) →', interaction);
+        void sendBrowser('click', { x: interaction.x, y: interaction.y });
     };
 
     const handleSendConceptual = async () => {
@@ -798,10 +931,10 @@ export default function Session() {
         if (!msg) return;
 
         setTopicInput('');
-        setPillMessage('AI is thinking...');
+        setStatusMessage('Sending response...');
 
         if (MOCK_BACKEND) {
-            await new Promise(r => setTimeout(r, 1500));
+            await new Promise(r => setTimeout(r, 1000));
             const fakeResponses = [
                 "That's an interesting point. How does that relate to the stability of the system?",
                 "Understood. What would be the primary disadvantage of using that approach?",
@@ -812,8 +945,8 @@ export default function Session() {
             const newDebrief = {
                 text: nextResponse !== currentQuestion ? nextResponse : "Can you elaborate on that further?"
             };
-            setCurrentDebrief(newDebrief);
-            setPillMessage('AI has a question for you...');
+            setDebriefMessage(newDebrief);
+            setStatusMessage('AI replied (Mocked).');
         } else {
             try {
                 const resp = await conversationalTurn({
@@ -824,23 +957,22 @@ export default function Session() {
                     current_lo: currentLO || undefined
                 });
                 const aiText = resp?.text || 'Got it. Let\'s continue.';
-                setCurrentDebrief({ text: aiText });
-                setPillMessage('AI replied. Waiting for your input...');
+                setDebriefMessage({ text: aiText });
+                setStatusMessage('AI replied.');
                 setIsStartAllowed(!(aiText && /\?/.test(aiText)));
             } catch (e: any) {
-                setCurrentDebrief({ text: `Sorry, I encountered an error. ${e?.message}` });
-                setPillMessage('Waiting for your input...');
+                setDebriefMessage({ text: `Sorry, I encountered an error. ${e?.message}` });
             }
         }
     };
 
     const handleShowMe = async () => {
-        if (imprinting_mode !== 'DEBRIEF_CONCEPTUAL' || !isConceptualStarted) return;
+        if (imprinting_mode !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted) return;
         const lastQ = currentDebrief?.text || '';
         if (!lastQ) return;
         const msg = (topicInput || '').trim();
         if (!msg) {
-             showNotification('Type what you want to demonstrate, then click Show Me.');
+            setStatusMessage('Type what you want me to demonstrate, then click Show Me.');
             setTimeout(() => topicInputRef.current?.focus(), 0);
             return;
         }
@@ -848,18 +980,17 @@ export default function Session() {
         setIsShowMeRecording(true);
         setImprintingMode('WORKFLOW');
         setActiveView('vnc');
-        setPillMessage('Switching to browser for "Show Me" demo...');
+        setStatusMessage('Show Me: switched to Browser. Starting recording...');
         setTopicInput('');
         if (!isRecording) {
             try { await handleStartRecording(); }
-            catch (e: any) { 
-                setSubmitError(`Failed to start Show Me recording: ${e?.message || e}`);
-                setPillMessage('Waiting for your input...');
-            }
+            catch (e: any) { setStatusMessage(`Failed to start Show Me recording: ${e?.message || e}`); }
         }
     };
 
     const handleStopRecording = async () => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] handleStopRecording: begin');
         if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
         try {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -867,36 +998,34 @@ export default function Session() {
                 mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
             }
         } catch (err) { console.warn('Stop recording warning:', err); }
-        try {
-            if (!MOCK_BACKEND) {
-                type StopRecordingResp = VNCActionResponse & { count?: number };
-                const stopResp = (await sendAndAwait('stop_recording', {}, 'stop_recording')) as StopRecordingResp;
-                if (typeof stopResp?.count === 'number') setPacketsCount(stopResp.count);
-            }
-             showNotification('Recording stopped.');
-
-        } catch (err: any) {
-             setSubmitError(`Error: ${err?.message || 'Failed to stop recording'}`);
-        } finally {
-            setIsRecording(false);
-            setTimeToNextScreenshot(null);
-        }
+        setIsRecording(false);
+        setTimeToNextScreenshot(null);
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] handleStopRecording: done');
     };
     
     const handleTogglePauseResume = () => {
         if (!mediaRecorderRef.current) return;
         if (isPaused) {
+            // Resume local mic and instruct pod to resume
             mediaRecorderRef.current.resume();
             setIsPaused(false);
+            try { void sendBrowser('resume_recording'); } catch {}
             recordingIntervalRef.current = setInterval(() => {
                 setRecordingDuration(prev => prev + 1);
             }, 1000);
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleTogglePauseResume: resumed');
         } else {
+            // Pause local mic and instruct pod to pause
             mediaRecorderRef.current.pause();
             setIsPaused(true);
+            try { void sendBrowser('pause_recording'); } catch {}
             if (recordingIntervalRef.current) {
                 clearInterval(recordingIntervalRef.current);
             }
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleTogglePauseResume: paused');
         }
     };
 
@@ -907,6 +1036,10 @@ export default function Session() {
             setTimeToNextScreenshot((prev) => {
                 if (prev == null) return screenshotIntervalSec;
                 const next = prev - 1;
+                if (next <= 1) {
+                    // eslint-disable-next-line no-console
+                    console.log('[TeacherPage] T-minus next periodic screenshot', { next });
+                }
                 return next <= 0 ? screenshotIntervalSec : next;
             });
         }, 1000);
@@ -914,83 +1047,146 @@ export default function Session() {
     }, [isRecording, screenshotIntervalSec]);
 
     const handleSubmitEpisode = async () => {
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] handleSubmitEpisode: begin', { MOCK_BACKEND, isRecording, stagedAssetsCount: stagedAssets.length, currentLO });
         setSubmitMessage(null);
         setSubmitError(null);
         setIsSubmitting(true);
         setIsStartAllowed(false);
+        // Ensure we stop recording to finalize audio and actions
         if (isRecording) {
             await handleStopRecording();
+            // Give MediaRecorder.onstop a moment to populate the blob
             await new Promise((r) => setTimeout(r, 150));
         }
 
         try {
             if (MOCK_BACKEND) {
-                setPillMessage('Submitting episode...');
+                setStatusMessage('Stopping recording and preparing data (Mocked)...');
+                await new Promise(r => setTimeout(r, 1000));
+                setStatusMessage('Submitting episode (Mocked)...');
                 await new Promise(r => setTimeout(r, 2000));
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] handleSubmitEpisode: MOCK flow');
                 const fakeResponse = {
                     action: 'SPEAK_AND_INITIATE_DEBRIEF',
                     text: "Great question! On the real axis, the root locus exists between an odd number of poles and zeros. Count the total number of poles and zeros to the right of any point on the real axis. If it's odd, that section is part of the root locus."
                 };
                 setSubmitMessage(`Submitted. Processed 123 fake actions.`);
-                setPillMessage('AI is analyzing...');
-                
-                await new Promise(r => setTimeout(r, 2000));
-
+                setStatusMessage('Episode submitted. AI is analyzing (Mocked)...');
                 if (fakeResponse.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
                     const aiText = fakeResponse.text || '';
                     let hypothesis = 'Great question!';
                     let question = aiText.replace('Great question! ', '');
-                    
-                    setCurrentDebrief({ hypothesis, text: question });
+                    const lastSentenceEnd = Math.max(aiText.lastIndexOf('. '), aiText.lastIndexOf('! '), aiText.lastIndexOf('? '));
+                    if (lastSentenceEnd > -1 && lastSentenceEnd < aiText.length - 2) {
+                        hypothesis = aiText.substring(0, lastSentenceEnd + 1);
+                        question = aiText.substring(lastSentenceEnd + 2).trim();
+                    }
+                    setDebriefMessage({ hypothesis, text: question });
                     setImprintingMode('DEBRIEF_CONCEPTUAL');
                     setActiveView('excalidraw');
-                    setIsConceptualStarted(true);
+                    setConceptualStarted(true);
                     setIsStartAllowed(false);
-                    setPillMessage('AI has a question for you...');
+                    setStatusMessage('AI has a question for you (Mocked).');
                     setTimeout(() => topicInputRef.current?.focus(), 0);
                 }
-                return; 
+                return; // Do not hit real backend in mock mode
             }
 
+            // Real backend flow
+            // Prepare audio: upload via HTTP to get an asset_id (avoid sending audio over LiveKit data channel)
             const blob = audioBlobRef.current;
-            const audio_b64: string = blob ? await convertBlobToWavDataURL(blob) : '';
-            
-            setPillMessage('Fetching recorded actions...');
-            const actionsResp = await sendAndAwait('get_recorded_actions', { session_id: roomName }, 'get_recorded_actions');
-            const packets: RecordedPacket[] = Array.isArray((actionsResp as any)?.packets) ? (actionsResp as any).packets : [];
-            
-            setPillMessage(`Submitting episode...`);
-            const response = await submitImprintingEpisode({
-                expert_id: user?.id || 'unknown_expert',
-                session_id: roomName,
-                curriculum_id: String(curriculumId),
-                narration: 'Expert narration from episode.',
-                audio_b64,
-                expert_actions: packets,
-                staged_assets: stagedAssets,
-                current_lo: currentLO || undefined,
-                in_response_to_question: isShowMeRecording && showMeQuestionRef.current ? showMeQuestionRef.current : undefined,
-            });
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleSubmitEpisode: audio prepared', { blobPresent: !!blob, blobSize: blob?.size });
 
-            setSubmitMessage(`Submitted. Processed ${packets.length} actions.`);
-            setPillMessage('AI is analyzing...');
-
-            if (response?.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
-                const aiText = (response as any).text || '';
-                const hasQuestion = !!aiText && /\?/.test(aiText);
-                if (hasQuestion) {
-                    setImprintingMode('DEBRIEF_CONCEPTUAL');
-                    setActiveView('excalidraw');
-                    setIsConceptualStarted(true);
-                    setIsStartAllowed(false);
-                    setPillMessage('AI has a question for you...');
-                } else {
-                    setImprintingMode('WORKFLOW');
-                    setIsStartAllowed(true);
-                    setPillMessage('Waiting for your input...');
+            // Upload audio first (staging), then send only a small payload over LiveKit
+            let audioAssetId: string | null = null;
+            if (blob && user?.id) {
+                try {
+                    setStatusMessage('Uploading audio narration...');
+                    const audioFile = new File([blob], 'narration.wav', { type: 'audio/wav' });
+                    const assetInfo = await stageAsset({
+                        expert_id: user.id,
+                        session_id: roomName,
+                        curriculum_id: String(curriculumId),
+                        file: audioFile,
+                    });
+                    audioAssetId = assetInfo.asset_id;
+                    // eslint-disable-next-line no-console
+                    console.log('[TeacherPage] Audio uploaded, asset_id:', audioAssetId);
+                } catch (e) {
+                    // eslint-disable-next-line no-console
+                    console.warn('[TeacherPage] Audio upload failed (continuing without audio asset):', e);
                 }
             }
-            
+
+            // In LiveKit flow, instruct the browser pod to stop and submit payload to imprinter.
+            setStatusMessage('Submitting episode via browser pod...');
+            try {
+                // Merge any previously staged assets with the new audio asset reference (if any)
+                const staged_assets_compact = [
+                    ...stagedAssets,
+                    ...(audioAssetId ? [{ asset_id: audioAssetId, filename: 'narration.wav', role: 'AUDIO_NARRATION' }] : []),
+                ];
+
+                const payload: Record<string, unknown> = {
+                    expert_id: user?.id || 'expert',
+                    session_id: roomName,
+                    curriculum_id: String(curriculumId),
+                    // Do NOT include audio_b64 in data-channel payload
+                    staged_assets: staged_assets_compact,
+                    current_lo: currentLO || undefined,
+                    narration: 'Expert narration from episode.',
+                    imprinting_mode: imprinting_mode,
+                    // Use selected environment for both keys (backend + browser_manager)
+                    imprinting_environment: imprintingEnvironment,
+                    environment: imprintingEnvironment,
+                };
+                if (isShowMeRecording && showMeQuestionRef.current) {
+                    (payload as any).in_response_to_question = showMeQuestionRef.current;
+                }
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] handleSubmitEpisode → sendBrowser(stop_recording)', { keys: Object.keys(payload) });
+                await sendBrowser('stop_recording', payload);
+                setSubmitMessage('Submitted. Processing on server...');
+                setStatusMessage('Episode submitted. AI is analyzing...');
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] handleSubmitEpisode ✓ submitted via pod');
+            } catch (postErr: any) {
+                setSubmitError(postErr?.message || 'Failed to submit via pod');
+                setStatusMessage('Submit failed.');
+                // eslint-disable-next-line no-console
+                console.error('[TeacherPage] handleSubmitEpisode ✗', postErr);
+                // Optional direct fallback to imprinter if pod submission fails
+                const DIRECT_FALLBACK = (process.env.NEXT_PUBLIC_TEACHER_DIRECT_SUBMIT_IF_POD_FAILS ?? 'true') === 'true';
+                if (DIRECT_FALLBACK) {
+                    try {
+                        // eslint-disable-next-line no-console
+                        console.warn('[TeacherPage] Falling back to direct imprinter submission');
+                        const audio_b64: string = blob ? await convertBlobToWavDataURL(blob) : '';
+                        const directPayload = {
+                            expert_id: user?.id || 'expert',
+                            session_id: roomName,
+                            curriculum_id: String(curriculumId),
+                            narration: 'Expert narration from episode.',
+                            audio_b64,
+                            expert_actions: [], // No local action capture in Teacher; rely on audio and staged assets
+                            current_lo: currentLO || undefined,
+                            staged_assets: stagedAssets,
+                            in_response_to_question: (isShowMeRecording && showMeQuestionRef.current) ? showMeQuestionRef.current : undefined,
+                        };
+                        const resp = await submitImprintingEpisode(directPayload as any);
+                        setSubmitMessage('Submitted directly. Processing on server...');
+                        setStatusMessage('Episode submitted (direct). AI is analyzing...');
+                        console.log('[TeacherPage] Direct submit ✓', { keys: Object.keys(resp || {}) });
+                    } catch (directErr: any) {
+                        console.error('[TeacherPage] Direct submit ✗', directErr);
+                    }
+                }
+            }
+
+            // Reset buffers/state after submit
             packetsRef.current = [];
             setPacketsCount(0);
             audioChunksRef.current = [];
@@ -1000,9 +1196,12 @@ export default function Session() {
             showMeQuestionRef.current = null;
         } catch (err: any) {
             setSubmitError(err?.message || 'Failed to submit');
-            setPillMessage('Waiting for your input...');
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] handleSubmitEpisode catch ✗', err);
         } finally {
             setIsSubmitting(false);
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] handleSubmitEpisode: end');
         }
     };
 
@@ -1014,32 +1213,36 @@ export default function Session() {
             const assetInfo = await stageAsset({ expert_id: user.id, session_id: roomName, curriculum_id: String(curriculumId), file });
             const item = { filename: assetInfo.filename || file.name, role: role || "ASSET", asset_id: assetInfo.asset_id };
             setStagedAssets(prev => [...prev, item]);
-            showNotification(`${file.name} uploaded.`);
         } catch (e: any) {
-            showNotification(`Error uploading asset: ${e?.message || e}`);
+            setStatusMessage(`Error uploading asset: ${e?.message || e}`);
         } finally {
             if (event.target) event.target.value = '';
         }
     };
-
+    
+    // Remove a staged asset by index
     const handleRemoveStagedAsset = (index: number) => setStagedAssets(prev => prev.filter((_, i) => i !== index));
 
+    // Finish session: stop recording, cleanup VNC session, reset URLs
     const executeFinishSession = async () => {
         try {
-            if (isRecording) {
-                await handleStopRecording();
-                await new Promise(r => setTimeout(r, 200));
-            }
-            if (packetsCount > 0 || (MOCK_BACKEND && activeView === 'vnc')) {
+            setIsFinishModalOpen(false);
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] executeFinishSession: begin', { isRecording, hasAudioBlob: !!audioBlobRef.current, stagedAssets: stagedAssets.length });
+            if (isRecording || audioBlobRef.current) {
+                // If we have something to submit (either still recording or we have captured audio), submit it.
                 await handleSubmitEpisode();
             } else {
-                setSubmitMessage('Session finished.');
+                // If nothing to submit, just ensure local mic is stopped
+                if (isRecording) await handleStopRecording();
             }
-        } catch (err: any) {
-            console.error('Finish session error:', err);
+        } catch (e: any) {
+            setSubmitError(e?.message || 'Failed to finish session');
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] executeFinishSession ✗', e);
         } finally {
-            try { disconnectVNC(); } catch {}
-            try { disconnectFromVNCSensor(); } catch {}
+            // eslint-disable-next-line no-console
+            console.log('[TeacherPage] executeFinishSession: end');
         }
     };
 
@@ -1047,28 +1250,50 @@ export default function Session() {
         setIsFinishModalOpen(true);
     };
 
-    useEffect(() => {
-        if (sessionBubbleUrl) {
-            connectToVNCSensor(sessionBubbleUrl);
-        }
-        return () => {
-            disconnectVNC();
-            disconnectFromVNCSensor();
-        };
-    }, [sessionBubbleUrl, disconnectVNC, connectToVNCSensor, disconnectFromVNCSensor]);
+    // Removed legacy VNC sensor connect effect
 
     const handleIncreaseTimer = () => {
         setScreenshotIntervalSec(prev => prev + 5);
     };
 
-    const handleDecreaseTimer = () => {
-        setScreenshotIntervalSec(prev => Math.max(5, prev - 5));
+    // --- NEW: VS Code environment switch ---
+    const handleSwitchToVSCode = () => {
+        // 1) Set environment for subsequent recording/submission
+        setImprintingEnvironment('vscode');
+        // 2) Navigate browser pod to code-server
+        void sendBrowser('navigate', { url: 'http://localhost:4600' });
+        // 3) Feedback
+        setStatusMessage('Switched to VS Code environment.');
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] UI: Switched to VS Code. Subsequent recordings will capture VS Code actions.');
+    };
+
+    // Paste text from local clipboard into the remote session
+    const handlePasteFromLocal = async () => {
+        try {
+            const clipboardText = await navigator.clipboard.readText();
+            if (clipboardText) {
+                setStatusMessage('Pasting from clipboard...');
+                await sendBrowser('paste_from_local', { text: clipboardText });
+                setStatusMessage('Pasted content into session.');
+                // eslint-disable-next-line no-console
+                console.log('[TeacherPage] Pasted text from local clipboard into pod.');
+            } else {
+                setStatusMessage('Your clipboard is empty.');
+            }
+        } catch (err: any) {
+            // eslint-disable-next-line no-console
+            console.error('[TeacherPage] Clipboard read failed:', err);
+            setStatusMessage('Could not access clipboard. Please grant permission in your browser.');
+            setSubmitError(`Clipboard Error: ${err?.message || String(err)}`);
+        }
     };
 
 
     if (!isLoaded) return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
     if (isIntroActive) return <IntroPage onAnimationComplete={handleIntroComplete} />;
 
+    // Guard: require a courseId in the URL. Prevents accidental fallback to a hardcoded curriculum.
     if (!courseId) {
         return (
             <div className="w-full h-full flex items-center justify-center text-white">
@@ -1086,16 +1311,16 @@ export default function Session() {
         );
     }
 
+// ...
+
+
     return (
         <>
             {(DEV_BYPASS || isSignedIn) ? (
                 <>
                     <Sphere />
-                    {/* --- RENDER THE NEW STATUS PILL --- */}
-                    <StatusPill message={pillMessage} type={pillType} />
-                    
                     {
-                        false ? (
+                        imprintingPhase !== 'LIVE_IMPRINTING' ? (
                             <div className='w-full h-full'>
                                 {imprintingPhase === 'SEED_INPUT' && (<SeedInput onSubmit={handleSeedSubmit} />)}
                                 {imprintingPhase === 'REVIEW_DRAFT' && (<CurriculumEditor initialDraft={curriculumDraft} onFinalize={handleReviewComplete} curriculumId={String(curriculumId)} />)}
@@ -1108,25 +1333,31 @@ export default function Session() {
                                         activeView={activeView}
                                         imprintingMode={imprinting_mode}
                                         componentButtons={componentButtons}
-                                        vncUrl={viewerUrl}
-                                        vncOverlay={null}
-                                        handleVncInteraction={handleVncInteraction}
+                                        room={room}
+                                        livekitUrl={livekitUrl}
+                                        livekitToken={livekitToken}
+                                        isConnected={isConnected}
                                         currentDebrief={currentDebrief}
                                         topicInput={topicInput}
                                         setTopicInput={setTopicInput}
                                         handleSendConceptual={handleSendConceptual}
                                         topicInputRef={topicInputRef}
+                                        sendBrowserInteraction={sendBrowserInteraction}
+                                        onToggleConceptualRecording={handleToggleConceptualRecording}
+                                        isConceptualRecording={isConceptualRecording}
+                                        conceptualRecordingDuration={conceptualRecordingDuration}
                                     />
-                                    {/* --- THIS IS THE PANEL THAT HAS BEEN REMOVED --- */}
+                                    
                                 </div>
                                 {imprinting_mode === 'WORKFLOW' ? (
                                 <TeacherFooter
                                     onUploadClick={() => fileInputRef.current?.click()}
                                     onCaptureClick={handleCaptureScreenshot}
                                     onIncreaseTimer={handleIncreaseTimer}
-                                    onDecreaseTimer={handleDecreaseTimer}
                                     screenshotIntervalSec={screenshotIntervalSec}
                                     onSaveScriptClick={handleSaveSetupText}
+                                    onPasteClick={handlePasteFromLocal}
+                                    onVSCodeClick={handleSwitchToVSCode}
                                     isRecording={isRecording}
                                     isPaused={isPaused}
                                     recordingDuration={recordingDuration}
@@ -1134,7 +1365,7 @@ export default function Session() {
                                     onTogglePauseResume={handleTogglePauseResume}
                                     onSubmitEpisode={handleSubmitEpisode}
                                     onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !isConceptualStarted || isRecording}
+                                    isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted || isRecording}
                                     onFinalizeTopicClick={handleFinalizeTopic}
                                     isFinalizeDisabled={!currentLO || isFinalizingLO}
                                     onFinishClick={handleFinishClick}
@@ -1145,7 +1376,7 @@ export default function Session() {
                                     onFinishClick={handleFinishClick}
                                     isFinishDisabled={isSubmitting}
                                     onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={!isConceptualStarted || isRecording}
+                                    isShowMeDisabled={!conceptualStarted || isRecording}
                                 />
                                 )}
                             </>
