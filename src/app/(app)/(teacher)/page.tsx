@@ -1,4 +1,6 @@
 "use client";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 import React, { useState, useEffect, useRef } from 'react';
 // Import the specific buttons we need for the new footer
@@ -8,7 +10,7 @@ import { MessageButton } from '@/components/MessageButton';
 // MODIFICATION: Added Send icon for the new chat input
 import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic } from 'lucide-react';
 // Keep other existing imports
-import dynamic from 'next/dynamic';
+import NextDynamic from 'next/dynamic';
 import Image from 'next/image';
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
@@ -24,9 +26,9 @@ import LoSelector from '@/components/imprinting/LoSelector';
 import { SendModal } from '@/components/SendModal';
 
 
-const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
-const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
-const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
+const IntroPage = NextDynamic(() => import('@/components/session/IntroPage'));
+const LiveKitViewer = NextDynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
+const VideoViewer = NextDynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
 
 
 // --- NEW: Type definition for the AI's debrief message ---
