@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useStudentInteractionSensor } from './useStudentInteractionSensor';
 import { useVisualActionExecutor, ToolCommand } from './useVisualActionExecutor';
+import type { SkeletonElement } from './useVisualActionExecutor';
 import { useSessionStore } from '@/lib/store';
 
 // Enhanced interfaces for the unified integration
@@ -490,6 +491,17 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
     }
   })();
 
+  // Narrow unknown[] from store to SkeletonElement[] expected by prepareElementsWithFiles
+  const isSkeletonElement = (e: unknown): e is SkeletonElement => {
+    if (!e || typeof e !== 'object') return false;
+    const o = e as Record<string, unknown>;
+    return typeof o.type === 'string';
+  };
+  const asSkeletonArray = (arr: unknown[] | null | undefined): SkeletonElement[] => {
+    if (!Array.isArray(arr)) return [];
+    return arr.filter(isSkeletonElement);
+  };
+
   const summarize = (e: any) => {
     if (!e) return { id: null, type: 'null' };
     const txt = typeof e.text === 'string' ? e.text : '';
@@ -519,7 +531,7 @@ export function useExcalidrawIntegration(): UseExcalidrawIntegrationReturn {
           (async () => {
             try {
               // Convert incoming skeletons to Excalidraw elements with files
-              const prepared = await visualActionExecutor.prepareElementsWithFiles(visualizationData);
+              const prepared = await visualActionExecutor.prepareElementsWithFiles(asSkeletonArray(visualizationData));
               if (EXCAL_DEBUG) {
                 const samplePrepared = prepared.slice(0, 5).map(summarize);
                 console.log('[EXCALIDRAW-INTEGRATION] Prepared elements sample:', samplePrepared);

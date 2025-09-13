@@ -4,6 +4,26 @@ import { devtools } from 'zustand/middleware';
 type ExcalidrawAPIType = unknown;
 export type SessionView = 'excalidraw' | 'vnc' | 'video' | 'mic' | 'statusbar' | 'intro';
 
+// Represents a generic visualization element used by the Excalidraw integration.
+// This is intentionally flexible to accommodate both skeleton elements and
+// Excalidraw-ready elements while avoiding explicit `any` types.
+export interface VisualizationElement {
+  id?: string;
+  type: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  text?: string;
+  // Support both mutable and readonly tuple arrays as used by Excalidraw
+  points?: readonly (readonly [number, number])[] | [number, number][];
+  startBinding?: { elementId: string; focus?: number; gap?: number } | null;
+  endBinding?: { elementId: string; focus?: number; gap?: number } | null;
+  isDeleted?: boolean;
+  // Allow additional properties that may be provided by upstream generators
+  [key: string]: unknown;
+}
+
 // --- Imprinting phases and curriculum types ---
 export type ImprintingPhase =
   | 'SEED_INPUT'
@@ -42,7 +62,7 @@ interface SessionState {
     isMicEnabled: boolean;
     isMusicButtonPlaying: boolean;
     isMicActivatingPending: boolean;
-    visualizationData: any[] | null;
+    visualizationData: unknown[] | null;
     suggestedResponses: { id: string; text: string; reason?: string }[];
     suggestedTitle?: string;
     isNavigating: boolean; // <-- State for our loader
@@ -67,7 +87,7 @@ interface SessionState {
     setIsMicEnabled: (isEnabled: boolean) => void;
     setIsMusicButtonPlaying: (isPlaying: boolean) => void;
     setIsMicActivatingPending: (isPending: boolean) => void;
-    setVisualizationData: (data: any[] | null) => void;
+    setVisualizationData: (data: unknown[] | null) => void;
     setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
     clearSuggestedResponses: () => void;
     setIsNavigating: (isNavigating: boolean) => void; // <-- Action for our loader

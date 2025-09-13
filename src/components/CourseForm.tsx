@@ -69,7 +69,9 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
 
   // --- State Setup (No changes in logic) ---
   const [isSaving, setIsSaving] = useState(false);
-  const { data: existingCourse, isLoading: isLoadingCourse } = useCourse(courseId, { enabled: isEditMode });
+  // Ensure a definite string is passed; the query is only enabled when courseId exists
+  const courseIdStr = courseId ?? '';
+  const { data: existingCourse, isLoading: isLoadingCourse } = useCourse(courseIdStr, { enabled: isEditMode });
   const [localState, setLocalState] = useState({ title: "", description: "", tags: [] as string[], skills: [] as string[], learningOutcomes: [] as string[], difficulty: "Intermediate" });
   const { setData: setGlobalData, ...globalState } = useNewCourseStore();
 
@@ -102,9 +104,10 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
   
     if (isEditMode) {
       try {
-        await api.updateCourse(courseId, formState);
+        const cid = courseId as string; // safe because isEditMode implies courseId is defined
+        await api.updateCourse(cid, formState);
         alert("Course updated successfully!");
-        router.push(`/courses/${courseId}`);
+        router.push(`/courses/${cid}`);
       } catch (err) {
         alert(`Error: Could not update the course. ${(err as Error).message}`);
         setIsSaving(false);
