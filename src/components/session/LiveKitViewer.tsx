@@ -189,6 +189,14 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     return () => { if (el) track.detach(el); };
   }, [track]);
 
+  // Ensure the container is focused so keyboard events work without extra clicks
+  useEffect(() => {
+    const c = containerRef.current;
+    if (c) {
+      try { c.focus(); } catch {}
+    }
+  }, []);
+
   const publishOrQueue = useCallback(async (payload: object) => {
     if (room.state !== ConnectionState.Connected) {
       if (onInteraction) await onInteraction(payload);
@@ -257,18 +265,28 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     const intrinsicX = localX / scaleContain;
     const intrinsicY = localY / scaleContain;
 
-    // Return intrinsic pixel coordinates; server expects CSS pixels which match intrinsic when device_scale_factor=1
-    const x = Math.floor(intrinsicX);
-    const y = Math.floor(intrinsicY);
+    // Map to capture resolution if known (server's original capture size)
+    // This keeps click accuracy even if LiveKit scaled the video.
+    let x = intrinsicX;
+    let y = intrinsicY;
+    if (captureSize && captureSize.w > 0 && captureSize.h > 0 && intrinsicW > 0 && intrinsicH > 0) {
+      const scaleX = captureSize.w / intrinsicW;
+      const scaleY = captureSize.h / intrinsicH;
+      x *= scaleX;
+      y *= scaleY;
+    }
+    x = Math.floor(x);
+    y = Math.floor(y);
     return {
-      x: Math.max(0, Math.min(intrinsicW - 1, x)),
-      y: Math.max(0, Math.min(intrinsicH - 1, y)),
+      x: Math.max(0, Math.min((captureSize?.w ?? intrinsicW) - 1, x)),
+      y: Math.max(0, Math.min((captureSize?.h ?? intrinsicH) - 1, y)),
     };
   };
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    try { containerRef.current?.focus(); } catch {}
     const coords = calculateCoords(event);
     try {
       const video = videoRef.current;
@@ -353,7 +371,7 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
   return (
     <div
       ref={containerRef}
-      className="w-full h-full flex items-center justify-center bg-black rounded shadow-lg cursor-crosshair"
+      className="h-full aspect-[16/9] bg-transparent rounded shadow-lg cursor-crosshair overflow-scroll"
       style={{ outline: 'none', userSelect: 'none', WebkitUserSelect: 'none' }} // Hide focus ring & prevent selection
       onClick={handleClick}
       onContextMenu={handleContextMenu}
@@ -369,8 +387,8 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
         muted
         draggable={false}
         onDragStart={(e) => e.preventDefault()}
-        className="w-full h-full"
-        style={{ objectFit: 'contain', userSelect: 'none', WebkitUserSelect: 'none' }}
+        className="w-full h-full aspect-[16/9]"
+        style={{ objectFit: 'contain', userSelect: 'none', WebkitUserSelect: 'none', backgroundColor: 'transparent' }}
       />
     </div>
   );
