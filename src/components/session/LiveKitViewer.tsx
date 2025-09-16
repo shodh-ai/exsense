@@ -179,6 +179,8 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
   const containerRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef<object[]>([]);
   const flushingRef = useRef<boolean>(false);
+  // Debounce timer for resize events so we don't flood the backend while dragging
+  const resizeDebounceTimer = useRef<NodeJS.Timeout | null>(null);
   const modifiersRef = useRef<{ Control: boolean; Shift: boolean; Alt: boolean; Meta: boolean }>({
     Control: false, Shift: false, Alt: false, Meta: false,
   });
@@ -231,12 +233,25 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
       if (entries.length > 0) {
         const { width, height } = entries[0].contentRect;
         if (width > 0 && height > 0) {
-          publishOrQueue({ type: "resize", width: Math.round(width), height: Math.round(height) });
+          // Debounce rapid resize storms (e.g., during window drag)
+          if (resizeDebounceTimer.current) {
+            clearTimeout(resizeDebounceTimer.current);
+          }
+          resizeDebounceTimer.current = setTimeout(() => {
+            try { console.log(`[ResizeDebounced] Sending new size: ${Math.round(width)}x${Math.round(height)}`); } catch {}
+            publishOrQueue({ type: "resize", width: Math.round(width), height: Math.round(height) });
+          }, 250);
         }
       }
     });
     resizeObserver.observe(container);
-    return () => resizeObserver.disconnect();
+    return () => {
+      resizeObserver.disconnect();
+      if (resizeDebounceTimer.current) {
+        clearTimeout(resizeDebounceTimer.current);
+        resizeDebounceTimer.current = null;
+      }
+    };
   }, [publishOrQueue]);
 
   const calculateCoords = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -371,7 +386,7 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
   return (
     <div
       ref={containerRef}
-      className="h-full aspect-[16/9] bg-transparent rounded shadow-lg cursor-crosshair overflow-scroll"
+      className="w-full h-full bg-black rounded shadow-lg cursor-crosshair"
       style={{ outline: 'none', userSelect: 'none', WebkitUserSelect: 'none' }} // Hide focus ring & prevent selection
       onClick={handleClick}
       onContextMenu={handleContextMenu}
@@ -387,7 +402,7 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
         muted
         draggable={false}
         onDragStart={(e) => e.preventDefault()}
-        className="w-full h-full aspect-[16/9]"
+        className="w-full h-full"
         style={{ objectFit: 'contain', userSelect: 'none', WebkitUserSelect: 'none', backgroundColor: 'transparent' }}
       />
     </div>
