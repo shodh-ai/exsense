@@ -6,7 +6,7 @@ import { MicButton } from '@/components/MicButton';
 import { UploadButton } from '@/components/UploadButton';
 import { MessageButton } from '@/components/MessageButton';
 // MODIFICATION: Added Send icon for the new chat input
-import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic } from 'lucide-react';
+import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic, ExternalLink } from 'lucide-react';
 // Keep other existing imports
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
@@ -298,6 +298,7 @@ interface TeacherFooterProps {
     screenshotIntervalSec: number;
     onSaveScriptClick?: () => void;
     onVSCodeClick?: () => void;
+    onSalesforceClick?: () => void;
     onPasteClick?: () => void;
     isRecording: boolean;
     isPaused: boolean;
@@ -319,6 +320,7 @@ const TeacherFooter = ({
     screenshotIntervalSec, 
     onSaveScriptClick,
     onVSCodeClick,
+    onSalesforceClick,
     onPasteClick,
     isRecording,
     isPaused,
@@ -385,6 +387,13 @@ const TeacherFooter = ({
                         className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
                     >
                         <img src="/vscode.svg" alt="Switch to VS Code" className="w-6 h-6" />
+                    </button>
+                    <button
+                        onClick={onSalesforceClick}
+                        title="Open Salesforce Home"
+                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
+                    >
+                        <ExternalLink className="w-5 h-5 text-[#566FE9]" />
                     </button>
                     <UploadButton
                         isVisible={true}
@@ -1268,6 +1277,18 @@ export default function Session() {
         console.log('[TeacherPage] UI: Switched to VS Code. Subsequent recordings will capture VS Code actions.');
     };
 
+    // --- NEW: Open Salesforce in browser environment ---
+    const handleOpenSalesforce = () => {
+        // Ensure we're in the browser environment
+        setImprintingEnvironment('browser');
+        // Navigate the browser pod to the Salesforce Home URL
+        void sendBrowser('navigate', { url: 'https://ruby-ruby-7891.lightning.force.com/lightning/page/home' });
+        // Feedback
+        setStatusMessage('Opening Salesforce Home in the browser...');
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] UI: Opening Salesforce Home URL in browser pod');
+    };
+
     // Paste text from local clipboard into the remote session
     const handlePasteFromLocal = async () => {
         try {
@@ -1358,6 +1379,7 @@ export default function Session() {
                                     onSaveScriptClick={handleSaveSetupText}
                                     onPasteClick={handlePasteFromLocal}
                                     onVSCodeClick={handleSwitchToVSCode}
+                                    onSalesforceClick={handleOpenSalesforce}
                                     isRecording={isRecording}
                                     isPaused={isPaused}
                                     recordingDuration={recordingDuration}

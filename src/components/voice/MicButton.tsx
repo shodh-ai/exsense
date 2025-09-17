@@ -106,6 +106,43 @@ export default function MicButton({ roomId, identity, sessionId, thesisId, mode,
     }
   }, [roomId, identity]);
 
+  // Wait up to a short timeout for the bot participant to appear in the room
+  const waitForBotJoin = useCallback(async (timeoutMs: number = 5000) => {
+    const room = roomRef.current;
+    if (!room) return;
+    const started = Date.now();
+    await new Promise<void>((resolve) => {
+      const identityMatches = (p: any) => typeof p?.identity === 'string' && p.identity.startsWith('voice-bot-');
+      const checkNow = () => {
+        try {
+          const has = Array.from((room as any).remoteParticipants?.values?.() || []).some(identityMatches);
+          if (has || Date.now() - started > timeoutMs) {
+            cleanup();
+            resolve();
+          }
+        } catch {
+          cleanup();
+          resolve();
+        }
+      };
+      const onPC = (p: any) => {
+        try {
+          if (identityMatches(p)) {
+            cleanup();
+            resolve();
+          }
+        } catch {}
+      };
+      const cleanup = () => {
+        try { (room as any).off?.(RoomEvent.ParticipantConnected, onPC); } catch {}
+        clearInterval(iv);
+      };
+      try { (room as any).on?.(RoomEvent.ParticipantConnected, onPC); } catch {}
+      const iv = setInterval(checkNow, 200);
+      checkNow();
+    });
+  }, []);
+
   const startPublishing = useCallback(async () => {
     try {
       const room = await connectIfNeeded();
@@ -117,53 +154,31 @@ export default function MicButton({ roomId, identity, sessionId, thesisId, mode,
           room.on(RoomEvent.Connected, onConnected);
         });
       }
-      // Create local mic track
-      console.debug("[MicButton] creating local audio track");
-      const audioTrack = await createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
-      localTrackRef.current = audioTrack;
-      // Small delay helps LK engine settle on some browsers
-      await new Promise((r) => setTimeout(r, 200));
-      // Publish with retry loop for "engine not connected" races
-      let lastErr: any = null;
-      for (let i = 0; i < 5; i++) {
-        try {
-          console.debug("[MicButton] publishing mic track (attempt)", { attempt: i + 1 });
-          await room.localParticipant.publishTrack(audioTrack);
-          console.debug("[MicButton] publish success");
-          lastErr = null;
-          break;
-        } catch (err: any) {
-          lastErr = err;
-          const msg = String(err?.message || err);
-          console.warn("[MicButton] publish failed", { attempt: i + 1, msg });
-          if (/engine not connected/i.test(msg) || /not connected/i.test(msg)) {
-            await new Promise((r) => setTimeout(r, 300));
-            continue;
-          }
-          throw err;
-        }
-      }
-      if (lastErr) throw lastErr;
-      // Ensure server-side bot is running
+      // Ensure server-side bot is running FIRST, then publish mic so the bot always sees it
       console.debug("[MicButton] starting voice bot", { roomId, sessionId, thesisId, mode, studentId, authorId });
       await startVoiceBot({ room: roomId, sessionId, thesisId, mode, studentId, authorId });
-      console.debug("[MicButton] start bot request sent");
+      console.debug("[MicButton] start bot request sent; waiting for bot join...");
+      await waitForBotJoin(4000);
+      // Enable microphone via LiveKit API (handles getUserMedia + publish internally)
+      console.debug("[MicButton] enabling microphone via setMicrophoneEnabled(true)");
+      await room.localParticipant.setMicrophoneEnabled(true, {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      } as any);
     } catch (e: any) {
       setError(e?.message || String(e));
       console.error("[MicButton] error in startPublishing", e);
       setPressed(false);
     }
-  }, [connectIfNeeded, roomId, sessionId, thesisId, mode, studentId, authorId]);
+  }, [connectIfNeeded, waitForBotJoin, roomId, sessionId, thesisId, mode, studentId, authorId]);
 
   const stopPublishing = useCallback(async () => {
     try {
       const room = roomRef.current;
-      const local = localTrackRef.current;
-      if (room && local) {
-        try { await room.localParticipant.unpublishTrack(local); console.debug("[MicButton] mic track unpublished"); } catch {}
-        try { local.stop(); console.debug("[MicButton] mic track stopped"); } catch {}
+      if (room) {
+        try { await room.localParticipant.setMicrophoneEnabled(false); console.debug("[MicButton] microphone disabled"); } catch {}
       }
-      localTrackRef.current = null;
     } catch (e: any) {
       setError(e?.message || String(e));
       console.error("[MicButton] error in stopPublishing", e);

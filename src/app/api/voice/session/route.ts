@@ -6,11 +6,12 @@ export const runtime = "nodejs";
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
-const LIVEKIT_URL = process.env.LIVEKIT_URL;
+// Prefer a browser-accessible URL when returning to the client
+const PUBLIC_LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL;
 
 export async function POST(req: Request) {
   try {
-    if (!LIVEKIT_URL) throw new Error('LIVEKIT_URL is not defined');
+    if (!PUBLIC_LIVEKIT_URL) throw new Error('NEXT_PUBLIC_LIVEKIT_URL or LIVEKIT_URL must be defined');
     if (!API_KEY) throw new Error('LIVEKIT_API_KEY is not defined');
     if (!API_SECRET) throw new Error('LIVEKIT_API_SECRET is not defined');
 
@@ -36,7 +37,7 @@ export async function POST(req: Request) {
     at.addGrant(grant);
     const token = await at.toJwt();
 
-    return NextResponse.json({ url: LIVEKIT_URL, token }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ url: PUBLIC_LIVEKIT_URL, token }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e: any) {
     console.error('[api/voice/session] error', e?.message || e);
     return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
