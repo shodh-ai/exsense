@@ -26,7 +26,18 @@ const StarRating = ({ rating }: { rating: number }) => {
     <div className="flex items-center gap-[4px]">{Array.from({ length: totalStars }, (_, index) => { const starValue = index + 1; const fillPercentage = rating >= starValue ? "100%" : rating > index ? `${(rating - index) * 100}%` : "0%"; return (<div key={index} className="relative h-5 w-5"><Star className="absolute left-0 top-0 h-5 w-5 fill-gray-300 text-gray-300" /><div className="absolute left-0 top-0 h-full overflow-hidden" style={{ width: fillPercentage }}><Star className="h-5 w-5 flex-shrink-0 fill-[#566FE9] text-[#566FE9]" /></div></div>); })}</div>
   );
 };
-const CourseHeader = () => (<div className="flex justify-between items-center"><h2 className="text-base font-semibold text-[#394169]">Course Overview</h2></div>);
+
+// --- THIS IS THE FIX ---
+const CourseHeader = ({ courseId }: { courseId: string }) => (
+    <div className="flex justify-between items-center">
+        <h2 className="text-base font-semibold text-[#394169]">Course Overview</h2>
+        <Button asChild>
+            <Link href={`/courses/${courseId}/edit`}>Edit Curriculum</Link>
+        </Button>
+    </div>
+);
+// --- END OF FIX ---
+
 const CourseBanner = ({ imageUrl }: { imageUrl?: string }) => (<div className="flex justify-center"><img className="w-full rounded-lg h-auto max-h-48 md:max-h-[200px] object-cover" alt="Course banner" src={imageUrl || "/banner.svg"} /></div>);
 const CourseIntroduction = ({ tags, title, description }: { tags: string[], title: string, description: string }) => (
   <section className="flex flex-col gap-3">
@@ -126,7 +137,9 @@ export default function TeacherCoursePage(): JSX.Element {
             <div className="mx-auto flex w-full max-w-[80%] flex-col gap-10 md:gap-12">
               <Breadcrumb courseTitle={course.title} />
               <div className="flex flex-col gap-6">
-                <CourseHeader />
+                {/* --- THIS IS THE FIX --- */}
+                <CourseHeader courseId={course.id} />
+                {/* --- END OF FIX --- */}
                 <CourseBanner imageUrl={course.imageUrl} />
               </div>
 
