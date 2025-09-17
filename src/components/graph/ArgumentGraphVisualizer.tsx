@@ -16,7 +16,9 @@ import { useThesisGraph } from "@/hooks/useThesisGraph";
 const dagreGraph = new dagre.graphlib.Graph();
 dagreGraph.setDefaultEdgeLabel(() => ({}));
 
-function layout(nodes: Node[], edges: Edge[]) {
+type RFNodeData = { label?: string; raw?: any };
+
+function layout(nodes: Node<RFNodeData>[], edges: Edge[]) {
   const g = dagreGraph;
   g.setGraph({ rankdir: "TB", nodesep: 60, ranksep: 80, marginx: 20, marginy: 20 });
   nodes.forEach((n) => g.setNode(n.id, { width: 220, height: 62 }));
@@ -43,12 +45,12 @@ export type ArgumentGraphVisualizerProps = {
 
 export default function ArgumentGraphVisualizer({ thesisId, refreshKey, highlightTerms = [] }: ArgumentGraphVisualizerProps) {
   const { graph, loading, error, refresh } = useThesisGraph(thesisId);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<RFNodeData>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // prepare nodes/edges
   const rfData = useMemo(() => {
-    const ns: Node[] = (graph.nodes || []).map((n: any) => ({
+    const ns: Node<RFNodeData>[] = (graph.nodes || []).map((n: any) => ({
       id: n.id,
       type: "default",
       data: { label: n?.data?.label ?? n?.id, raw: n },
@@ -76,7 +78,7 @@ export default function ArgumentGraphVisualizer({ thesisId, refreshKey, highligh
 
   // apply layout
   useEffect(() => {
-    setNodes(rfData.nodes);
+    setNodes(rfData.nodes as unknown as Node<RFNodeData>[]);
     setEdges(rfData.edges);
   }, [rfData, setNodes, setEdges]);
 
@@ -92,7 +94,7 @@ export default function ArgumentGraphVisualizer({ thesisId, refreshKey, highligh
     if (!highlightTerms?.length) return;
     const terms = highlightTerms.map((s) => s.toLowerCase());
     setNodes((ns) =>
-      ns.map((n) => {
+      (ns as Node<RFNodeData>[]).map((n) => {
         const label: string = n?.data?.label || "";
         const hit = terms.some((t) => label.toLowerCase().includes(t));
         return {
@@ -102,8 +104,8 @@ export default function ArgumentGraphVisualizer({ thesisId, refreshKey, highligh
             boxShadow: hit ? "0 0 0 3px rgba(59,130,246,0.4)" : undefined,
             border: hit ? "2px solid #3b82f6" : (n.style as any)?.border,
           },
-        } as Node;
-      })
+        } as Node<RFNodeData>;
+      }) as unknown as Node<RFNodeData>[]
     );
   }, [highlightTerms, setNodes]);
 

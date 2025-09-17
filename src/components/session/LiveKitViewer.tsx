@@ -179,6 +179,8 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
   const containerRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef<object[]>([]);
   const flushingRef = useRef<boolean>(false);
+  // Debounce timer for resize events so we don't flood the backend while dragging
+  const resizeDebounceTimer = useRef<NodeJS.Timeout | null>(null);
   const modifiersRef = useRef<{ Control: boolean; Shift: boolean; Alt: boolean; Meta: boolean }>({
     Control: false, Shift: false, Alt: false, Meta: false,
   });
@@ -188,6 +190,14 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     if (el) track.attach(el);
     return () => { if (el) track.detach(el); };
   }, [track]);
+
+  // Ensure the container is focused so keyboard events work without extra clicks
+  useEffect(() => {
+    const c = containerRef.current;
+    if (c) {
+      try { c.focus(); } catch {}
+    }
+  }, []);
 
   const publishOrQueue = useCallback(async (payload: object) => {
     if (room.state !== ConnectionState.Connected) {
@@ -223,12 +233,25 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
       if (entries.length > 0) {
         const { width, height } = entries[0].contentRect;
         if (width > 0 && height > 0) {
-          publishOrQueue({ type: "resize", width: Math.round(width), height: Math.round(height) });
+          // Debounce rapid resize storms (e.g., during window drag)
+          if (resizeDebounceTimer.current) {
+            clearTimeout(resizeDebounceTimer.current);
+          }
+          resizeDebounceTimer.current = setTimeout(() => {
+            try { console.log(`[ResizeDebounced] Sending new size: ${Math.round(width)}x${Math.round(height)}`); } catch {}
+            publishOrQueue({ type: "resize", width: Math.round(width), height: Math.round(height) });
+          }, 250);
         }
       }
     });
     resizeObserver.observe(container);
-    return () => resizeObserver.disconnect();
+    return () => {
+      resizeObserver.disconnect();
+      if (resizeDebounceTimer.current) {
+        clearTimeout(resizeDebounceTimer.current);
+        resizeDebounceTimer.current = null;
+      }
+    };
   }, [publishOrQueue]);
 
   const calculateCoords = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -257,18 +280,28 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     const intrinsicX = localX / scaleContain;
     const intrinsicY = localY / scaleContain;
 
-    // Return intrinsic pixel coordinates; server expects CSS pixels which match intrinsic when device_scale_factor=1
-    const x = Math.floor(intrinsicX);
-    const y = Math.floor(intrinsicY);
+    // Map to capture resolution if known (server's original capture size)
+    // This keeps click accuracy even if LiveKit scaled the video.
+    let x = intrinsicX;
+    let y = intrinsicY;
+    if (captureSize && captureSize.w > 0 && captureSize.h > 0 && intrinsicW > 0 && intrinsicH > 0) {
+      const scaleX = captureSize.w / intrinsicW;
+      const scaleY = captureSize.h / intrinsicH;
+      x *= scaleX;
+      y *= scaleY;
+    }
+    x = Math.floor(x);
+    y = Math.floor(y);
     return {
-      x: Math.max(0, Math.min(intrinsicW - 1, x)),
-      y: Math.max(0, Math.min(intrinsicH - 1, y)),
+      x: Math.max(0, Math.min((captureSize?.w ?? intrinsicW) - 1, x)),
+      y: Math.max(0, Math.min((captureSize?.h ?? intrinsicH) - 1, y)),
     };
   };
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    try { containerRef.current?.focus(); } catch {}
     const coords = calculateCoords(event);
     try {
       const video = videoRef.current;
@@ -353,7 +386,7 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
   return (
     <div
       ref={containerRef}
-      className="w-full h-full flex items-center justify-center bg-black rounded shadow-lg cursor-crosshair"
+      className="w-full h-full bg-black rounded shadow-lg cursor-crosshair"
       style={{ outline: 'none', userSelect: 'none', WebkitUserSelect: 'none' }} // Hide focus ring & prevent selection
       onClick={handleClick}
       onContextMenu={handleContextMenu}
@@ -370,7 +403,7 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
         draggable={false}
         onDragStart={(e) => e.preventDefault()}
         className="w-full h-full"
-        style={{ objectFit: 'contain', userSelect: 'none', WebkitUserSelect: 'none' }}
+        style={{ objectFit: 'contain', userSelect: 'none', WebkitUserSelect: 'none', backgroundColor: 'transparent' }}
       />
     </div>
   );
