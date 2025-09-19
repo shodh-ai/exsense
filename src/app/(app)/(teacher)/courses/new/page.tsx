@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from "react";
@@ -94,7 +95,7 @@ export default function NewCoursePage() {
   };
 
   return (
-    <div className="container mx-auto h-[calc(100vh-60px)]">
+    <div className="container mx-auto h-[90%] overflow-y-auto custom-scrollbar">
       <CirriculumEditor
         initialTitle={title}
         initialDescription={description}
@@ -102,7 +103,7 @@ export default function NewCoursePage() {
         onFinalize={handleCreateCourse}
         finalizeLabel={isCreating ? "Creating..." : "Finalize Course"}
       />
-      <div className="fixed bottom-0 left-0 right-0">
+      <div className="fixed bottom-[2%] left-0 right-0">
         <Footer />
       </div>
     </div>

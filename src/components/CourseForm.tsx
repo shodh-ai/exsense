@@ -129,7 +129,7 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
         LAYOUT FIX: This is now a simple content wrapper. The `min-h-screen`, `flex`, and `<main>`
         tags have been removed to prevent conflicts with the main `layout.tsx`.
       */}
-      <div className="w-full h-[87%] overflow-y-auto bg-transparent relative z-10">
+      <div className="w-full h-[90%] overflow-y-auto bg-transparent relative z-10 custom-scrollbar">
         {/*
           LAYOUT FIX: This `div` with `mx-auto` is the content block that will be
           correctly centered by the parent layout.
@@ -180,12 +180,19 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
 
             </CardContent>
           </Card>
-
+          
+          {/* --- MODIFIED BUTTON SECTION --- */}
           <div className="space-y-4 mt-6">
+            {/* Preview Button */}
+            <Button variant="outline" className="w-full h-auto px-7 py-4 rounded-full border-2 border-[#566fe9] text-[#566fe9] hover:bg-[#e9ebfd] hover:text-[#566fe9]">
+                <span className="text-sm font-semibold">Preview Course Details</span>
+            </Button>
+            {/* Update/Save Button */}
             <Button onClick={handleSave} disabled={isSaving} className="w-full h-auto px-7 py-4 rounded-full bg-[#566fe9] hover:bg-[#4557d2]">
-              <span className="text-sm font-semibold text-white">{isSaving ? 'Saving...' : (isEditMode ? 'Save Changes' : 'Save & Return to Editor')}</span>
+              <span className="text-sm font-semibold text-white">{isSaving ? 'Saving...' : (isEditMode ? 'Update Course Details' : 'Save & Return to Editor')}</span>
             </Button>
           </div>
+
         </div>
         
         {/* The Footer naturally follows the main content block */}

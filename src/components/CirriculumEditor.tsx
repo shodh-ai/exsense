@@ -164,7 +164,7 @@ const CirriculumEditor = ({
   return (
     <>
       <Sphere/>
-      <div className="w-full h-[90%] bg-transparent flex flex-col relative">
+      <div className="w-full h-[90%] bg-transparent flex flex-col relative custom=scrollbar">
         <ConfirmationModal
           isOpen={isDeleteModalOpen}
           onClose={() => setIsDeleteModalOpen(false)}

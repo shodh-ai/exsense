@@ -126,7 +126,7 @@ export const CurriculumSection = ({
   };
 
   return (
-    <div className="w-full bg-[#fbfbfe] border border-gray-200 rounded-2xl p-4 space-y-[20px]">
+    <div className="w-full bg-[#fbfbfe] border border-gray-200 rounded-2xl p-4 space-y-[20px] custom=scrollbar">
       {/* --- Section Title (with error handling) --- */}
       <div className="space-y-[20px]">
         <label className="text-sm font-semibold text-[#394169]">Section Title</label>
