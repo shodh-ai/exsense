@@ -1,65 +1,40 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+// This route starts the voice bot associated with a room. For local development,
+// we simply acknowledge and let the LiveKit Agent auto-join via roomConfig.
+// If you have an external voice service, you can proxy to it by setting VOICE_BASE.
+const VOICE_BASE = process.env.VOICE_BASE; // e.g., http://localhost:8090
 
-const VOICE_INTERNAL = process.env.VOICE_INTERNAL_BASE || "http://localhost:8090";
+export const revalidate = 0;
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
-    console.log('[api/voice/start-bot] incoming POST');
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { room, session_id, thesis_id, mode, student_id, author_id } = body || {};
 
-    // Kick off upstream call in the background; respond immediately to client
-    (async () => {
-      const t0 = Date.now();
-      try {
-        // primary attempt
-        const ctrl = new AbortController();
-        const to = setTimeout(() => ctrl.abort("timeout"), 10000);
-        let target = `${VOICE_INTERNAL}/voice/start-bot`;
-        let res: Response;
-        try {
-          console.log('[api/voice/start-bot] POST', target);
-          res = await fetch(target, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-            signal: ctrl.signal,
-          });
-        } catch (e) {
-          // fallback via host.docker.internal
-          console.warn('[api/voice/start-bot] primary fetch failed, retrying via host.docker.internal', String(e));
-          const ctrl2 = new AbortController();
-          const to2 = setTimeout(() => ctrl2.abort("timeout"), 10000);
-          target = `http://host.docker.internal:8090/voice/start-bot`;
-          console.log('[api/voice/start-bot] POST', target);
-          res = await fetch(target, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-            signal: ctrl2.signal,
-          }).finally(() => clearTimeout(to2));
-        } finally {
-          clearTimeout(to);
-        }
+    if (!room) return NextResponse.json({ error: "Missing 'room'" }, { status: 400 });
 
-        if (!res.ok) {
-          const text = await res.text();
-          console.error('[api/voice/start-bot] upstream error', res.status, text);
-        } else {
-          const json = await res.json().catch(() => ({}));
-          console.log('[api/voice/start-bot] success in', Date.now() - t0, 'ms', json);
-        }
-      } catch (err) {
-        console.error('[api/voice/start-bot] background error', err);
-      }
-    })();
+    if (VOICE_BASE) {
+      // Proxy to external service if configured
+      const url = new URL("/voice/start-bot", VOICE_BASE).toString();
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ room, session_id, thesis_id, mode, student_id, author_id }),
+      });
+      const text = await res.text();
+      const tryJson = (() => { try { return JSON.parse(text); } catch { return text; } })();
+      return NextResponse.json(tryJson, { status: res.status });
+    }
 
-    // Return immediately so the UI doesn't block on upstream timing
-    return NextResponse.json({ status: 'started' }, { status: 202 });
-  } catch (e: any) {
-    console.error("[api/voice/start-bot] error", e?.message || e);
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    // By default, do nothing and return OK. The token issued by /api/voice/session includes
+    // a roomConfig with agent name, which should prompt the LiveKit Agent Worker to join.
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error("/api/voice/start-bot error:", error.message);
+      return new NextResponse(error.message, { status: 500 });
+    }
+    return new NextResponse("Unknown error", { status: 500 });
   }
 }

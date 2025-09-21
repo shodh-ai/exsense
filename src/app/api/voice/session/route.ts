@@ -1,32 +1,35 @@
 import { NextResponse } from "next/server";
 import { AccessToken, type AccessTokenOptions, type VideoGrant } from "livekit-server-sdk";
-
-export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
+import { RoomConfiguration } from "@livekit/protocol";
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
-// Prefer a browser-accessible URL when returning to the client
-const PUBLIC_LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL || process.env.LIVEKIT_URL;
+const LIVEKIT_URL = process.env.LIVEKIT_URL;
+const AGENT_NAME = process.env.LIVEKIT_AGENT_NAME || "my-voice-agent";
+
+export const revalidate = 0;
 
 export async function POST(req: Request) {
   try {
-    if (!PUBLIC_LIVEKIT_URL) throw new Error('NEXT_PUBLIC_LIVEKIT_URL or LIVEKIT_URL must be defined');
-    if (!API_KEY) throw new Error('LIVEKIT_API_KEY is not defined');
-    if (!API_SECRET) throw new Error('LIVEKIT_API_SECRET is not defined');
+    if (!LIVEKIT_URL) throw new Error("LIVEKIT_URL is not defined");
+    if (!API_KEY) throw new Error("LIVEKIT_API_KEY is not defined");
+    if (!API_SECRET) throw new Error("LIVEKIT_API_SECRET is not defined");
 
-    const body = await req.json();
-    const room: string = body?.room;
-    const identity: string = body?.identity;
+    const body = await req.json().catch(() => ({}));
+    const room: string | undefined = body?.room;
+    const identity: string | undefined = body?.identity;
     const ttlSeconds: number | undefined = body?.ttl_seconds;
-    if (!room || !identity) throw new Error('room and identity are required');
 
-    // Build token following agent-starter-react pattern
-    const at = new AccessToken(API_KEY, API_SECRET, {
+    if (!room) return NextResponse.json({ error: "Missing 'room'" }, { status: 400 });
+    if (!identity) return NextResponse.json({ error: "Missing 'identity'" }, { status: 400 });
+
+    const userInfo: AccessTokenOptions = {
       identity,
       name: identity,
-      ttl: ttlSeconds && Number.isFinite(ttlSeconds) ? `${Math.max(60, Math.min(86400, Math.trunc(ttlSeconds)))}s` : '15m',
-    } as AccessTokenOptions);
+      ...(ttlSeconds ? { ttl: `${Math.max(60, Math.min(60 * 60, Math.floor(ttlSeconds)))}s` } : { ttl: "15m" }),
+    };
+
+    const at = new AccessToken(API_KEY, API_SECRET, userInfo);
     const grant: VideoGrant = {
       room,
       roomJoin: true,
@@ -35,11 +38,22 @@ export async function POST(req: Request) {
       canSubscribe: true,
     };
     at.addGrant(grant);
+
+    // Configure the agent to auto-join this room (LiveKit Agent Worker must be running with the same agent_name)
+    if (AGENT_NAME) {
+      at.roomConfig = new RoomConfiguration({
+        agents: [{ agentName: AGENT_NAME }],
+      });
+    }
+
     const token = await at.toJwt();
 
-    return NextResponse.json({ url: PUBLIC_LIVEKIT_URL, token }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (e: any) {
-    console.error('[api/voice/session] error', e?.message || e);
-    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+    return NextResponse.json({ url: LIVEKIT_URL, token });
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error("/api/voice/session error:", error.message);
+      return new NextResponse(error.message, { status: 500 });
+    }
+    return new NextResponse("Unknown error", { status: 500 });
   }
 }
