@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Footer from '@/components/Footer';
-import { Room } from 'livekit-client';
+import type { Room } from 'livekit-client';
 
-import dynamic from 'next/dynamic';
+import NextDynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 
@@ -14,19 +14,19 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
 import SuggestedResponses from '@/components/session/SuggestedResponses';
 
-// --- MODIFICATION: Import BOTH converters (removed MermaidDirectRenderer import) ---
-import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw';
-import { convertToExcalidrawElements } from '@excalidraw/excalidraw';
+// Excalidraw and Mermaid conversion libs are imported dynamically in the effect below
 
-const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
+const IntroPage = NextDynamic(() => import('@/components/session/IntroPage'));
 
-const ExcalidrawWrapper = dynamic(() => import('@/components/session/ExcalidrawWrapper'), { ssr: false });
-const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
+const ExcalidrawWrapper = NextDynamic(() => import('@/components/session/ExcalidrawWrapper'), { ssr: false });
+const LiveKitViewer = NextDynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
 
-const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
-const MessageDisplay = dynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
+const VideoViewer = NextDynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
+const MessageDisplay = NextDynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
 
-const fallbackRoom = new Room();
+// Prevent static prerendering of this page at build time
+export const dynamic = 'force-dynamic';
+
 type ViewKey = ReturnType<typeof useSessionStore.getState>['activeView'];
 
 interface ButtonConfig {
@@ -116,6 +116,8 @@ export default function Session() {
             if (diagramDefinition && diagramDefinition.trim()) {
                 try {
                     console.log("Step 1: Parsing Mermaid to skeleton elements...");
+                    const { parseMermaidToExcalidraw } = await import('@excalidraw/mermaid-to-excalidraw');
+                    const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw');
                     const { elements: skeletonElements } = await parseMermaidToExcalidraw(diagramDefinition);
                     console.log(`Step 1 successful. Found ${skeletonElements.length} skeleton elements.`);
 

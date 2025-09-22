@@ -5,12 +5,6 @@ import { useSessionStore } from '@/lib/store';
 
 // Lazy import to avoid SSR issues; rrweb-player relies on DOM APIs
 let ReplayerCtor: any = null;
-if (typeof window !== 'undefined') {
-  // Dynamically require to ensure this only runs on the client
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const mod = require('rrweb-player');
-  ReplayerCtor = mod?.Replayer || mod?.default;
-}
 
 export const RrwebPlayer: React.FC = () => {
   const replayUrl = useSessionStore((s) => s.replayEventsUrl);
@@ -25,10 +19,14 @@ export const RrwebPlayer: React.FC = () => {
     let cancelled = false;
 
     const setupReplayer = async (url: string) => {
-      if (!containerRef.current || !ReplayerCtor) return;
+      if (!containerRef.current) return;
       setIsLoading(true);
       setError(null);
       try {
+        if (!ReplayerCtor) {
+          const mod: any = await import('rrweb-player');
+          ReplayerCtor = mod?.Replayer || mod?.default;
+        }
         const resp = await fetch(url, { cache: 'no-store' });
         if (!resp.ok) throw new Error(`Failed to fetch events: ${resp.status} ${resp.statusText}`);
         const events = await resp.json();
@@ -45,10 +43,11 @@ export const RrwebPlayer: React.FC = () => {
         });
         replayer.play();
         setIsLoading(false);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (cancelled) return;
         console.error('[RrwebPlayer] Failed to setup replayer:', e);
-        setError(e?.message ?? 'Unknown error');
+        const message = e instanceof Error ? e.message : 'Unknown error';
+        setError(message);
         setIsLoading(false);
       }
     };
@@ -136,3 +135,4 @@ export const RrwebPlayer: React.FC = () => {
     </div>
   );
 };
+
