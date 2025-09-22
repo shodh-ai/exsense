@@ -1,5 +1,6 @@
+// exsense/src/app/(app)/courses/new/page.tsx
 
-"use client";
+'use client';
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -9,11 +10,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import CirriculumEditor from "@/components/CirriculumEditor";
 import Footer from "@/components/Footer";
 import { SectionData } from "@/components/CurriculumSection";
-import { useNewCourseStore } from "@/lib/newCourseStore"; // Adjust this import path if needed
+import { useNewCourseStore } from "@/lib/newCourseStore"; 
 
 // --- API & Hooks ---
 import { useApiService } from "@/lib/api";
-import { queryKeys } from "@/hooks/useApi"; // Assuming you have queryKeys defined for React Query
+import { queryKeys } from "@/hooks/useApi"; 
 
 export default function NewCoursePage() {
   const router = useRouter();
@@ -21,7 +22,6 @@ export default function NewCoursePage() {
   const queryClient = useQueryClient();
   const [isCreating, setIsCreating] = useState(false);
 
-  // Get ALL data from the shared store, including what was set on the details-form page.
   const {
     title,
     description,
@@ -37,6 +37,7 @@ export default function NewCoursePage() {
   const handleCreateCourse = async (
     editorData: { title: string; description: string; sections: SectionData[] }
   ) => {
+    // ... (Your existing logic here remains the same)
     if (isCreating) return;
     setIsCreating(true);
 
@@ -47,7 +48,6 @@ export default function NewCoursePage() {
     }
 
     try {
-      // 1. Combine data from the editor AND the store into one complete payload.
       const finalCoursePayload = {
         title: editorData.title.trim(),
         description: editorData.description.trim(),
@@ -58,13 +58,11 @@ export default function NewCoursePage() {
         language: language,
       };
 
-      // 2. Send the complete payload to the backend.
       const newCourse = await api.createCourse(finalCoursePayload);
       if (!newCourse || !newCourse.id) {
         throw new Error("Course creation failed: No ID was returned from the server.");
       }
 
-      // 3. Create the lessons associated with the new course.
       for (let i = 0; i < editorData.sections.length; i++) {
         const section = editorData.sections[i];
         await api.createLesson(newCourse.id, {
@@ -76,14 +74,10 @@ export default function NewCoursePage() {
         });
       }
       
-      // 4. Invalidate the cache to ensure the course page fetches fresh data.
       await queryClient.invalidateQueries({ queryKey: queryKeys.courses });
       await queryClient.invalidateQueries({ queryKey: queryKeys.teacherCourses });
 
-      // 5. Reset the form's global state for the next use.
       resetNewCourseStore();
-
-      // 6. Redirect to the newly created course page.
       router.push(`/courses/${newCourse.id}`);
 
     } catch (error) {
@@ -97,6 +91,9 @@ export default function NewCoursePage() {
   return (
     <div className="container mx-auto h-[90%] overflow-y-auto custom-scrollbar">
       <CirriculumEditor
+        // --- THIS IS THE ONLY CHANGE IN THIS FILE ---
+        mode="create" 
+        // --- END CHANGE ---
         initialTitle={title}
         initialDescription={description}
         initialSections={sections}

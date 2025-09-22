@@ -11,11 +11,20 @@ import { PlusIcon, Trash2Icon, ChevronDown } from "lucide-react";
 const environments = ["VS Code Editor", "Salesforce", "Figma", "Jupyter", "Google Docs"] as const;
 type Environment = typeof environments[number];
 
+// --- MODIFICATION START ---
+// Define and export the new TeachingMode type
+export type TeachingMode = 'video' | 'text' | 'quiz' | 'document';
+
+// Update the Module interface to include the new properties
 export interface Module {
   id: string;
   title: string;
-  environment?: Environment | null; // Environment is optional
+  environment?: Environment | null;
+  teachingMode?: TeachingMode;
+  content?: any; // Can be a string for text/URL, or an object for quiz data
 }
+// --- MODIFICATION END ---
+
 
 export interface SectionData {
   id:string;
@@ -32,7 +41,7 @@ interface CurriculumSectionProps {
   titleError?: string | null;
 }
 
-// --- Environment Dropdown Component ---
+// --- Environment Dropdown Component (No changes here) ---
 const EnvironmentDropdown = ({
   selectedEnvironment,
   onEnvironmentChange,
@@ -91,7 +100,7 @@ const EnvironmentDropdown = ({
   );
 };
 
-// --- Main Section Component ---
+// --- Main Section Component (No changes here, it is not used in the new flow but kept for reference) ---
 export const CurriculumSection = ({
     section,
     onUpdate,
@@ -127,7 +136,7 @@ export const CurriculumSection = ({
 
   return (
     <div className="w-full bg-[#fbfbfe] border border-gray-200 rounded-2xl p-4 space-y-[20px] custom=scrollbar">
-      {/* --- Section Title (with error handling) --- */}
+      {/* Section Title */}
       <div className="space-y-[20px]">
         <label className="text-sm font-semibold text-[#394169]">Section Title</label>
         <div className={`mt-2 flex items-center w-full bg-white border p-3 pr-[5px] gap-2 transition-all duration-200 rounded-[600px] h-[50px] ${
@@ -144,7 +153,7 @@ export const CurriculumSection = ({
         )}
       </div>
 
-      {/* --- Section Description --- */}
+      {/* Section Description */}
       <div className="space-y-[20px]">
         <label className="text-sm font-semibold text-[#394169]">Section Description</label>
         <div className="mt-2 flex items-center w-full bg-white border border-gray-200 p-3 pr-[5px] gap-2 rounded-[12px]">
@@ -157,7 +166,7 @@ export const CurriculumSection = ({
         </div>
       </div>
 
-      {/* --- Modules --- */}
+      {/* Modules */}
       <div className="space-y-[20px]">
         <label className="text-sm font-semibold text-[#394169]">Modules</label>
         <div className="mt-2 space-y-[8px]">
@@ -188,7 +197,7 @@ export const CurriculumSection = ({
         </div>
       </div>
 
-      {/* --- Scope --- */}
+      {/* Scope */}
       <div className="space-y-[20px]">
         <label className="text-sm font-semibold text-[#394169]">Scope</label>
         <div className="mt-2 flex items-center w-full bg-white border border-gray-200 p-3 pr-[5px] gap-2 rounded-[12px]">
