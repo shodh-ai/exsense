@@ -263,6 +263,8 @@ enum ClientUIActionType {
   BROWSER_TYPE = 61;                    // Type text into a browser input field
   UPLOAD_FILE_TO_JUPYTER = 62;          // Upload a file to Jupyter notebook environment
   HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION = 63;
+  // rrweb replay action
+  RRWEB_REPLAY = 73;                    // Trigger rrweb replay on the frontend using events JSON URL
   // Suggested responses (quick replies) list
   SUGGESTED_RESPONSES = 65;             // Display quick reply suggestions to the user
   

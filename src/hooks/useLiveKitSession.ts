@@ -645,6 +645,24 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             console.warn('[B2F RPC] SUGGESTED_RESPONSES payload missing or invalid, and no parsable parameters found:', { payload, params });
           }
         }
+      } else if (
+        // Prefer enum when available, but also handle numeric value for backward compatibility
+        (ClientUIActionType as any).RRWEB_REPLAY ?
+          request.actionType === (ClientUIActionType as any).RRWEB_REPLAY :
+          (request.actionType as number) === 73
+      ) {
+        console.log('[B2F RPC] Handling RRWEB_REPLAY');
+        const url = (request as any).parameters?.events_url;
+        if (url && typeof url === 'string') {
+          try {
+            useSessionStore.getState().showReplay(url);
+            console.log('[B2F RPC] rrweb replay URL set in store');
+          } catch (e) {
+            console.error('[B2F RPC] Failed to set rrweb replay URL:', e);
+          }
+        } else {
+          console.error('[B2F RPC] RRWEB_REPLAY action received without a valid events_url.');
+        }
       } else if ((request.actionType as number) === 64) { // EXCALIDRAW_CLEAR_CANVAS
         console.log('[B2F RPC] Handling EXCALIDRAW_CLEAR_CANVAS');
         // Clear canvas via debug functions if available
