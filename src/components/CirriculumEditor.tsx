@@ -298,6 +298,7 @@ const CirriculumEditor = ({
                           onUpdate={handleUpdateSection}
                           onDelete={handleRequestDelete}
                           titleError={index === 0 ? titleError : null}
+                          courseId={courseId}
                       />
                   ))}
                   <Button onClick={handleAddSection} className="w-full h-auto px-7 py-4 bg-[#566fe9] hover:bg-[#4a5fd1] rounded-[600px] transition-colors" disabled={submitting}>
