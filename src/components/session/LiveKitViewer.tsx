@@ -1,4 +1,3 @@
-// LivekitViewer.tsx
 "use client";
 import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { Track, RemoteTrack, RemoteVideoTrack, RemoteTrackPublication, VideoQuality, RoomEvent, ConnectionState, Room, RemoteParticipant } from 'livekit-client';
