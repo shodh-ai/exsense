@@ -66,6 +66,8 @@ interface SessionState {
     suggestedResponses: { id: string; text: string; reason?: string }[];
     suggestedTitle?: string;
     isNavigating: boolean; // <-- State for our loader
+    // --- rrweb replay state ---
+    replayEventsUrl: string | null;
 
     // --- Imprinting / Session Controller State ---
     imprinting_mode: string;
@@ -91,6 +93,9 @@ interface SessionState {
     setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
     clearSuggestedResponses: () => void;
     setIsNavigating: (isNavigating: boolean) => void; // <-- Action for our loader
+    // rrweb replay actions
+    showReplay: (url: string) => void;
+    hideReplay: () => void;
 
     // --- Imprinting Actions ---
     setImprintingMode: (mode: string) => void;
@@ -123,6 +128,8 @@ export const useSessionStore = create<SessionState>()(
             suggestedResponses: [],
             suggestedTitle: undefined,
             isNavigating: false, // <-- Initial state is false
+            // rrweb replay defaults
+            replayEventsUrl: null,
 
             // --- Imprinting defaults ---
             imprinting_mode: 'DEBRIEF_CONCEPTUAL',
@@ -149,6 +156,9 @@ export const useSessionStore = create<SessionState>()(
             setSuggestedResponses: (suggestions, title) => set({ suggestedResponses: suggestions, suggestedTitle: title }),
             clearSuggestedResponses: () => set({ suggestedResponses: [], suggestedTitle: undefined }),
             setIsNavigating: (isNavigating) => set({ isNavigating }), // <-- Action implementation
+            // rrweb replay actions
+            showReplay: (url) => set({ replayEventsUrl: url }),
+            hideReplay: () => set({ replayEventsUrl: null }),
 
             // --- Imprinting Actions ---
             setImprintingMode: (mode) => set({ imprinting_mode: mode }),

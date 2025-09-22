@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import 'rrweb-player/dist/style.css';
 
 :root {
   --background: #ffffff;
