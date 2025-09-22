@@ -16,6 +16,7 @@ import SuggestedResponses from '@/components/session/SuggestedResponses';
 
 // --- MODIFICATION: Import BOTH converters (removed MermaidDirectRenderer import) ---
 import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw';
+import { convertToExcalidrawElements } from '@excalidraw/excalidraw';
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
 
@@ -44,13 +45,11 @@ interface SessionContentProps {
     livekitUrl: string;
     livekitToken: string;
     isConnected: boolean;
-    diagramDefinition: string;
     isDiagramGenerating: boolean;
-    onDiagramUpdate: (definition: string) => void;
     sendBrowserInteraction: (payload: object) => Promise<void>;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, diagramDefinition, isDiagramGenerating, onDiagramUpdate, sendBrowserInteraction }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction }: SessionContentProps) {
     return (
         <div className='w-full h-full flex flex-col'>
             <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
@@ -100,14 +99,7 @@ export default function Session() {
 
     const [isIntroActive, setIsIntroActive] = useState(true);
     // Initialize Mermaid visualization hook (provides diagramDefinition and controls)
-    const {
-        diagramDefinition,
-        isStreaming,
-        error: mermaidError,
-        startVisualization,
-        clearDiagram,
-        updateDiagram,
-    } = useMermaidVisualization();
+    const { diagramDefinition, isGenerating } = useMermaidVisualization();
     const SESSION_DEBUG = false;
 
     const handleIntroComplete = () => setIsIntroActive(false);
@@ -127,8 +119,7 @@ export default function Session() {
                     const { elements: skeletonElements } = await parseMermaidToExcalidraw(diagramDefinition);
                     console.log(`Step 1 successful. Found ${skeletonElements.length} skeleton elements.`);
 
-                    console.log("Step 2: Dynamically importing and converting to final Excalidraw elements...");
-                    const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw');
+                    console.log("Step 2: Converting skeleton to final Excalidraw elements...");
                     const excalidrawElements = convertToExcalidrawElements(skeletonElements);
                     console.log("Step 2 successful. Final elements created.");
 
@@ -254,9 +245,7 @@ export default function Session() {
                         livekitUrl={livekitUrl}
                         livekitToken={livekitToken}
                         isConnected={isConnected}
-                        diagramDefinition={diagramDefinition}
-                        isDiagramGenerating={isStreaming}
-                        onDiagramUpdate={updateDiagram}
+                        isDiagramGenerating={isGenerating}
                         sendBrowserInteraction={sendBrowserInteraction}
                     />
 
