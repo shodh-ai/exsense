@@ -125,6 +125,10 @@ interface SessionContentProps {
     onToggleConceptualRecording: () => void;
     isConceptualRecording: boolean;
     conceptualRecordingDuration: number;
+    // Tab controls
+    onSwitchTab: (id: string) => void | Promise<void>;
+    onOpenNewTab: (name: string, url: string) => void | Promise<void>;
+    onCloseTab: (id: string) => void | Promise<void>;
 }
 
 function SessionContent({
@@ -146,6 +150,9 @@ function SessionContent({
     onToggleConceptualRecording,
     isConceptualRecording,
     conceptualRecordingDuration,
+    onSwitchTab,
+    onOpenNewTab,
+    onCloseTab,
 }: SessionContentProps) {
     return (
         <div className='w-full h-[90%] flex flex-col items-center justify-between'>
@@ -189,9 +196,9 @@ function SessionContent({
                             {room ? (
                                 <>
                                     <TabManager
-                                        onSwitchTab={switchTab}
-                                        onOpenNewTab={openNewTab}
-                                        onCloseTab={closeTab}
+                                        onSwitchTab={onSwitchTab}
+                                        onOpenNewTab={onOpenNewTab}
+                                        onCloseTab={onCloseTab}
                                     />
                                     <div className="flex-1 min-h-0">
                                         <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
@@ -1381,6 +1388,9 @@ export default function Session() {
                                         onToggleConceptualRecording={handleToggleConceptualRecording}
                                         isConceptualRecording={isConceptualRecording}
                                         conceptualRecordingDuration={conceptualRecordingDuration}
+                                        onSwitchTab={switchTab}
+                                        onOpenNewTab={openNewTab}
+                                        onCloseTab={closeTab}
                                     />
                                     
                                 </div>
