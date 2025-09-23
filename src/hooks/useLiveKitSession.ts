@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Observable, firstValueFrom } from 'rxjs';
 import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment } from 'livekit-client';
 import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
@@ -138,6 +139,10 @@ export interface UseLiveKitSessionReturn {
   sendBrowserInteraction: (payload: object) => Promise<void>;
   sessionStatusUrl?: string | null;
   sessionManagerSessionId?: string | null;
+  // --- Browser tab controls ---
+  openNewTab: (name: string, url: string) => Promise<void>;
+  switchTab: (tabId: string) => Promise<void>;
+  closeTab: (tabId: string) => Promise<void>;
 }
 
 export interface LiveKitSpawnOptions {
@@ -159,6 +164,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const setIsMicEnabled = useSessionStore((s) => s.setIsMicEnabled); // mic control
   const setSuggestedResponses = useSessionStore((s) => s.setSuggestedResponses);
   const clearSuggestedResponses = useSessionStore((s) => s.clearSuggestedResponses);
+  // Browser tab actions from store
+  const addTab = useSessionStore((s) => s.addTab);
+  const removeTab = useSessionStore((s) => s.removeTab);
+  const setActiveTabIdInStore = useSessionStore((s) => s.setActiveTabId);
 
   // --- HOOK'S INTERNAL STATE ---
   const [isConnected, setIsConnected] = useState(false);
@@ -1130,6 +1139,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, []);
 
+  // --- TAB MANAGEMENT FUNCTIONS --- (declared after sendBrowserInteraction below)
+
   // --- Kickstart: send an initial navigate over LiveKit DataChannel so the pod draws content ---
   useEffect(() => {
     if (!isConnected) return;
@@ -1271,6 +1282,60 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, []);
 
+  // --- NEW TAB MANAGEMENT FUNCTIONS ---
+  const openNewTab = useCallback(async (name: string, url: string) => {
+    try {
+      const tabId = uuidv4();
+      await sendBrowserInteraction({ action: 'open_tab', tab_id: tabId, url });
+      addTab({ id: tabId, name, url });
+      setActiveTabIdInStore(tabId);
+    } catch (e) {
+      console.error('[Tabs] openNewTab failed:', e);
+    }
+  }, [sendBrowserInteraction, addTab, setActiveTabIdInStore]);
+
+  const switchTab = useCallback(async (tabId: string) => {
+    try {
+      const currentActive = useSessionStore.getState().activeTabId;
+      if (currentActive === tabId) return;
+      await sendBrowserInteraction({ action: 'switch_tab', tab_id: tabId });
+      setActiveTabIdInStore(tabId);
+    } catch (e) {
+      console.error('[Tabs] switchTab failed:', e);
+    }
+  }, [sendBrowserInteraction, setActiveTabIdInStore]);
+
+  const closeTab = useCallback(async (tabIdToClose: string) => {
+    try {
+      // Prevent closing the last remaining tab
+      const tabsState = useSessionStore.getState().tabs;
+      if (tabsState.length <= 1) {
+        console.warn('Cannot close the last tab.');
+        return;
+      }
+
+      // Snapshot before removing to decide fallback active tab
+      const currentTabs = tabsState;
+      const currentActiveTabId = useSessionStore.getState().activeTabId;
+
+      // 1) Tell backend to close the actual browser page
+      await sendBrowserInteraction({ action: 'close_tab', tab_id: tabIdToClose });
+
+      // 2) Update frontend state
+      removeTab(tabIdToClose);
+
+      // 3) If we closed the active tab, pick another tab and switch to it
+      if (currentActiveTabId === tabIdToClose) {
+        const newActiveTab = currentTabs.find(t => t.id !== tabIdToClose);
+        if (newActiveTab) {
+          await switchTab(newActiveTab.id);
+        }
+      }
+    } catch (e) {
+      console.error('[Tabs] closeTab failed:', e);
+    }
+  }, [sendBrowserInteraction, removeTab, switchTab]);
+
   return { 
     isConnected, 
     isLoading, 
@@ -1287,5 +1352,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     sendBrowserInteraction,
     sessionStatusUrl: sessionStatusUrlState,
     sessionManagerSessionId: sessionManagerSessionIdState,
+    // tabs
+    openNewTab,
+    switchTab,
+    closeTab,
   };
 }

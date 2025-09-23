@@ -7,6 +7,7 @@ import type { Room } from 'livekit-client';
 import NextDynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
+import { TabManager } from '@/components/session/TabManager';
 
 import { useMermaidVisualization } from '@/hooks/useMermaidVisualization';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
@@ -47,9 +48,13 @@ interface SessionContentProps {
     isConnected: boolean;
     isDiagramGenerating: boolean;
     sendBrowserInteraction: (payload: object) => Promise<void>;
+    // tab management
+    openNewTab: (name: string, url: string) => Promise<void>;
+    switchTab: (id: string) => Promise<void>;
+    closeTab: (id: string) => Promise<void>;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab }: SessionContentProps) {
     return (
         <div className='w-full h-full flex flex-col'>
             <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
@@ -77,9 +82,18 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                         </div>
                     )}
                 </div>
-                <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
+                <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full flex flex-col`}>
                     {room ? (
-                        <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                        <>
+                            <TabManager
+                                onSwitchTab={switchTab}
+                                onOpenNewTab={openNewTab}
+                                onCloseTab={closeTab}
+                            />
+                            <div className="flex-1 w-full h-full min-h-0">
+                                <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                            </div>
+                        </>
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-300">Connecting to LiveKit...</div>
                     )}
@@ -169,6 +183,9 @@ export default function Session() {
         livekitToken,
         deleteSessionNow,
         sendBrowserInteraction,
+        openNewTab,
+        switchTab,
+        closeTab,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? roomName : '',
         shouldInitializeLiveKit ? userName : '',
@@ -249,6 +266,9 @@ export default function Session() {
                         isConnected={isConnected}
                         isDiagramGenerating={isGenerating}
                         sendBrowserInteraction={sendBrowserInteraction}
+                        openNewTab={openNewTab}
+                        switchTab={switchTab}
+                        closeTab={closeTab}
                     />
 
                     {hasSuggestions && (

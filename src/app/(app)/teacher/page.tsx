@@ -22,6 +22,7 @@ import CurriculumEditor from '@/components/imprinting/CurriculumEditor';
 import LoSelector from '@/components/imprinting/LoSelector';
 // --- MODIFICATION: Import the new modal component ---
 import { SendModal } from '@/components/SendModal';
+import { TabManager } from '@/components/session/TabManager';
 
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
@@ -184,9 +185,18 @@ function SessionContent({
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
                     <div className="w-full h-full flex flex-col md:flex-row gap-4">
-                        <div className="flex-1">
+                        <div className="flex-1 flex flex-col min-h-0">
                             {room ? (
-                                <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                                <>
+                                    <TabManager
+                                        onSwitchTab={switchTab}
+                                        onOpenNewTab={openNewTab}
+                                        onCloseTab={closeTab}
+                                    />
+                                    <div className="flex-1 min-h-0">
+                                        <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                                    </div>
+                                </>
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
                                     Connecting to LiveKit...
@@ -597,6 +607,9 @@ export default function Session() {
         isConnected,
         room,
         sendBrowserInteraction,
+        openNewTab,
+        switchTab,
+        closeTab,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? lkRoomName : '',
         shouldInitializeLiveKit ? lkUserName : '',

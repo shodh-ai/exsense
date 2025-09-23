@@ -24,6 +24,13 @@ export interface VisualizationElement {
   [key: string]: unknown;
 }
 
+// --- Browser Tabs ---
+export interface BrowserTab {
+  id: string;
+  name: string;
+  url: string;
+}
+
 // --- Imprinting phases and curriculum types ---
 export type ImprintingPhase =
   | 'SEED_INPUT'
@@ -69,6 +76,10 @@ interface SessionState {
     // --- rrweb replay state ---
     replayEventsUrl: string | null;
 
+    // --- Browser tab state ---
+    tabs: BrowserTab[];
+    activeTabId: string | null;
+
     // --- Imprinting / Session Controller State ---
     imprinting_mode: string;
     currentLO: string | null;
@@ -96,6 +107,11 @@ interface SessionState {
     // rrweb replay actions
     showReplay: (url: string) => void;
     hideReplay: () => void;
+
+    // --- Browser tab actions ---
+    addTab: (tab: BrowserTab) => void;
+    removeTab: (id: string) => void;
+    setActiveTabId: (id: string | null) => void;
 
     // --- Imprinting Actions ---
     setImprintingMode: (mode: string) => void;
@@ -131,6 +147,10 @@ export const useSessionStore = create<SessionState>()(
             // rrweb replay defaults
             replayEventsUrl: null,
 
+            // --- Browser tab defaults ---
+            tabs: [],
+            activeTabId: null,
+
             // --- Imprinting defaults ---
             imprinting_mode: 'DEBRIEF_CONCEPTUAL',
             currentLO: null,
@@ -159,6 +179,15 @@ export const useSessionStore = create<SessionState>()(
             // rrweb replay actions
             showReplay: (url) => set({ replayEventsUrl: url }),
             hideReplay: () => set({ replayEventsUrl: null }),
+
+            // --- Browser tab actions ---
+            addTab: (tab) => set((state) => ({ tabs: [...state.tabs, tab] })),
+            removeTab: (id) => set((state) => ({
+              tabs: state.tabs.filter(t => t.id !== id),
+              // if removing current active, clear active; caller may select a new one
+              activeTabId: state.activeTabId === id ? null : state.activeTabId,
+            })),
+            setActiveTabId: (id) => set({ activeTabId: id }),
 
             // --- Imprinting Actions ---
             setImprintingMode: (mode) => set({ imprinting_mode: mode }),
