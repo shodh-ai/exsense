@@ -70,6 +70,10 @@ interface SessionState {
     isMusicButtonPlaying: boolean;
     isMicActivatingPending: boolean;
     visualizationData: unknown[] | null;
+    // Mermaid diagram definition used as single source of truth for visualization
+    diagramDefinition: string;
+    // Centralized loading state for diagram generation
+    isDiagramGenerating: boolean;
     suggestedResponses: { id: string; text: string; reason?: string }[];
     suggestedTitle?: string;
     isNavigating: boolean; // <-- State for our loader
@@ -101,6 +105,8 @@ interface SessionState {
     setIsMusicButtonPlaying: (isPlaying: boolean) => void;
     setIsMicActivatingPending: (isPending: boolean) => void;
     setVisualizationData: (data: unknown[] | null) => void;
+    setDiagramDefinition: (definition: string) => void;
+    setIsDiagramGenerating: (isGenerating: boolean) => void;
     setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
     clearSuggestedResponses: () => void;
     setIsNavigating: (isNavigating: boolean) => void; // <-- Action for our loader
@@ -141,6 +147,8 @@ export const useSessionStore = create<SessionState>()(
             isMusicButtonPlaying: false,
             isMicActivatingPending: false,
             visualizationData: null,
+            diagramDefinition: '',
+            isDiagramGenerating: false,
             suggestedResponses: [],
             suggestedTitle: undefined,
             isNavigating: false, // <-- Initial state is false
@@ -173,6 +181,8 @@ export const useSessionStore = create<SessionState>()(
             setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
             setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }),
             setVisualizationData: (data) => set({ visualizationData: data }),
+            setDiagramDefinition: (definition) => set({ diagramDefinition: definition }),
+            setIsDiagramGenerating: (isGenerating) => set({ isDiagramGenerating: isGenerating }),
             setSuggestedResponses: (suggestions, title) => set({ suggestedResponses: suggestions, suggestedTitle: title }),
             clearSuggestedResponses: () => set({ suggestedResponses: [], suggestedTitle: undefined }),
             setIsNavigating: (isNavigating) => set({ isNavigating }), // <-- Action implementation

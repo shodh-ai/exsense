@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Footer from '@/components/Footer';
 import type { Room } from 'livekit-client';
 
@@ -9,7 +9,6 @@ import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { TabManager } from '@/components/session/TabManager';
 
-import { useMermaidVisualization } from '@/hooks/useMermaidVisualization';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
@@ -112,8 +111,9 @@ export default function Session() {
     const setVisualizationData = useSessionStore((s) => s.setVisualizationData);
 
     const [isIntroActive, setIsIntroActive] = useState(true);
-    // Initialize Mermaid visualization hook (provides diagramDefinition and controls)
-    const { diagramDefinition, isGenerating } = useMermaidVisualization();
+    // Centralized diagramDefinition and generation state from store
+    const diagramDefinition = useSessionStore((s) => s.diagramDefinition);
+    const isGenerating = useSessionStore((s) => s.isDiagramGenerating);
     const SESSION_DEBUG = false;
 
     const handleIntroComplete = () => setIsIntroActive(false);

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { useSessionStore } from '@/lib/store';
 
 export interface MermaidVisualizationHook {
   diagramDefinition: string;
@@ -9,8 +10,10 @@ export interface MermaidVisualizationHook {
 }
 
 export const useMermaidVisualization = (): MermaidVisualizationHook => {
-  const [diagramDefinition, setDiagramDefinition] = useState<string>('');
-  const [isGenerating, setIsGenerating] = useState(false);
+  const diagramDefinition = useSessionStore((s) => s.diagramDefinition);
+  const setDiagramDefinition = useSessionStore((s) => s.setDiagramDefinition);
+  const isGenerating = useSessionStore((s) => s.isDiagramGenerating);
+  const setIsDiagramGenerating = useSessionStore((s) => s.setIsDiagramGenerating);
   const [error, setError] = useState<string | null>(null);
 
   const clearDiagram = useCallback(() => {
@@ -19,12 +22,12 @@ export const useMermaidVisualization = (): MermaidVisualizationHook => {
   }, []);
 
   const startVisualization = useCallback(async (text: string, topic: string = '') => {
-    setIsGenerating(true);
+    setIsDiagramGenerating(true);
     setError(null);
     setDiagramDefinition('');
 
     try {
-      const response = await fetch('http://localhost:8002/generate-mermaid-text', {
+      const response = await fetch('http://localhost:8011/generate-mermaid-text', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -47,7 +50,7 @@ export const useMermaidVisualization = (): MermaidVisualizationHook => {
       setError(errorMessage);
       setDiagramDefinition(`flowchart TD\n    Error[\"Generation Failed\"]`);
     } finally {
-      setIsGenerating(false);
+      setIsDiagramGenerating(false);
     }
   }, []);
 
