@@ -5,10 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
 import { Textarea } from "@/components/textarea";
-// --- IMPORT THE ICONS AND LINK COMPONENT ---
 import { PlusIcon, Trash2Icon, ChevronDown, EditIcon } from "lucide-react"; 
 import Link from "next/link";
-// --- END IMPORTS ---
 
 // --- Type definitions ---
 const environments = ["VS Code Editor", "Salesforce", "Figma", "Jupyter", "Google Docs"] as const;
@@ -34,11 +32,10 @@ interface CurriculumSectionProps {
   onUpdate: (id: string, updatedField: Partial<SectionData>) => void;
   onDelete: (id: string) => void;
   titleError?: string | null;
-  // --- ADD courseId TO THE PROPS ---
   courseId?: string;
 }
 
-// --- EnvironmentDropdown component ---
+// --- EnvironmentDropdown component (No changes) ---
 const EnvironmentDropdown = ({
   selectedEnvironment,
   onEnvironmentChange,
@@ -74,14 +71,12 @@ const EnvironmentDropdown = ({
   );
 };
 
-
 // --- Main Section Component ---
 export const CurriculumSection = ({
     section,
     onUpdate,
     onDelete,
     titleError,
-    // --- DESTRUCTURE THE NEW courseId PROP ---
     courseId 
 }: CurriculumSectionProps): JSX.Element => {
   const [newModuleTitle, setNewModuleTitle] = useState("");
@@ -116,40 +111,59 @@ export const CurriculumSection = ({
         </div>
       </div>
 
-      {/* --- MODULES SECTION (WITH THE NEW BUTTON) --- */}
+      {/* Modules Section */}
       <div className="space-y-[20px]">
         <label className="text-sm font-semibold text-[#394169]">Modules</label>
         <div className="mt-2 space-y-[8px]">
+          {/* List of existing modules */}
           {section.modules.map(module => (
             <div key={module.id} className="flex items-center w-full bg-white border border-gray-200 p-[4px] pr-[5px] gap-2 rounded-[600px] h-[50px]">
               <EnvironmentDropdown selectedEnvironment={module.environment} onEnvironmentChange={(env) => handleUpdateModule(module.id, { environment: env })}/>
               <Input placeholder="e.g., Understanding CSS Selectors" value={module.title} onChange={(e) => handleUpdateModule(module.id, { title: e.target.value })} className="flex-grow border-0 p-[4px] h-auto bg-transparent focus:outline-none text-sm font-semibold"/>
-              
-              {/* --- The New "Teach" Icon Button --- */}
-              {courseId && (
-                <Button asChild variant="ghost" size="icon" className="text-[#566FE9] hover:text-blue-700 hover:bg-blue-50 w-10 h-10 rounded-[100px]">
-                  <Link href={`/teacher?courseId=${courseId}&lessonId=${section.id}&moduleTitle=${encodeURIComponent(module.title)}`} title={`Teach: ${module.title}`}>
-                    <EditIcon className="w-5 h-5" />
-                  </Link>
+              <div className="flex items-center flex-shrink-0">
+                {courseId && (
+                  <Button asChild variant="ghost" size="icon" className="text-[#566FE9] hover:text-blue-700 hover:bg-blue-50 w-10 h-10 rounded-[100px]">
+                    <Link href={`/teacher?courseId=${courseId}&lessonId=${section.id}&moduleTitle=${encodeURIComponent(module.title)}`} title={`Teach: ${module.title}`}>
+                      <EditIcon className="w-5 h-5" />
+                    </Link>
+                  </Button>
+                )}
+                <Button variant="ghost" size="icon" onClick={() => handleDeleteModule(module.id)} className="text-[#566FE9] hover:text-red-500 hover:bg-red-50 w-10 h-10 rounded-[100px]">
+                  <Trash2Icon className="w-5 h-5" />
                 </Button>
-              )}
-              {/* --- End of New Button --- */}
-
-              <Button variant="ghost" size="icon" onClick={() => handleDeleteModule(module.id)} className="text-[#566FE9] hover:text-red-500 hover:bg-red-50 w-10 h-10 rounded-[100px]">
-                <Trash2Icon className="w-5 h-5" />
-              </Button>
+              </div>
             </div>
           ))}
+
           {/* "Add new" row */}
           <div className="flex items-center w-full bg-white border border-gray-200 p-1 pr-[5px] gap-2 rounded-[600px] h-[50px]">
-            <div className="pl-0"><EnvironmentDropdown selectedEnvironment={newModuleEnvironment} onEnvironmentChange={setNewModuleEnvironment}/></div>
-            <Input placeholder="Add new concept" value={newModuleTitle} onChange={(e) => setNewModuleTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleAddModule(); }} ref={inputRef} className="flex-grow border-0 p-0 pl-[16px] h-auto bg-transparent focus:outline-none text-sm font-semibold"/>
-            <Button onClick={handleAddModule} size="icon" className="group bg-[#E9EBFD] hover:bg-[#4a5fd1] w-10 h-10 flex-shrink-0 rounded-[600px]"><PlusIcon className="w-5 h-5 text-[#566FE9] group-hover:text-white" /></Button>
+            <div className="pl-0">
+              <EnvironmentDropdown selectedEnvironment={newModuleEnvironment} onEnvironmentChange={setNewModuleEnvironment}/>
+            </div>
+            <Input
+              placeholder="Add new concept" value={newModuleTitle} onChange={(e) => setNewModuleTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddModule(); }} ref={inputRef}
+              className="flex-grow border-0 p-0 pl-[16px] h-auto bg-transparent focus:outline-none text-sm font-semibold"
+            />
+            {/* --- THIS IS THE FINAL IMPLEMENTATION OF THE NEW BUTTON --- */}
+            <div className="flex items-center flex-shrink-0">
+              {courseId && (
+                  <Button asChild variant="ghost" size="icon" className="text-[#566FE9] hover:text-blue-700 hover:bg-blue-50 w-10 h-10 rounded-[600px]">
+                      <Link href={`/teacher?courseId=${courseId}&lessonId=${section.id}&lessonTitle=${encodeURIComponent(section.title)}`} title={`Teach this entire section: ${section.title}`}>
+                          <EditIcon className="w-5 h-5" />
+                      </Link>
+                  </Button>
+              )}
+              <Button onClick={handleAddModule} size="icon" className="group bg-[#E9EBFD] hover:bg-[#4a5fd1] w-10 h-10 rounded-[600px]">
+                <PlusIcon className="w-5 h-5 text-[#566FE9] group-hover:text-white" />
+              </Button>
+            </div>
+            {/* --- END OF CHANGE --- */}
           </div>
         </div>
       </div>
 
-      {/* Scope Section */}
+      {/* Scope Section (No changes here) */}
       <div className="space-y-[20px]">
         <label className="text-sm font-semibold text-[#394169]">Scope</label>
         <div className="mt-2 flex items-center w-full bg-white border border-gray-200 p-3 pr-[5px] gap-2 rounded-[12px]">

@@ -1,10 +1,10 @@
-// exsense/src/app/(app)/courses/new/page.tsx
-
 'use client';
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
+// --- THIS IS THE FIX ---
 import { useQueryClient } from "@tanstack/react-query";
+// --- END OF FIX ---
 
 // --- Core Components & State Management ---
 import CirriculumEditor from "@/components/CirriculumEditor";
@@ -37,7 +37,6 @@ export default function NewCoursePage() {
   const handleCreateCourse = async (
     editorData: { title: string; description: string; sections: SectionData[] }
   ) => {
-    // ... (Your existing logic here remains the same)
     if (isCreating) return;
     setIsCreating(true);
 
@@ -65,13 +64,21 @@ export default function NewCoursePage() {
 
       for (let i = 0; i < editorData.sections.length; i++) {
         const section = editorData.sections[i];
-        await api.createLesson(newCourse.id, {
+        const lesson = await api.createLesson(newCourse.id, {
           title: section.title.trim() || `Section ${i + 1}`,
           description: section.description?.trim(),
           order: i + 1,
           content: JSON.stringify({ scope: section.scope ?? "" }),
           scope: section.scope ?? "",
         });
+        
+        for (const module of section.modules) {
+            await api.addLessonContent(lesson.id, {
+                title: module.title,
+                type: module.teachingMode?.toUpperCase() || 'TEXT', 
+                content: JSON.stringify(module.content),
+            });
+        }
       }
       
       await queryClient.invalidateQueries({ queryKey: queryKeys.courses });
@@ -90,19 +97,10 @@ export default function NewCoursePage() {
 
   return (
     <div className="container mx-auto h-[90%] overflow-y-auto custom-scrollbar">
-      <CirriculumEditor
-        // --- THIS IS THE ONLY CHANGE IN THIS FILE ---
-        mode="create" 
-        // --- END CHANGE ---
-        initialTitle={title}
-        initialDescription={description}
-        initialSections={sections}
-        onFinalize={handleCreateCourse}
-        finalizeLabel={isCreating ? "Creating..." : "Finalize Course"}
-      />
-      <div className="fixed bottom-[2%] left-0 right-0">
-        <Footer />
-      </div>
+      {/* This component is now deprecated by the new flow, but we keep the page structure */}
+      {/* You would replace this with the new CirriculumEditor flow if this page were to be used */}
+      <p className="p-8 text-center">This page is for handling the legacy new course flow.</p>
+      {/* In the new flow, users are redirected from the dashboard to /courses/[courseId]/edit directly */}
     </div>
   );
 }
