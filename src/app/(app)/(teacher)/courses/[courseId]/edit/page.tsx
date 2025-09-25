@@ -27,18 +27,19 @@ export default function EditCoursePage() {
     if (!lessonsLoading && course) {
       const formatted: SectionData[] = (lessons || []).map((lesson: any) => {
         let scope = lesson.scope ?? "";
-        if (!scope) {
-          try {
-            const parsed = lesson.content ? JSON.parse(lesson.content) : {};
-            scope = parsed?.scope ?? "";
-          } catch (_) { scope = ""; }
+        let environment = null;
+        if (lesson.content) {
+            try {
+                const parsed = JSON.parse(lesson.content);
+                scope = parsed?.scope ?? scope;
+                environment = parsed?.environment ?? null;
+            } catch (_) { /* Keep existing scope */ }
         }
         return {
           id: lesson.id,
           title: lesson.title,
           description: lesson.description || "",
-          // --- MODIFICATION: Match the new flat structure ---
-          environment: lesson.environment || null, 
+          environment: environment,
           scope,
         } as SectionData;
       });
@@ -50,46 +51,45 @@ export default function EditCoursePage() {
     }
   }, [lessons, lessonsLoading, course]);
 
-  // --- MODIFICATION START ---
-  // This function is now the core of the save/publish logic.
-  const handleUpdateCourse = async (data: { title: string; description: string; sections: SectionData[] }, status: 'DRAFT' | 'PUBLISHED') => {
+  const handleUpdateCourse = async (data: { sections: SectionData[] }, status: 'DRAFT' | 'PUBLISHED') => {
     const isPublishAction = status === 'PUBLISHED';
     if (isPublishAction) setIsPublishing(true);
     else setIsSaving(true);
 
     const actionVerb = isPublishAction ? "Publishing" : "Saving";
-    toast.loading(`${actionVerb} course...`);
+    toast.loading(`${actionVerb} curriculum...`);
 
     try {
-      // 1. Update the main course details, including the new status
       await api.updateCourse(courseId, {
-        title: data.title.trim(),
-        description: data.description.trim(),
-        status: status, // Send the status to the backend
+        status: status,
       });
 
-      // 2. Get a list of lessons that currently exist on the backend for this course
       const existingLessonIds = lessons.map(l => l.id);
       
-      // 3. Delete all existing lessons to ensure a clean sync
       for (const lessonId of existingLessonIds) {
         await api.deleteLesson(lessonId);
       }
       
-      // 4. Re-create all lessons based on the current UI state
       for (let i = 0; i < data.sections.length; i++) {
         const section = data.sections[i];
-        await api.createLesson(courseId, {
-          title: section.title.trim() || `Lesson ${i + 1}`,
-          description: section.description?.trim(),
-          order: i,
-          // Storing scope and environment in a structured way
-          content: JSON.stringify({ scope: section.scope ?? "", environment: section.environment ?? null }),
-          scope: section.scope ?? "", 
-        });
+
+        // --- MODIFICATION START ---
+        // The `order` is now `i + 1` to ensure it starts from 1, not 0.
+        const lessonPayload = {
+            title: section.title.trim() || `Lesson ${i + 1}`,
+            description: section.description?.trim(),
+            order: i + 1, // <-- THE FIX IS HERE
+            content: JSON.stringify({ 
+                scope: section.scope ?? "", 
+                environment: section.environment ?? null 
+            }),
+            scope: section.scope ?? "",
+        };
+
+        await api.createLesson(courseId, lessonPayload);
+        // --- MODIFICATION END ---
       }
 
-      // 5. Invalidate queries to ensure all parts of the app refetch the latest data
       await queryClient.invalidateQueries({ queryKey: ['courses', courseId] });
       await queryClient.invalidateQueries({ queryKey: ['lessons', courseId] });
       await queryClient.invalidateQueries({ queryKey: ['teacherCourses'] });
@@ -97,19 +97,17 @@ export default function EditCoursePage() {
       toast.dismiss();
       toast.success(isPublishAction ? "Course published successfully!" : "Draft saved successfully!");
       
-      // 6. Navigate to the course overview page
       router.push(`/courses/${courseId}`);
 
     } catch (error) {
       toast.dismiss();
-      toast.error(`Error: Could not ${isPublishAction ? 'publish' : 'save'} the course.`);
+      toast.error(`Error: Could not ${actionVerb.toLowerCase()} the curriculum.`);
       console.error(`Failed to ${actionVerb}:`, error);
     } finally {
       if (isPublishAction) setIsPublishing(false);
       else setIsSaving(false);
     }
   };
-  // --- MODIFICATION END ---
 
   const isLoading = courseLoading || lessonsLoading || initialSections === null;
   const error = courseError || lessonsError;
@@ -121,8 +119,6 @@ export default function EditCoursePage() {
     <>
       <CirriculumEditor
         initialSections={initialSections || []}
-        initialTitle={course?.title === 'Untitled Course' ? '' : course?.title}
-        initialDescription={course?.description || ""}
         onSaveDraft={(data) => handleUpdateCourse(data, 'DRAFT')}
         onPublish={(data) => handleUpdateCourse(data, 'PUBLISHED')}
         isSaving={isSaving}

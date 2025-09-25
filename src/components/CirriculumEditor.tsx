@@ -12,13 +12,13 @@ import { Button } from "@/components/button";
 import { Input } from "@/components/input";
 import Sphere from "@/components/Sphere";
 import { CurriculumSection, SectionData } from "@/components/CurriculumSection";
+import { toast } from 'sonner';
 
 type CirriculumEditorProps = {
   initialSections?: SectionData[];
-  initialTitle?: string;
-  initialDescription?: string;
-  onSaveDraft?: (data: { title:string; description:string; sections: SectionData[] }) => Promise<void> | void;
-  onPublish?: (data: { title:string; description:string; sections: SectionData[] }) => Promise<void> | void;
+  // --- MODIFICATION: Remove initialTitle and initialDescription from props ---
+  onSaveDraft?: (data: { sections: SectionData[] }) => Promise<void> | void;
+  onPublish?: (data: { sections: SectionData[] }) => Promise<void> | void;
   isSaving?: boolean;
   isPublishing?: boolean;
   courseId?: string; 
@@ -26,8 +26,6 @@ type CirriculumEditorProps = {
 
 const CirriculumEditor = ({
   initialSections,
-  initialTitle,
-  initialDescription,
   onSaveDraft,
   onPublish,
   isSaving,
@@ -37,17 +35,16 @@ const CirriculumEditor = ({
   const router = useRouter();
   const [sections, setSections] = useState<SectionData[]>(initialSections && initialSections.length ? initialSections : [{ id: uuidv4(), title: "", description: "", scope: "", environment: null }]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [titleError, setTitleError] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null); // This can be removed or kept for lesson title validation
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [sectionIdToDelete, setSectionIdToDelete] = useState<string | null>(null);
 
+  // --- MODIFICATION: This effect is now simpler, it just sets the sections ---
   useEffect(() => {
     if (initialSections && initialSections.length > 0) {
-        const firstSectionTitle = initialTitle === 'Untitled Course' ? '' : initialTitle;
-        const updatedInitialSections = initialSections.map((s, i) => i === 0 ? { ...s, title: firstSectionTitle || s.title, description: initialDescription || s.description } : s);
-        setSections(updatedInitialSections);
+        setSections(initialSections);
     }
-  }, [initialSections, initialTitle, initialDescription]);
+  }, [initialSections]);
 
   const handleAddSection = () => {
     const newSection: SectionData = { id: uuidv4(), title: "", description: "", scope: "", environment: null };
@@ -55,6 +52,7 @@ const CirriculumEditor = ({
   };
 
   const handleRequestDelete = (idToDelete: string) => {
+    // Keep a minimum of one lesson
     if (sections.length <= 1) return;
     setSectionIdToDelete(idToDelete);
     setIsDeleteModalOpen(true);
@@ -68,9 +66,6 @@ const CirriculumEditor = ({
   };
 
   const handleUpdateSection = (idToUpdate: string, updatedField: Partial<SectionData>) => {
-    if (sections.length > 0 && sections[0].id === idToUpdate && 'title' in updatedField) {
-        if (titleError) setTitleError(null);
-    }
     setSections(currentSections =>
       currentSections.map(section =>
         section.id === idToUpdate ? { ...section, ...updatedField } : section
@@ -78,26 +73,24 @@ const CirriculumEditor = ({
     );
   };
 
-  const handleAction = (actionCallback?: Function) => {
+  // --- MODIFICATION: This function is simplified significantly ---
+  const handleAction = (actionCallback?: (data: { sections: SectionData[] }) => void) => {
     if (isSaving || isPublishing) return;
-    if (!sections.length || !sections[0].title.trim()) {
-      setTitleError('A course title is required. Please set it in the first lesson.');
-      return;
-    }
-    setTitleError(null);
-    const title = sections[0].title.trim();
-    const description = sections[0].description.trim() || "";
     
+    // Optional: You can add validation here to check if any lesson titles are empty.
+    const anyEmptyTitles = sections.some(s => !s.title.trim());
+    if (anyEmptyTitles) {
+        toast.error("All lessons must have a title before saving.");
+        return;
+    }
+
     if (actionCallback) {
-      actionCallback({ title, description, sections });
+      // It now only passes the sections array up to the parent page.
+      actionCallback({ sections });
     }
   };
 
-  // --- MODIFICATION START ---
-  // The URL now correctly points to the settings page for the current courseId.
-  // Or, if it's a new course, it goes back to the new course details form.
   const courseDetailsUrl = courseId ? `/courses/${courseId}/settings` : '/courses/new/details-form';
-  // --- MODIFICATION END ---
 
   return (
     <>
@@ -116,11 +109,9 @@ const CirriculumEditor = ({
                     <div className="relative self-stretch font-updated-title-2 font-[18px] font-bold">Curriculum Editor</div>
                     <div className="flex flex-wrap gap-[8px] w-full">
                         <Button variant="outline" className="flex-1 h-[50px] md:flex-initial md:w-auto px-7 py-4 rounded-[600px] border-[#566fe9] text-[#566fe9] hover:bg-[#566fe9] hover:text-white">Course Map</Button>
-                        {/* --- MODIFICATION START --- */}
                         <Button asChild variant="outline" className="flex-1 h-[50px] md:flex-initial md:w-auto px-7 py-4 rounded-[600px] border-[#566fe9] text-[#566fe9] hover:bg-[#566fe9] hover:text-white">
                             <Link href={courseDetailsUrl}>Course Details</Link>
                         </Button>
-                        {/* --- MODIFICATION END --- */}
                         <div className="w-full order-last md:w-auto md:flex-1 md:order-none flex h-[50px] items-center pl-5 pr-0 py-1.5 relative bg-white rounded-[600px] border border-solid border-[#c7ccf8]">
                             <Input placeholder="Search..." className="border-0 bg-transparent p-0 h-auto flex-grow placeholder:text-[#8187a0] focus-outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                             <Button size="icon" className={`rounded-full flex-shrink-0 p-2.5 mr-1 h-[38px] w-[38px] transition-colors ${searchQuery ? "bg-[#566fe9]" : "bg-[#e6e8ff]"}`}><SearchIcon className={`w-5 h-5 transition-colors ${searchQuery ? "text-white" : "text-[#566fe9]"}`}/></Button>
@@ -137,7 +128,9 @@ const CirriculumEditor = ({
                             section={section}
                             onUpdate={handleUpdateSection}
                             onDelete={handleRequestDelete}
-                            titleError={index === 0 ? titleError : null}
+                            // --- MODIFICATION: titleError is no longer relevant for the main course title ---
+                            // You could repurpose this to validate lesson titles if needed
+                            titleError={null} 
                             courseId={courseId}
                         />
                     ))}

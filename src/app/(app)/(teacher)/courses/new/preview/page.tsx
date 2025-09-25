@@ -108,11 +108,7 @@ const CourseDetailsSection = ({ details }: { details: CourseDetail[] }) => (
         ))}
       </div>
     </div>
-    <Button asChild className="w-full rounded-[100px] h-[50px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20 hover:bg-[#4a5fd1]">
-      <Link href="/courses/new/details-form">
-        Back to Editor
-      </Link>
-    </Button>
+    
   </section>
 );
 
@@ -219,6 +215,11 @@ export default function NewCoursePreviewPage(): JSX.Element {
                 imageUrl={user?.imageUrl}
               />
               {/* --- MODIFICATION END --- */}
+              <Button asChild className="w-full rounded-[100px] h-[50px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20 hover:bg-[#4a5fd1]">
+      <Link href="/courses/new/details-form">
+        Back to Editor
+      </Link>
+    </Button>
 
             </div>
           </div>
