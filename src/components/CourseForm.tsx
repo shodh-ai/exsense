@@ -4,9 +4,10 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeftIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { toast } from "sonner";
 
 // --- State Management & API Hooks ---
-import { useNewCourseStore } from "@/lib/newCourseStore"; // Adjust import path
+import { useNewCourseStore } from "@/lib/newCourseStore";
 import { useCourse } from "@/hooks/useApi";
 import { useApiService } from "@/lib/api";
 
@@ -19,7 +20,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/toggle-group";
 import Sphere from "@/components/Sphere";
 import Footer from "@/components/Footer";
 
-// --- Helper component for dynamic input lists (No changes here) ---
+// --- Helper component for dynamic input lists (No changes) ---
 interface DynamicInputListProps {
   label: string;
   placeholder: string;
@@ -67,9 +68,7 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
   
   const isEditMode = !!courseId;
 
-  // --- State Setup (No changes in logic) ---
   const [isSaving, setIsSaving] = useState(false);
-  // Ensure a definite string is passed; the query is only enabled when courseId exists
   const courseIdStr = courseId ?? '';
   const { data: existingCourse, isLoading: isLoadingCourse } = useCourse(courseIdStr, { enabled: isEditMode });
   const [localState, setLocalState] = useState({ title: "", description: "", tags: [] as string[], skills: [] as string[], learningOutcomes: [] as string[], difficulty: "Intermediate" });
@@ -89,7 +88,6 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
   }, [existingCourse, isEditMode]);
 
   const formState = isEditMode ? localState : globalState;
-  
 
   const handleUpdateField = (field: keyof typeof formState, value: any) => {
     if (isEditMode) {
@@ -104,16 +102,54 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
   
     if (isEditMode) {
       try {
-        const cid = courseId as string; // safe because isEditMode implies courseId is defined
+        const cid = courseId as string;
         await api.updateCourse(cid, formState);
-        alert("Course updated successfully!");
+        toast.success("Course updated successfully!");
         router.push(`/courses/${cid}`);
       } catch (err) {
-        alert(`Error: Could not update the course. ${(err as Error).message}`);
+        toast.error(`Error: Could not update the course. ${(err as Error).message}`);
+      } finally {
         setIsSaving(false);
       }
     } else {
-      router.back();
+      toast.loading("Creating your new course draft...");
+      
+      if (!globalState.title.trim()) {
+        toast.dismiss();
+        toast.error("A course title is required to create a draft.");
+        setIsSaving(false);
+        return;
+      }
+
+      try {
+        const coursePayload = {
+          title: globalState.title,
+          description: globalState.description,
+          tags: globalState.tags,
+          skills: globalState.skills,
+          learningOutcomes: globalState.learningOutcomes,
+          difficulty: globalState.difficulty,
+          language: globalState.language,
+        };
+
+        const newCourse = await api.createCourse(coursePayload);
+
+        if (!newCourse || !newCourse.id) {
+          throw new Error("Course creation failed: No ID was returned from the server.");
+        }
+
+        toast.dismiss();
+        toast.success("Draft created successfully! Let's build the curriculum.");
+        
+        useNewCourseStore.getState().reset();
+
+        router.push(`/courses/${newCourse.id}/edit`);
+
+      } catch (err) {
+        toast.dismiss();
+        toast.error(`Error: Could not create the course. ${(err as Error).message}`);
+        setIsSaving(false);
+      }
     }
   };
   
@@ -121,19 +157,10 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
     return <div className="p-8 text-center text-lg">Loading Course Settings...</div>;
   }
 
-  // --- CORRECTED JSX RETURN ---
   return (
     <>
       <Sphere />
-      {/*
-        LAYOUT FIX: This is now a simple content wrapper. The `min-h-screen`, `flex`, and `<main>`
-        tags have been removed to prevent conflicts with the main `layout.tsx`.
-      */}
       <div className="w-full h-[90%] overflow-y-auto bg-transparent relative z-10 custom-scrollbar">
-        {/*
-          LAYOUT FIX: This `div` with `mx-auto` is the content block that will be
-          correctly centered by the parent layout.
-        */}
         <div className="max-w-4xl mx-auto px-6 py-8 pb-20">
           <div className="translate-y-[-1rem] animate-fade-in">
             <header className="flex items-center gap-3 mb-6">
@@ -151,22 +178,19 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
 
           <Card className="border-[#c7ccf8] translate-y-[-1rem] animate-fade-in">
             <CardContent className="p-4 space-y-5">
-              {/* Title and Description */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-[#394169]">Course Title</label>
-                <Input readOnly={!isEditMode && !!globalState.title} value={formState.title} onChange={(e) => handleUpdateField('title', e.target.value)} className={`h-[46px] rounded-full border border-[#c7ccf8] bg-white px-4 ${!isEditMode && 'bg-gray-50 text-gray-500'}`} placeholder={!isEditMode ? "Set in Curriculum Editor" : "Enter course title"}/>
+                <Input value={formState.title} onChange={(e) => handleUpdateField('title', e.target.value)} className={`h-[46px] rounded-full border border-[#c7ccf8] bg-white px-4`} placeholder={"Enter course title"}/>
               </div>
               <div className="space-y-2">
                   <label className="text-sm font-semibold text-[#394169]">Course Description</label>
-                  <Textarea value={formState.description} onChange={(e) => handleUpdateField('description', e.target.value)} className="min-h-[100px] border-[#c7ccf8] rounded-xl" />
+                  <Textarea value={formState.description} onChange={(e) => handleUpdateField('description', e.target.value)} className="h-[100px] border-[1px] border-[#c7ccf8] bg-white px- rounded-[12px]" />
               </div>
               
-              {/* Dynamic Lists */}
               <DynamicInputList label="Course Highlights (Tags)" placeholder="Add new highlight" items={formState.tags} onItemsChange={(items) => handleUpdateField('tags', items)} />
               <DynamicInputList label="Learning Outcomes" placeholder="e.g., Learn fundamentals" items={formState.learningOutcomes} onItemsChange={(items) => handleUpdateField('learningOutcomes', items)} />
               <DynamicInputList label="Course Keywords (Skills)" placeholder="e.g., TensorFlow, NLP" items={formState.skills} onItemsChange={(items) => handleUpdateField('skills', items)} />
 
-              {/* Difficulty Toggle */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-[#394169]">Select Course Difficulty</label>
                 <div className="bg-white border border-[#c7ccf8] rounded-full p-1">
@@ -181,22 +205,23 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
             </CardContent>
           </Card>
           
-          {/* --- MODIFIED BUTTON SECTION --- */}
-          <div className="space-y-4 mt-6">
-            {/* Preview Button */}
-            <Button variant="outline" className="w-full h-auto px-7 py-4 rounded-full border-2 border-[#566fe9] text-[#566fe9] hover:bg-[#e9ebfd] hover:text-[#566fe9]">
-                <span className="text-sm font-semibold">Preview Course Details</span>
+          <div className="h-full space-y-4 mt-6">
+
+            <Link href="/courses/new/preview" passHref>
+              <Button asChild variant="outline" className="w-full h-auto px-7 py-4 rounded-full border-2 border-[#566fe9] text-[#566fe9] hover:bg-[#e9ebfd] hover:text-[#566fe9] mb-[16px]">
+                  <span className="text-sm font-semibold">Preview Course Details</span>
+              </Button>
+            </Link>
+            {/* --- MODIFICATION END --- */}
+            
+            <Button onClick={handleSave} disabled={isSaving} className="w-full h-auto px-7 pt-4 py-4 rounded-full bg-[#566fe9] hover:bg-[#4557d2]">
+              <span className="text-sm font-semibold text-white">{isSaving ? 'Saving...' : (isEditMode ? 'Update Course Details' : 'Save & Continue to Curriculum')}</span>
             </Button>
-            {/* Update/Save Button */}
-            <Button onClick={handleSave} disabled={isSaving} className="w-full h-auto px-7 py-4 rounded-full bg-[#566fe9] hover:bg-[#4557d2]">
-              <span className="text-sm font-semibold text-white">{isSaving ? 'Saving...' : (isEditMode ? 'Update Course Details' : 'Save & Return to Editor')}</span>
-            </Button>
+           
           </div>
 
         </div>
         
-        {/* The Footer naturally follows the main content block */}
-       
       </div>
       <Footer />
     </>

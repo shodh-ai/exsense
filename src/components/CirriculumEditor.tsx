@@ -35,7 +35,7 @@ const CirriculumEditor = ({
   courseId,
 }: CirriculumEditorProps): JSX.Element => {
   const router = useRouter();
-  const [sections, setSections] = useState<SectionData[]>(initialSections && initialSections.length ? initialSections : [{ id: uuidv4(), title: "", description: "", modules: [], scope: "" }]);
+  const [sections, setSections] = useState<SectionData[]>(initialSections && initialSections.length ? initialSections : [{ id: uuidv4(), title: "", description: "", scope: "", environment: null }]);
   const [searchQuery, setSearchQuery] = useState("");
   const [titleError, setTitleError] = useState<string | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -50,7 +50,7 @@ const CirriculumEditor = ({
   }, [initialSections, initialTitle, initialDescription]);
 
   const handleAddSection = () => {
-    const newSection: SectionData = { id: uuidv4(), title: "", description: "", modules: [], scope: "" };
+    const newSection: SectionData = { id: uuidv4(), title: "", description: "", scope: "", environment: null };
     setSections(currentSections => [...currentSections, newSection]);
   };
 
@@ -81,7 +81,7 @@ const CirriculumEditor = ({
   const handleAction = (actionCallback?: Function) => {
     if (isSaving || isPublishing) return;
     if (!sections.length || !sections[0].title.trim()) {
-      setTitleError('A course title is required. Please set it in the first section.');
+      setTitleError('A course title is required. Please set it in the first lesson.');
       return;
     }
     setTitleError(null);
@@ -93,7 +93,11 @@ const CirriculumEditor = ({
     }
   };
 
-  const courseOverviewUrl = courseId ? `/courses/${courseId}` : '/courses/new/details-form';
+  // --- MODIFICATION START ---
+  // The URL now correctly points to the settings page for the current courseId.
+  // Or, if it's a new course, it goes back to the new course details form.
+  const courseDetailsUrl = courseId ? `/courses/${courseId}/settings` : '/courses/new/details-form';
+  // --- MODIFICATION END ---
 
   return (
     <>
@@ -112,9 +116,11 @@ const CirriculumEditor = ({
                     <div className="relative self-stretch font-updated-title-2 font-[18px] font-bold">Curriculum Editor</div>
                     <div className="flex flex-wrap gap-[8px] w-full">
                         <Button variant="outline" className="flex-1 h-[50px] md:flex-initial md:w-auto px-7 py-4 rounded-[600px] border-[#566fe9] text-[#566fe9] hover:bg-[#566fe9] hover:text-white">Course Map</Button>
+                        {/* --- MODIFICATION START --- */}
                         <Button asChild variant="outline" className="flex-1 h-[50px] md:flex-initial md:w-auto px-7 py-4 rounded-[600px] border-[#566fe9] text-[#566fe9] hover:bg-[#566fe9] hover:text-white">
-                            <Link href={courseOverviewUrl}>Course Details</Link>
+                            <Link href={courseDetailsUrl}>Course Details</Link>
                         </Button>
+                        {/* --- MODIFICATION END --- */}
                         <div className="w-full order-last md:w-auto md:flex-1 md:order-none flex h-[50px] items-center pl-5 pr-0 py-1.5 relative bg-white rounded-[600px] border border-solid border-[#c7ccf8]">
                             <Input placeholder="Search..." className="border-0 bg-transparent p-0 h-auto flex-grow placeholder:text-[#8187a0] focus-outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                             <Button size="icon" className={`rounded-full flex-shrink-0 p-2.5 mr-1 h-[38px] w-[38px] transition-colors ${searchQuery ? "bg-[#566fe9]" : "bg-[#e6e8ff]"}`}><SearchIcon className={`w-5 h-5 transition-colors ${searchQuery ? "text-white" : "text-[#566fe9]"}`}/></Button>
@@ -135,8 +141,6 @@ const CirriculumEditor = ({
                             courseId={courseId}
                         />
                     ))}
-
-                    {/* --- THIS IS THE FINAL, CORRECTED BUTTON LAYOUT --- */}
                     <div className="mt-4 space-y-3">
                         <div className="grid grid-cols-2 gap-3">
                             <Button 
@@ -153,7 +157,7 @@ const CirriculumEditor = ({
                                 variant="outline"
                                 className="w-full h-12 rounded-full border-2 border-[#E9EBFD] bg-white px-8 py-3 font-semibold text-[#394169] hover:bg-[#F6F6FE]"
                             >
-                                Add New Section
+                                Add New Lesson
                             </Button>
                         </div>
                         <Button 
@@ -164,7 +168,6 @@ const CirriculumEditor = ({
                             {isPublishing ? 'Publishing…' : 'Publish Course'}
                         </Button>
                     </div>
-                    {/* --- END OF CORRECTED BUTTON LAYOUT --- */}
                 </div>
             </div>
         </div>

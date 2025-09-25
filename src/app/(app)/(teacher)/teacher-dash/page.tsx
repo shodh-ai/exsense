@@ -34,6 +34,7 @@ const TeacherDashboard = (): JSX.Element => {
   
   const router = useRouter();
   const api = useApiService();
+  // This state is no longer needed here but is kept in case of other async actions
   const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
   const overviewCards = useMemo(() => {
@@ -59,21 +60,13 @@ const TeacherDashboard = (): JSX.Element => {
     ];
   }, [analytics]);
 
-  const handleCreateNewCourse = async () => {
-    setIsCreatingDraft(true);
-    toast.loading("Creating new course draft...");
-    try {
-      const draftCourse = await api.createCourse({ title: "Untitled Course" });
-      toast.dismiss();
-      toast.success("Draft created! Redirecting...");
-      router.push(`/courses/${draftCourse.id}/edit`);
-    } catch (error) {
-      toast.dismiss();
-      toast.error("Could not create a new course draft. Please try again.");
-      console.error("Draft creation failed:", error);
-      setIsCreatingDraft(false);
-    }
+  // --- MODIFICATION START ---
+  // This function is simplified to just navigate to the details form page.
+  // The responsibility of creating the course is moved to the form itself.
+  const handleCreateNewCourse = () => {
+    router.push('/courses/new/details-form');
   };
+  // --- MODIFICATION END ---
 
   return (
     <>

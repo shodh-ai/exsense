@@ -5,13 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import CirriculumEditor from "@/components/CirriculumEditor";
 import { SectionData } from "@/components/CurriculumSection";
 import { useApiService } from "@/lib/api";
-// --- THIS IS THE FIX ---
 import { useCourse, useLessons } from "@/hooks/useApi";
 import { useQueryClient } from "@tanstack/react-query";
-// --- END OF FIX ---
 import Footer from "@/components/Footer";
 import { toast } from "sonner";
-import { v4 as uuidv4 } from 'uuid'; // Import uuid for new drafts
+import { v4 as uuidv4 } from 'uuid';
 
 export default function EditCoursePage() {
   const { courseId } = useParams<{ courseId: string }>();
@@ -39,64 +37,79 @@ export default function EditCoursePage() {
           id: lesson.id,
           title: lesson.title,
           description: lesson.description || "",
-          modules: [],
+          // --- MODIFICATION: Match the new flat structure ---
+          environment: lesson.environment || null, 
           scope,
         } as SectionData;
       });
-      // If the course is a new draft with no lessons, start with a blank section
       if (course.title === 'Untitled Course' && formatted.length === 0) {
-        setInitialSections([{ id: uuidv4(), title: "", description: "", modules: [], scope: "" }]);
+        setInitialSections([{ id: uuidv4(), title: "", description: "", scope: "", environment: null }]);
       } else {
         setInitialSections(formatted);
       }
     }
   }, [lessons, lessonsLoading, course]);
 
+  // --- MODIFICATION START ---
+  // This function is now the core of the save/publish logic.
   const handleUpdateCourse = async (data: { title: string; description: string; sections: SectionData[] }, status: 'DRAFT' | 'PUBLISHED') => {
     const isPublishAction = status === 'PUBLISHED';
     if (isPublishAction) setIsPublishing(true);
     else setIsSaving(true);
 
-    toast.loading(isPublishAction ? "Publishing course..." : "Saving draft...");
+    const actionVerb = isPublishAction ? "Publishing" : "Saving";
+    toast.loading(`${actionVerb} course...`);
 
     try {
+      // 1. Update the main course details, including the new status
       await api.updateCourse(courseId, {
         title: data.title.trim(),
         description: data.description.trim(),
-        status,
+        status: status, // Send the status to the backend
       });
 
+      // 2. Get a list of lessons that currently exist on the backend for this course
       const existingLessonIds = lessons.map(l => l.id);
       
+      // 3. Delete all existing lessons to ensure a clean sync
       for (const lessonId of existingLessonIds) {
         await api.deleteLesson(lessonId);
       }
+      
+      // 4. Re-create all lessons based on the current UI state
       for (let i = 0; i < data.sections.length; i++) {
         const section = data.sections[i];
         await api.createLesson(courseId, {
-          title: section.title.trim() || `Section ${i + 1}`,
+          title: section.title.trim() || `Lesson ${i + 1}`,
           description: section.description?.trim(),
           order: i,
-          content: JSON.stringify({ scope: section.scope ?? "" }),
-          scope: section.scope ?? "",
-        } as any);
+          // Storing scope and environment in a structured way
+          content: JSON.stringify({ scope: section.scope ?? "", environment: section.environment ?? null }),
+          scope: section.scope ?? "", 
+        });
       }
 
+      // 5. Invalidate queries to ensure all parts of the app refetch the latest data
+      await queryClient.invalidateQueries({ queryKey: ['courses', courseId] });
+      await queryClient.invalidateQueries({ queryKey: ['lessons', courseId] });
       await queryClient.invalidateQueries({ queryKey: ['teacherCourses'] });
       
       toast.dismiss();
       toast.success(isPublishAction ? "Course published successfully!" : "Draft saved successfully!");
+      
+      // 6. Navigate to the course overview page
       router.push(`/courses/${courseId}`);
 
     } catch (error) {
       toast.dismiss();
       toast.error(`Error: Could not ${isPublishAction ? 'publish' : 'save'} the course.`);
-      console.error(`Failed to ${isPublishAction ? 'publish' : 'save'}:`, error);
+      console.error(`Failed to ${actionVerb}:`, error);
     } finally {
       if (isPublishAction) setIsPublishing(false);
       else setIsSaving(false);
     }
   };
+  // --- MODIFICATION END ---
 
   const isLoading = courseLoading || lessonsLoading || initialSections === null;
   const error = courseError || lessonsError;
