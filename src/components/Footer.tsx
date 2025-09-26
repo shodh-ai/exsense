@@ -27,7 +27,7 @@ export default function Footer({
     showMusicButton = true,
 }: FooterProps) {
     return (
-        <footer className="absolute bottom-[32px] w-full h-[60px] p-4 z-10">
+        <footer className="absolute bottom-[2%] w-full h-[60px] p-4 z-10">
             <div className="relative w-full h-full">
                 <div 
                   className="absolute top-1/2 right-1/2 flex items-center gap-6" 

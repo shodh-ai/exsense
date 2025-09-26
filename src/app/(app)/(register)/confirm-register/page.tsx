@@ -1,67 +1,82 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
 import Sphere from "@/components/Sphere";
 import { useUser } from "@clerk/nextjs";
 
 export default function ConfirmRegister() {
-
-// File: exsense/src/app/(register)/confirm-register/page.tsx
-
-
     const router = useRouter();
     const { user, isSignedIn, isLoaded } = useUser();
+    
+    // State to manage redirection and prevent double-redirects
+    const [isRedirecting, setIsRedirecting] = useState(false);
+    const [statusMessage, setStatusMessage] = useState("Finalizing your account...");
 
-    // Promote role to publicMetadata if needed (after email or OAuth sign-up)
-    useEffect(() => {
-        if (!isLoaded || !isSignedIn || !user) return;
-        const currentPublicRole = ((user.publicMetadata as any)?.role as string) || undefined;
-        const unsafeRole = ((user.unsafeMetadata as any)?.role as string) || undefined;
+    // useCallback ensures this function's identity is stable across re-renders
+    const getDesiredRole = useCallback(() => {
+        if (!user) return 'learner'; // Return default if user is not loaded
+        
+        const currentPublicRole = (user.publicMetadata as any)?.role as string | undefined;
+        const unsafeRole = (user.unsafeMetadata as any)?.role as string | undefined;
         let pendingRole: string | undefined;
-        try { pendingRole = window.localStorage.getItem('pendingRole') || undefined; } catch {}
-        const desired = pendingRole || currentPublicRole || unsafeRole;
-        if (!desired || currentPublicRole === desired) {
-            try { window.localStorage.removeItem('pendingRole'); } catch {}
-            return;
+        try {
+            pendingRole = window.localStorage.getItem('pendingRole') || undefined;
+        } catch {}
+        
+        // Priority: pendingRole > unsafeMetadata > publicMetadata > fallback
+        return pendingRole || unsafeRole || currentPublicRole || 'learner';
+    }, [user]);
+
+    // useCallback for the navigation logic
+    const navigateToDashboard = useCallback(() => {
+        if (isRedirecting) return;
+        setIsRedirecting(true);
+
+        const role = getDesiredRole();
+        const destination = role.toLowerCase() === 'expert' ? '/teacher-dash' : '/student_dashboard';
+        
+        try {
+            window.localStorage.removeItem('pendingRole');
+        } catch {}
+
+        router.push(destination);
+    }, [isRedirecting, router, getDesiredRole]);
+
+    // This single useEffect handles role promotion and redirection
+    useEffect(() => {
+        if (!isLoaded || !isSignedIn || !user) {
+            return; // Wait until Clerk is ready
         }
-        // Use server-side API to promote to publicMetadata
+        
+        const desiredRole = getDesiredRole();
+        const publicRole = (user.publicMetadata as any)?.role as string | undefined;
+
+        if (publicRole === desiredRole) {
+            setStatusMessage("Redirecting you to your dashboard...");
+            const timer = setTimeout(navigateToDashboard, 2000);
+            return () => clearTimeout(timer);
+        }
+
+        // Role needs to be promoted from unsafe/pending to public metadata
         fetch('/api/promote-role', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ role: desired })
+            body: JSON.stringify({ role: desiredRole })
         })
-            .then(() => { try { window.localStorage.removeItem('pendingRole'); } catch {} })
-            .catch(() => {});
-    }, [isLoaded, isSignedIn, user]);
+        .catch((err) => {
+            console.error("Failed to promote user role:", err);
+            // Even on failure, we proceed, as the role might be in unsafeMetadata
+        })
+        .finally(() => {
+            setStatusMessage("Redirecting you to your dashboard...");
+            const timer = setTimeout(navigateToDashboard, 2000);
+            return () => clearTimeout(timer);
+        });
 
-    // Auto-redirect to the appropriate dashboard based on role
-    useEffect(() => {
-        // Determine desired role from public/unsafe metadata or pendingRole
-        const currentPublicRole = ((user?.publicMetadata as any)?.role as string) || undefined;
-        const unsafeRole = ((user?.unsafeMetadata as any)?.role as string) || undefined;
-        let pendingRole: string | undefined;
-        try { pendingRole = window.localStorage.getItem('pendingRole') || undefined; } catch {}
-        const desired = (pendingRole || currentPublicRole || unsafeRole || '').toLowerCase();
-        const destination = desired === 'expert' ? '/teacher-dash' : '/my-course';
+    }, [isLoaded, isSignedIn, user, getDesiredRole, navigateToDashboard]);
 
-        const timer = setTimeout(() => {
-            router.push(destination);
-        }, 2000);
-
-        return () => clearTimeout(timer);
-    }, [router, user]);
-
-    const handleContinue = () => {
-        const currentPublicRole = ((user?.publicMetadata as any)?.role as string) || undefined;
-        const unsafeRole = ((user?.unsafeMetadata as any)?.role as string) || undefined;
-        let pendingRole: string | undefined;
-        try { pendingRole = window.localStorage.getItem('pendingRole') || undefined; } catch {}
-        const desired = (pendingRole || currentPublicRole || unsafeRole || '').toLowerCase();
-        const destination = desired === 'expert' ? '/teacher-dash' : '/my-course';
-        router.push(destination);
-    };
 
     return (
         <div className="flex min-h-full w-full items-center justify-center bg-transparent p-4">
@@ -73,11 +88,11 @@ export default function ConfirmRegister() {
                         Account Created!
                     </div>
                     <div className="text-sm sm:text-base text-gray-700">
-                        You will be redirected to your dashboard in a few seconds.
+                        {statusMessage}
                     </div>
                 </div>
                 <button
-                    onClick={handleContinue}
+                    onClick={navigateToDashboard}
                     className="w-full max-w-md h-10 sm:h-12 bg-[#566FE9] hover:bg-[#4a5fcf] transition-colors rounded-full text-white text-sm sm:text-base font-semibold"
                 >
                     Continue
@@ -86,4 +101,3 @@ export default function ConfirmRegister() {
         </div>
     );
 }
-

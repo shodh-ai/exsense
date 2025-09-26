@@ -1,15 +1,17 @@
 'use client';
 
 import { PlusIcon } from "lucide-react";
-import React, { JSX, useMemo } from "react";
+import React, { JSX, useMemo, useState } from "react";
 import { Button } from "@/components/button";
 import { Card, CardContent } from "@/components/card";
 import Sphere from "@/components/Sphere";
 import Footer from "@/components/Footer";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTeacherCourses, useTeacherAnalytics } from "@/hooks/useApi";
+import { useApiService } from "@/lib/api";
+import { toast } from "sonner";
 
-// A skeleton component to show while data is loading
 const OverviewCardSkeleton = (): JSX.Element => (
     <Card className="border border-[#566fe966] rounded-xl bg-white animate-pulse">
         <CardContent className="p-4">
@@ -29,6 +31,11 @@ const OverviewCardSkeleton = (): JSX.Element => (
 const TeacherDashboard = (): JSX.Element => {
   const { data: courses = [], isLoading: coursesLoading, error: coursesError } = useTeacherCourses();
   const { data: analytics, isLoading: analyticsLoading, error: analyticsError } = useTeacherAnalytics();
+  
+  const router = useRouter();
+  const api = useApiService();
+  // This state is no longer needed here but is kept in case of other async actions
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false);
 
   const overviewCards = useMemo(() => {
     return [
@@ -52,6 +59,14 @@ const TeacherDashboard = (): JSX.Element => {
       },
     ];
   }, [analytics]);
+
+  // --- MODIFICATION START ---
+  // This function is simplified to just navigate to the details form page.
+  // The responsibility of creating the course is moved to the form itself.
+  const handleCreateNewCourse = () => {
+    router.push('/courses/new/details-form');
+  };
+  // --- MODIFICATION END ---
 
   return (
     <>
@@ -96,13 +111,18 @@ const TeacherDashboard = (): JSX.Element => {
           <section className="flex flex-col gap-5 w-full">
             <div className="flex flex-wrap items-center justify-between w-full gap-2">
               <h2 className="font-bold text-[18px] leading-[22px] text-[#394169]">
-                My Courses &amp; Insights
+                My Courses & Insights
               </h2>
-              <Button asChild variant="ghost" className="bg-[#566fe91a] rounded-[40px] text-[#566fe9] hover:bg-[#566fe930] h-[32px] px-4 py-2 flex items-center gap-1">
-                <Link href="/courses/new">
-                  <PlusIcon className="w-4 h-4" />
-                  <span className="font-semibold text-[12px] leading-[16px]">New Course</span>
-                </Link>
+              <Button 
+                variant="ghost" 
+                className="bg-[#566fe91a] rounded-[40px] text-[#566fe9] hover:bg-[#566fe930] h-[32px] px-4 py-2 flex items-center gap-1"
+                onClick={handleCreateNewCourse}
+                disabled={isCreatingDraft}
+              >
+                <PlusIcon className="w-4 h-4" />
+                <span className="font-semibold text-[12px] leading-[16px]">
+                  {isCreatingDraft ? "Starting..." : "New Course"}
+                </span>
               </Button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
@@ -110,7 +130,7 @@ const TeacherDashboard = (): JSX.Element => {
               {coursesError && <p className="text-red-500">Error loading courses.</p>}
               
               {!coursesLoading && !coursesError && courses.map((course: any) => (
-                <Link key={course.id} href={`/courses/${course.id}/edit`} className="block">
+                <Link key={course.id} href={`/courses/${course.id}`} className="block">
                   <Card className="border border-[#566fe966] rounded-xl bg-white overflow-hidden hover:shadow-md transition-shadow">
                     <CardContent className="p-0">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
