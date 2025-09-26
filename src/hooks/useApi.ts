@@ -462,3 +462,5 @@ export const useAdminCourses = () => {
     staleTime: 60 * 1000,
   });
 };
+
+export { useQueryClient };

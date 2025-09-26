@@ -1,36 +1,37 @@
-import { auth, clerkClient } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+// src/app/api/promote-role/route.ts
 
-function normalizeRole(input?: string): "learner" | "expert" | "admin" | undefined {
-  if (!input) return undefined;
-  const val = input.toLowerCase();
-  if (val === "expert" || val === "teacher") return "expert"; // keep canonical app-side
-  if (val === "learner" || val === "student") return "learner";
-  if (val === "admin") return "admin";
-  return undefined;
-}
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { clerkClient } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+    const { userId } = await auth(); // Get the current user's ID
+    const user = await currentUser(); // Get the full user object
 
-  try {
-    const body = await req.json().catch(() => ({}));
-    const rawRole = (body?.role as string | undefined) || undefined;
-    const role = normalizeRole(rawRole);
-
-    if (!role) {
-      return NextResponse.json({ error: "Invalid or missing role" }, { status: 400 });
+    if (!userId || !user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const client = await clerkClient();
-    await client.users.updateUser(userId, { publicMetadata: { role } });
+    try {
+        const { role } = await req.json();
 
-    return NextResponse.json({ ok: true, role });
-  } catch (err) {
-    console.error("/api/promote-role error", err);
-    return NextResponse.json({ error: "Failed to promote role" }, { status: 500 });
-  }
+        if (typeof role !== 'string' || (role !== 'learner' && role !== 'expert')) {
+            return NextResponse.json({ error: 'Invalid role provided' }, { status: 400 });
+        }
+
+        // Update the user's public metadata using clerkClient
+        const client = await clerkClient();
+        await client.users.updateUser(user.id, {
+            publicMetadata: {
+                ...user.publicMetadata, // Keep existing public metadata
+                role: role // Set or overwrite the role
+            }
+        });
+
+        return NextResponse.json({ message: 'User role updated successfully' }, { status: 200 });
+
+    } catch (error) {
+        console.error("Error promoting user role:", error);
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
 }

@@ -14,9 +14,9 @@ export const metadata: Metadata = {
   title: "ShodhAI",
   description: "ShodhAI",
   icons: {
-    icon: '/favicon.svg',
-    shortcut: '/favicon.svg',
-    apple: '/favicon.svg',
+    icon: '/Favicon.svg',
+    shortcut: '/Favicon.svg',
+    apple: '/Favicon.svg',
   },
 };
 

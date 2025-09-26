@@ -58,6 +58,7 @@ export interface Course {
   reviews?: Review[];
   faqs?: Faq[];
   analytics?: CourseAnalytics;
+  status?: 'DRAFT' | 'PUBLISHED'; 
 }
 
 export interface Enrollment {
