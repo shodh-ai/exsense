@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Observable, firstValueFrom } from 'rxjs';
 import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment } from 'livekit-client';
 import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
@@ -138,6 +139,10 @@ export interface UseLiveKitSessionReturn {
   sendBrowserInteraction: (payload: object) => Promise<void>;
   sessionStatusUrl?: string | null;
   sessionManagerSessionId?: string | null;
+  // --- Browser tab controls ---
+  openNewTab: (name: string, url: string) => Promise<void>;
+  switchTab: (tabId: string) => Promise<void>;
+  closeTab: (tabId: string) => Promise<void>;
 }
 
 export interface LiveKitSpawnOptions {
@@ -159,6 +164,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const setIsMicEnabled = useSessionStore((s) => s.setIsMicEnabled); // mic control
   const setSuggestedResponses = useSessionStore((s) => s.setSuggestedResponses);
   const clearSuggestedResponses = useSessionStore((s) => s.clearSuggestedResponses);
+  // Browser tab actions from store
+  const addTab = useSessionStore((s) => s.addTab);
+  const removeTab = useSessionStore((s) => s.removeTab);
+  const setActiveTabIdInStore = useSessionStore((s) => s.setActiveTabId);
 
   // --- HOOK'S INTERNAL STATE ---
   const [isConnected, setIsConnected] = useState(false);
@@ -645,6 +654,24 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             console.warn('[B2F RPC] SUGGESTED_RESPONSES payload missing or invalid, and no parsable parameters found:', { payload, params });
           }
         }
+      } else if (
+        // Prefer enum when available, but also handle numeric value for backward compatibility
+        (ClientUIActionType as any).RRWEB_REPLAY ?
+          request.actionType === (ClientUIActionType as any).RRWEB_REPLAY :
+          (request.actionType as number) === 73
+      ) {
+        console.log('[B2F RPC] Handling RRWEB_REPLAY');
+        const url = (request as any).parameters?.events_url;
+        if (url && typeof url === 'string') {
+          try {
+            useSessionStore.getState().showReplay(url);
+            console.log('[B2F RPC] rrweb replay URL set in store');
+          } catch (e) {
+            console.error('[B2F RPC] Failed to set rrweb replay URL:', e);
+          }
+        } else {
+          console.error('[B2F RPC] RRWEB_REPLAY action received without a valid events_url.');
+        }
       } else if ((request.actionType as number) === 64) { // EXCALIDRAW_CLEAR_CANVAS
         console.log('[B2F RPC] Handling EXCALIDRAW_CLEAR_CANVAS');
         // Clear canvas via debug functions if available
@@ -711,13 +738,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             } catch (phErr) {
               console.warn('[B2F RPC] Placeholder render failed (non-fatal):', phErr);
             }
-            // Call the non-streaming Visualizer endpoint and render when ready
+            // Call the Visualizer to get Mermaid text and let the client convert it
+            const { setDiagramDefinition, setIsDiagramGenerating } = useSessionStore.getState();
             try {
               if (!visualizerBaseUrl) {
                 throw new Error('NEXT_PUBLIC_VISUALIZER_URL is not set');
               }
-              // Prefer JSON endpoint for Excalidraw rendering
-              const resp = await fetch(`${visualizerBaseUrl}/generate-diagram`, {
+              setIsDiagramGenerating?.(true);
+              const resp = await fetch(`${visualizerBaseUrl}/generate-mermaid-text`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
@@ -725,51 +753,13 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
               if (!resp.ok) {
                 throw new Error(`Visualizer service returned ${resp.status}`);
               }
-              let returned: any[] = [];
-              try {
-                const contentType = resp.headers.get('content-type') || '';
-                if (contentType.includes('application/json')) {
-                  const diagramData = await resp.json();
-                  returned = Array.isArray(diagramData?.elements) ? diagramData.elements : [];
-                } else {
-                  // Likely Mermaid text. Read it as text and forward to Mermaid debug hook if present.
-                  const text = await resp.text();
-                  if (text && typeof window !== 'undefined' && (window as any).__mermaidDebug?.setDiagram) {
-                    try { (window as any).__mermaidDebug.setDiagram(text); } catch {}
-                  }
-                  // Then, try a follow-up JSON call to get skeleton elements for Excalidraw.
-                  const jsonResp = await fetch(`${visualizerBaseUrl}/generate-diagram`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
-                  });
-                  if (jsonResp.ok) {
-                    const jsonData = await jsonResp.json();
-                    returned = Array.isArray(jsonData?.elements) ? jsonData.elements : [];
-                  } else {
-                    console.warn('[B2F RPC] Mermaid stream received; JSON follow-up failed with', jsonResp.status);
-                  }
-                }
-              } catch (parseErr) {
-                // If JSON parsing failed due to Mermaid text
-                try {
-                  const text = await resp.text();
-                  if (text && typeof window !== 'undefined' && (window as any).__mermaidDebug?.setDiagram) {
-                    try { (window as any).__mermaidDebug.setDiagram(text); } catch {}
-                  }
-                } catch {}
+              const text = (await resp.text()).trim();
+              // Send to debug window (optional) and update centralized state
+              if (text && typeof window !== 'undefined' && (window as any).__mermaidDebug?.setDiagram) {
+                try { (window as any).__mermaidDebug.setDiagram(text); } catch {}
               }
-              if (returned.length === 0) {
-                console.warn('[B2F RPC] Visualizer returned no elements');
-              }
-              const { setVisualizationData } = useSessionStore.getState();
-              if (setVisualizationData) {
-                setVisualizationData(returned);
-              } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(returned);
-                window.__excalidrawDebug.setElements(excalidrawElements);
-              }
-              if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Visualization generated via Visualizer service');
+              setDiagramDefinition?.(text);
+              if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Mermaid text received and state updated');
             } catch (svcErr) {
               console.error('[B2F RPC] ❌ Failed to call Visualizer service:', svcErr);
               // Replace placeholder with an error message on failure
@@ -791,6 +781,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
               } catch (errRender) {
                 console.warn('[B2F RPC] Error placeholder render failed (non-fatal):', errRender);
               }
+            } finally {
+              try { setIsDiagramGenerating?.(false); } catch {}
             }
           }
           // Close the outer `else` branch for when no precomputed elements are provided
@@ -1112,6 +1104,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, []);
 
+  // --- TAB MANAGEMENT FUNCTIONS --- (declared after sendBrowserInteraction below)
+
   // --- Kickstart: send an initial navigate over LiveKit DataChannel so the pod draws content ---
   useEffect(() => {
     if (!isConnected) return;
@@ -1253,6 +1247,60 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
   }, []);
 
+  // --- NEW TAB MANAGEMENT FUNCTIONS ---
+  const openNewTab = useCallback(async (name: string, url: string) => {
+    try {
+      const tabId = uuidv4();
+      await sendBrowserInteraction({ action: 'open_tab', tab_id: tabId, url });
+      addTab({ id: tabId, name, url });
+      setActiveTabIdInStore(tabId);
+    } catch (e) {
+      console.error('[Tabs] openNewTab failed:', e);
+    }
+  }, [sendBrowserInteraction, addTab, setActiveTabIdInStore]);
+
+  const switchTab = useCallback(async (tabId: string) => {
+    try {
+      const currentActive = useSessionStore.getState().activeTabId;
+      if (currentActive === tabId) return;
+      await sendBrowserInteraction({ action: 'switch_tab', tab_id: tabId });
+      setActiveTabIdInStore(tabId);
+    } catch (e) {
+      console.error('[Tabs] switchTab failed:', e);
+    }
+  }, [sendBrowserInteraction, setActiveTabIdInStore]);
+
+  const closeTab = useCallback(async (tabIdToClose: string) => {
+    try {
+      // Prevent closing the last remaining tab
+      const tabsState = useSessionStore.getState().tabs;
+      if (tabsState.length <= 1) {
+        console.warn('Cannot close the last tab.');
+        return;
+      }
+
+      // Snapshot before removing to decide fallback active tab
+      const currentTabs = tabsState;
+      const currentActiveTabId = useSessionStore.getState().activeTabId;
+
+      // 1) Tell backend to close the actual browser page
+      await sendBrowserInteraction({ action: 'close_tab', tab_id: tabIdToClose });
+
+      // 2) Update frontend state
+      removeTab(tabIdToClose);
+
+      // 3) If we closed the active tab, pick another tab and switch to it
+      if (currentActiveTabId === tabIdToClose) {
+        const newActiveTab = currentTabs.find(t => t.id !== tabIdToClose);
+        if (newActiveTab) {
+          await switchTab(newActiveTab.id);
+        }
+      }
+    } catch (e) {
+      console.error('[Tabs] closeTab failed:', e);
+    }
+  }, [sendBrowserInteraction, removeTab, switchTab]);
+
   return { 
     isConnected, 
     isLoading, 
@@ -1269,5 +1317,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     sendBrowserInteraction,
     sessionStatusUrl: sessionStatusUrlState,
     sessionManagerSessionId: sessionManagerSessionIdState,
+    // tabs
+    openNewTab,
+    switchTab,
+    closeTab,
   };
 }

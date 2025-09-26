@@ -89,7 +89,7 @@ const CourseIntroduction = ({ tags, title, description }: { tags?: string[], tit
   </section>
 );
 
-const CourseDetailsSection = ({ details, onEnroll, isEnrolling, isEnrolled }: { details: CourseDetail[], onEnroll: () => void, isEnrolling: boolean, isEnrolled: boolean }) => (
+const CourseDetailsSection = ({ details, onEnroll, onStartSession, isEnrolling, isEnrolled }: { details: CourseDetail[], onEnroll: () => void, onStartSession?: () => void, isEnrolling: boolean, isEnrolled: boolean }) => (
   <section className="flex flex-col gap-7">
     <div className="flex flex-col gap-6">
       <h2 className="text-xl font-bold text-[#394169]">Course details</h2>
@@ -109,9 +109,15 @@ const CourseDetailsSection = ({ details, onEnroll, isEnrolling, isEnrolled }: { 
         ))}
       </div>
     </div>
-    <Button className="w-full rounded-[100px] h-[50px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20" onClick={onEnroll} disabled={isEnrolling || isEnrolled}>
-      {isEnrolled ? "Already Enrolled" : (isEnrolling ? "Enrolling..." : "Start Your Journey")}
-    </Button>
+    {isEnrolled ? (
+      <Button className="w-full rounded-[100px] h-[50px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20" onClick={onStartSession}>
+        Start Session
+      </Button>
+    ) : (
+      <Button className="w-full rounded-[100px] h-[50px] bg-[#566fe9] px-12 py-3 font-semibold text-white sm:px-20" onClick={onEnroll} disabled={isEnrolling}>
+        {isEnrolling ? "Enrolling..." : "Start Your Journey"}
+      </Button>
+    )}
   </section>
 );
 
@@ -244,6 +250,10 @@ export default function StudentCoursePage(): JSX.Element {
     enrollMutation.mutate(String(courseId));
   };
 
+  const startSession = () => {
+    router.push(`/session?courseId=${courseId}`);
+  };
+
   // --- LOADING AND ERROR STATES ---
   if (courseLoading) return <div className="p-6 text-center text-lg">Loading course details...</div>;
   if (courseError) return <div className="p-6 text-center text-red-500">Error: {(courseError as any)?.message || "Failed to load the course."}</div>;
@@ -278,7 +288,7 @@ export default function StudentCoursePage(): JSX.Element {
               </div>
 
               <CourseIntroduction tags={course.tags} title={course.title} description={course.description} />
-              <CourseDetailsSection details={courseDetails} onEnroll={enroll} isEnrolling={enrollMutation.isPending} isEnrolled={isEnrolled} />
+              <CourseDetailsSection details={courseDetails} onEnroll={enroll} onStartSession={startSession} isEnrolling={enrollMutation.isPending} isEnrolled={isEnrolled} />
               <WhatYouWillLearnSection skills={course.skills} outcomes={course.learningOutcomes} />
               <CourseMap />
               <TeacherProfileSection teacherName={course.teacher?.name} teacherTitle={course.teacher?.title} teacherBio={course.teacher?.bio} />

@@ -1,31 +1,32 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Footer from '@/components/Footer';
-import { Room } from 'livekit-client';
+import type { Room } from 'livekit-client';
 
-import dynamic from 'next/dynamic';
+import NextDynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
+import { TabManager } from '@/components/session/TabManager';
 
-import { useMermaidVisualization } from '@/hooks/useMermaidVisualization';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
 import SuggestedResponses from '@/components/session/SuggestedResponses';
 
-// --- MODIFICATION: Import BOTH converters (removed MermaidDirectRenderer import) ---
-import { parseMermaidToExcalidraw } from '@excalidraw/mermaid-to-excalidraw';
+// Excalidraw and Mermaid conversion libs are imported dynamically in the effect below
 
-const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
+const IntroPage = NextDynamic(() => import('@/components/session/IntroPage'));
 
-const ExcalidrawWrapper = dynamic(() => import('@/components/session/ExcalidrawWrapper'), { ssr: false });
-const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
+const ExcalidrawWrapper = NextDynamic(() => import('@/components/session/ExcalidrawWrapper'), { ssr: false });
+const LiveKitViewer = NextDynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
 
-const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
-const MessageDisplay = dynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
+const VideoViewer = NextDynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
+const MessageDisplay = NextDynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
 
-const fallbackRoom = new Room();
+// Prevent static prerendering of this page at build time
+export const dynamic = 'force-dynamic';
+
 type ViewKey = ReturnType<typeof useSessionStore.getState>['activeView'];
 
 interface ButtonConfig {
@@ -44,13 +45,15 @@ interface SessionContentProps {
     livekitUrl: string;
     livekitToken: string;
     isConnected: boolean;
-    diagramDefinition: string;
     isDiagramGenerating: boolean;
-    onDiagramUpdate: (definition: string) => void;
     sendBrowserInteraction: (payload: object) => Promise<void>;
+    // tab management
+    openNewTab: (name: string, url: string) => Promise<void>;
+    switchTab: (id: string) => Promise<void>;
+    closeTab: (id: string) => Promise<void>;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, diagramDefinition, isDiagramGenerating, onDiagramUpdate, sendBrowserInteraction }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab }: SessionContentProps) {
     return (
         <div className='w-full h-full flex flex-col'>
             <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
@@ -78,9 +81,18 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                         </div>
                     )}
                 </div>
-                <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
+                <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full flex flex-col`}>
                     {room ? (
-                        <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                        <>
+                            <TabManager
+                                onSwitchTab={switchTab}
+                                onOpenNewTab={openNewTab}
+                                onCloseTab={closeTab}
+                            />
+                            <div className="flex-1 w-full h-full min-h-0">
+                                <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                            </div>
+                        </>
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-300">Connecting to LiveKit...</div>
                     )}
@@ -99,15 +111,9 @@ export default function Session() {
     const setVisualizationData = useSessionStore((s) => s.setVisualizationData);
 
     const [isIntroActive, setIsIntroActive] = useState(true);
-    // Initialize Mermaid visualization hook (provides diagramDefinition and controls)
-    const {
-        diagramDefinition,
-        isStreaming,
-        error: mermaidError,
-        startVisualization,
-        clearDiagram,
-        updateDiagram,
-    } = useMermaidVisualization();
+    // Centralized diagramDefinition and generation state from store
+    const diagramDefinition = useSessionStore((s) => s.diagramDefinition);
+    const isGenerating = useSessionStore((s) => s.isDiagramGenerating);
     const SESSION_DEBUG = false;
 
     const handleIntroComplete = () => setIsIntroActive(false);
@@ -124,11 +130,12 @@ export default function Session() {
             if (diagramDefinition && diagramDefinition.trim()) {
                 try {
                     console.log("Step 1: Parsing Mermaid to skeleton elements...");
+                    const { parseMermaidToExcalidraw } = await import('@excalidraw/mermaid-to-excalidraw');
+                    const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw');
                     const { elements: skeletonElements } = await parseMermaidToExcalidraw(diagramDefinition);
                     console.log(`Step 1 successful. Found ${skeletonElements.length} skeleton elements.`);
 
-                    console.log("Step 2: Dynamically importing and converting to final Excalidraw elements...");
-                    const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw');
+                    console.log("Step 2: Converting skeleton to final Excalidraw elements...");
                     const excalidrawElements = convertToExcalidrawElements(skeletonElements);
                     console.log("Step 2 successful. Final elements created.");
 
@@ -176,6 +183,9 @@ export default function Session() {
         livekitToken,
         deleteSessionNow,
         sendBrowserInteraction,
+        openNewTab,
+        switchTab,
+        closeTab,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? roomName : '',
         shouldInitializeLiveKit ? userName : '',
@@ -254,10 +264,11 @@ export default function Session() {
                         livekitUrl={livekitUrl}
                         livekitToken={livekitToken}
                         isConnected={isConnected}
-                        diagramDefinition={diagramDefinition}
-                        isDiagramGenerating={isStreaming}
-                        onDiagramUpdate={updateDiagram}
+                        isDiagramGenerating={isGenerating}
                         sendBrowserInteraction={sendBrowserInteraction}
+                        openNewTab={openNewTab}
+                        switchTab={switchTab}
+                        closeTab={closeTab}
                     />
 
                     {hasSuggestions && (

@@ -6,7 +6,7 @@ import { MicButton } from '@/components/MicButton';
 import { UploadButton } from '@/components/UploadButton';
 import { MessageButton } from '@/components/MessageButton';
 // MODIFICATION: Added Send icon for the new chat input
-import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic } from 'lucide-react';
+import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic, ExternalLink } from 'lucide-react';
 // Keep other existing imports
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
@@ -22,6 +22,7 @@ import CurriculumEditor from '@/components/imprinting/CurriculumEditor';
 import LoSelector from '@/components/imprinting/LoSelector';
 // --- MODIFICATION: Import the new modal component ---
 import { SendModal } from '@/components/SendModal';
+import { TabManager } from '@/components/session/TabManager';
 
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
@@ -124,6 +125,10 @@ interface SessionContentProps {
     onToggleConceptualRecording: () => void;
     isConceptualRecording: boolean;
     conceptualRecordingDuration: number;
+    // Tab controls
+    onSwitchTab: (id: string) => void | Promise<void>;
+    onOpenNewTab: (name: string, url: string) => void | Promise<void>;
+    onCloseTab: (id: string) => void | Promise<void>;
 }
 
 function SessionContent({
@@ -145,6 +150,9 @@ function SessionContent({
     onToggleConceptualRecording,
     isConceptualRecording,
     conceptualRecordingDuration,
+    onSwitchTab,
+    onOpenNewTab,
+    onCloseTab,
 }: SessionContentProps) {
     return (
         <div className='w-full h-[90%] flex flex-col items-center justify-between'>
@@ -184,9 +192,18 @@ function SessionContent({
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
                     <div className="w-full h-full flex flex-col md:flex-row gap-4">
-                        <div className="flex-1">
+                        <div className="flex-1 flex flex-col min-h-0">
                             {room ? (
-                                <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                                <>
+                                    <TabManager
+                                        onSwitchTab={onSwitchTab}
+                                        onOpenNewTab={onOpenNewTab}
+                                        onCloseTab={onCloseTab}
+                                    />
+                                    <div className="flex-1 min-h-0">
+                                        <LiveKitViewer room={room} onInteraction={isConnected ? sendBrowserInteraction : undefined} />
+                                    </div>
+                                </>
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-gray-300">
                                     Connecting to LiveKit...
@@ -298,6 +315,7 @@ interface TeacherFooterProps {
     screenshotIntervalSec: number;
     onSaveScriptClick?: () => void;
     onVSCodeClick?: () => void;
+    onSalesforceClick?: () => void;
     onPasteClick?: () => void;
     isRecording: boolean;
     isPaused: boolean;
@@ -319,6 +337,7 @@ const TeacherFooter = ({
     screenshotIntervalSec, 
     onSaveScriptClick,
     onVSCodeClick,
+    onSalesforceClick,
     onPasteClick,
     isRecording,
     isPaused,
@@ -385,6 +404,13 @@ const TeacherFooter = ({
                         className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
                     >
                         <img src="/vscode.svg" alt="Switch to VS Code" className="w-6 h-6" />
+                    </button>
+                    <button
+                        onClick={onSalesforceClick}
+                        title="Open Salesforce Home"
+                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
+                    >
+                        <ExternalLink className="w-5 h-5 text-[#566FE9]" />
                     </button>
                     <UploadButton
                         isVisible={true}
@@ -588,10 +614,14 @@ export default function Session() {
         isConnected,
         room,
         sendBrowserInteraction,
+        openNewTab,
+        switchTab,
+        closeTab,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? lkRoomName : '',
         shouldInitializeLiveKit ? lkUserName : '',
-        (courseId as string) || undefined
+        (courseId as string) || undefined,
+        { spawnAgent: false, spawnBrowser: true }
     );
 
     useEffect(() => {
@@ -1268,6 +1298,18 @@ export default function Session() {
         console.log('[TeacherPage] UI: Switched to VS Code. Subsequent recordings will capture VS Code actions.');
     };
 
+    // --- NEW: Open Salesforce in browser environment ---
+    const handleOpenSalesforce = () => {
+        // Ensure we're in the browser environment
+        setImprintingEnvironment('browser');
+        // Navigate the browser pod to the Salesforce Home URL
+        void sendBrowser('navigate', { url: 'https://ruby-ruby-7891.lightning.force.com/lightning/page/home' });
+        // Feedback
+        setStatusMessage('Opening Salesforce Home in the browser...');
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] UI: Opening Salesforce Home URL in browser pod');
+    };
+
     // Paste text from local clipboard into the remote session
     const handlePasteFromLocal = async () => {
         try {
@@ -1346,6 +1388,9 @@ export default function Session() {
                                         onToggleConceptualRecording={handleToggleConceptualRecording}
                                         isConceptualRecording={isConceptualRecording}
                                         conceptualRecordingDuration={conceptualRecordingDuration}
+                                        onSwitchTab={switchTab}
+                                        onOpenNewTab={openNewTab}
+                                        onCloseTab={closeTab}
                                     />
                                     
                                 </div>
@@ -1358,6 +1403,7 @@ export default function Session() {
                                     onSaveScriptClick={handleSaveSetupText}
                                     onPasteClick={handlePasteFromLocal}
                                     onVSCodeClick={handleSwitchToVSCode}
+                                    onSalesforceClick={handleOpenSalesforce}
                                     isRecording={isRecording}
                                     isPaused={isPaused}
                                     recordingDuration={recordingDuration}

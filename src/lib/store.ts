@@ -24,6 +24,13 @@ export interface VisualizationElement {
   [key: string]: unknown;
 }
 
+// --- Browser Tabs ---
+export interface BrowserTab {
+  id: string;
+  name: string;
+  url: string;
+}
+
 // --- Imprinting phases and curriculum types ---
 export type ImprintingPhase =
   | 'SEED_INPUT'
@@ -63,9 +70,19 @@ interface SessionState {
     isMusicButtonPlaying: boolean;
     isMicActivatingPending: boolean;
     visualizationData: unknown[] | null;
+    // Mermaid diagram definition used as single source of truth for visualization
+    diagramDefinition: string;
+    // Centralized loading state for diagram generation
+    isDiagramGenerating: boolean;
     suggestedResponses: { id: string; text: string; reason?: string }[];
     suggestedTitle?: string;
     isNavigating: boolean; // <-- State for our loader
+    // --- rrweb replay state ---
+    replayEventsUrl: string | null;
+
+    // --- Browser tab state ---
+    tabs: BrowserTab[];
+    activeTabId: string | null;
 
     // --- Imprinting / Session Controller State ---
     imprinting_mode: string;
@@ -88,9 +105,19 @@ interface SessionState {
     setIsMusicButtonPlaying: (isPlaying: boolean) => void;
     setIsMicActivatingPending: (isPending: boolean) => void;
     setVisualizationData: (data: unknown[] | null) => void;
+    setDiagramDefinition: (definition: string) => void;
+    setIsDiagramGenerating: (isGenerating: boolean) => void;
     setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
     clearSuggestedResponses: () => void;
     setIsNavigating: (isNavigating: boolean) => void; // <-- Action for our loader
+    // rrweb replay actions
+    showReplay: (url: string) => void;
+    hideReplay: () => void;
+
+    // --- Browser tab actions ---
+    addTab: (tab: BrowserTab) => void;
+    removeTab: (id: string) => void;
+    setActiveTabId: (id: string | null) => void;
 
     // --- Imprinting Actions ---
     setImprintingMode: (mode: string) => void;
@@ -120,9 +147,17 @@ export const useSessionStore = create<SessionState>()(
             isMusicButtonPlaying: false,
             isMicActivatingPending: false,
             visualizationData: null,
+            diagramDefinition: '',
+            isDiagramGenerating: false,
             suggestedResponses: [],
             suggestedTitle: undefined,
             isNavigating: false, // <-- Initial state is false
+            // rrweb replay defaults
+            replayEventsUrl: null,
+
+            // --- Browser tab defaults ---
+            tabs: [],
+            activeTabId: null,
 
             // --- Imprinting defaults ---
             imprinting_mode: 'DEBRIEF_CONCEPTUAL',
@@ -146,9 +181,23 @@ export const useSessionStore = create<SessionState>()(
             setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
             setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }),
             setVisualizationData: (data) => set({ visualizationData: data }),
+            setDiagramDefinition: (definition) => set({ diagramDefinition: definition }),
+            setIsDiagramGenerating: (isGenerating) => set({ isDiagramGenerating: isGenerating }),
             setSuggestedResponses: (suggestions, title) => set({ suggestedResponses: suggestions, suggestedTitle: title }),
             clearSuggestedResponses: () => set({ suggestedResponses: [], suggestedTitle: undefined }),
             setIsNavigating: (isNavigating) => set({ isNavigating }), // <-- Action implementation
+            // rrweb replay actions
+            showReplay: (url) => set({ replayEventsUrl: url }),
+            hideReplay: () => set({ replayEventsUrl: null }),
+
+            // --- Browser tab actions ---
+            addTab: (tab) => set((state) => ({ tabs: [...state.tabs, tab] })),
+            removeTab: (id) => set((state) => ({
+              tabs: state.tabs.filter(t => t.id !== id),
+              // if removing current active, clear active; caller may select a new one
+              activeTabId: state.activeTabId === id ? null : state.activeTabId,
+            })),
+            setActiveTabId: (id) => set({ activeTabId: id }),
 
             // --- Imprinting Actions ---
             setImprintingMode: (mode) => set({ imprinting_mode: mode }),
