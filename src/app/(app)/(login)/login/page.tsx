@@ -145,7 +145,7 @@ export default function Login() {
                             <Image 
                                 className="relative w-5 h-5" 
                                 alt="Learner Icon" 
-                                src={activeUserType === "learner" ? "/learneractive.svg" : "/learner.svg"} 
+                                src={activeUserType === "learner" ? "/learnactive.svg" : "/learner.svg"} 
                                 width={20}
                                 height={20}
                             />

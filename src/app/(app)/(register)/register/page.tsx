@@ -97,7 +97,7 @@ export default function Register() {
                 <div className="flex flex-col items-center gap-2 relative self-stretch w-full mt-6">
                     <div className="flex items-center p-1 relative self-stretch w-full bg-[#566fe91a] rounded-[100px]">
                         <button type="button" onClick={() => setActiveUserType("learner")} className={`flex h-10 items-center justify-center gap-2 px-10 py-3 relative flex-1 grow rounded-[40px] transition-colors ${activeUserType === "learner" ? "bg-[#566fe9]" : "bg-transparent"}`}>
-                            <Image className="relative w-5 h-5" alt="Learner Icon" src={activeUserType === "learner" ? "/learneractive.svg" : "/learner.svg"} width={20} height={20} />
+                            <Image className="relative w-5 h-5" alt="Learner Icon" src={activeUserType === "learner" ? "/learnactive.svg" : "/learner.svg"} width={20} height={20} />
                             <span className={`relative font-semibold text-sm whitespace-nowrap ${activeUserType === "learner" ? "text-white" : "text-[#566fe9cc]"}`}>Learner</span>
                         </button>
                         <button type="button" onClick={() => setActiveUserType("expert")} className={`flex h-10 items-center justify-center gap-2 px-10 py-3 relative flex-1 grow rounded-[40px] transition-colors ${activeUserType === "expert" ? "bg-[#566fe9]" : "bg-transparent"}`}>
