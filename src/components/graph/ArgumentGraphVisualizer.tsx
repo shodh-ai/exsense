@@ -2,12 +2,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ReactFlow, {
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   useNodesState,
   useEdgesState,
   Node,
   Edge,
+  MarkerType,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import dagre from "dagre";
@@ -56,12 +58,16 @@ export default function ArgumentGraphVisualizer({ thesisId, refreshKey, highligh
       data: { label: n?.data?.label ?? n?.id, raw: n },
       position: n.position || { x: 0, y: 0 },
       style: {
-        border: "1px solid #d1d5db",
-        borderRadius: 6,
-        background: "#fff",
-        padding: 8,
+        border: "1px solid rgba(255,255,255,0.18)",
+        borderRadius: 10,
+        background: "rgba(255,255,255,0.08)",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+        padding: 10,
+        color: "#e5e7eb",
         fontSize: 12,
-      },
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+      } as React.CSSProperties,
     }));
     const es: Edge[] = (graph.edges || []).map((e: any) => ({
       id: e.id,
@@ -69,9 +75,13 @@ export default function ArgumentGraphVisualizer({ thesisId, refreshKey, highligh
       target: e.target,
       label: e.label,
       type: e.type || "smoothstep",
-      animated: !!e.animated,
-      style: { strokeWidth: 1.5 },
-      labelStyle: { fontSize: 11, fill: "#374151" },
+      animated: e.animated ?? true,
+      markerEnd: { type: MarkerType.ArrowClosed, color: "#60a5fa" },
+      style: { strokeWidth: 1.6, stroke: "#60a5fa" },
+      labelStyle: { fontSize: 11, fill: "#c7e0ff", fontWeight: 600 },
+      labelBgStyle: { fill: "rgba(2,6,23,0.7)", stroke: "rgba(255,255,255,0.15)" },
+      labelBgPadding: [3, 5],
+      labelBgBorderRadius: 6,
     }));
     return layout(ns, es);
   }, [graph]);
@@ -89,7 +99,7 @@ export default function ArgumentGraphVisualizer({ thesisId, refreshKey, highligh
     }
   }, [refreshKey, refresh]);
 
-  // highlight by terms
+  // highlight by terms (glow + accent border)
   useEffect(() => {
     if (!highlightTerms?.length) return;
     const terms = highlightTerms.map((s) => s.toLowerCase());
@@ -101,8 +111,8 @@ export default function ArgumentGraphVisualizer({ thesisId, refreshKey, highligh
           ...n,
           style: {
             ...(n.style as any),
-            boxShadow: hit ? "0 0 0 3px rgba(59,130,246,0.4)" : undefined,
-            border: hit ? "2px solid #3b82f6" : (n.style as any)?.border,
+            boxShadow: hit ? "0 0 0 6px rgba(59,130,246,0.25), 0 12px 28px rgba(0,0,0,0.5)" : (n.style as any)?.boxShadow,
+            border: hit ? "2px solid #60a5fa" : (n.style as any)?.border,
           },
         } as Node<RFNodeData>;
       }) as unknown as Node<RFNodeData>[]
@@ -113,11 +123,19 @@ export default function ArgumentGraphVisualizer({ thesisId, refreshKey, highligh
   if (error) return <div className="p-3 text-sm text-red-600">{error}</div>;
 
   return (
-    <div style={{ width: "100%", height: "100%", minHeight: 420 }}>
-      <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} fitView>
-        <MiniMap pannable zoomable />
+    <div style={{ width: "100%", height: "100%", minHeight: 440 }} className="rounded-md">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        fitView
+        panOnScroll
+        zoomOnScroll
+      >
+        <MiniMap pannable zoomable maskColor="rgba(2,6,23,0.6)" nodeStrokeColor={(n) => (n.style as any)?.border || "#334155"} />
         <Controls />
-        <Background />
+        <Background variant={BackgroundVariant.Dots} color="#334155" gap={20} size={1} />
       </ReactFlow>
     </div>
   );

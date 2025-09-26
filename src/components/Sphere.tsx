@@ -65,7 +65,13 @@ const emotionMusicMap: Record<Emotion, string | null> = { default: null, happy: 
 // --- COMPONENT
 // =================================================================
 
-const Sphere: React.FC = () => {
+type SphereProps = {
+    sizePercentage?: number; // fraction of viewport min dimension (default from constant)
+    bottomPaddingPx?: number; // additional bottom padding in px (default from constant)
+    horizontalShift?: number; // world-space horizontal shift (default 0.4)
+};
+
+const Sphere: React.FC<SphereProps> = ({ sizePercentage, bottomPaddingPx, horizontalShift }) => {
     // --- STATE & REFS ---
     const mountRef = useRef<HTMLDivElement>(null);
     const bubbleRef = useRef<HTMLDivElement>(null);
@@ -317,7 +323,8 @@ const Sphere: React.FC = () => {
             const visibleWidthAtDistance = visibleHeightAtDistance * aspect;
 
             // Determine the required diameter based on the smaller viewport dimension
-            const requiredWorldDimension = Math.min(visibleWidthAtDistance, visibleHeightAtDistance) * BLOB_SIZE_PERCENTAGE;
+            const effectiveSizePct = (typeof sizePercentage === 'number' ? sizePercentage : BLOB_SIZE_PERCENTAGE);
+            const requiredWorldDimension = Math.min(visibleWidthAtDistance, visibleHeightAtDistance) * effectiveSizePct;
 
             const unscaledBlobDiameter = shellGeometry.parameters.radius * 2;
             const newScale = requiredWorldDimension / unscaledBlobDiameter;
@@ -329,12 +336,13 @@ const Sphere: React.FC = () => {
             }
 
             const scaledIdleRadius = (shellGeometry.parameters.radius + shellMaterial.uniforms.u_amplitude.value) * newScale;
-            const bottomPaddingInWorldUnits = (BLOB_BOTTOM_PADDING_PIXELS / canvasHeight) * visibleHeightAtDistance;
-            const horizontalShift = 0.4;
+            const effectiveBottomPaddingPx = (typeof bottomPaddingPx === 'number' ? bottomPaddingPx : BLOB_BOTTOM_PADDING_PIXELS);
+            const bottomPaddingInWorldUnits = (effectiveBottomPaddingPx / canvasHeight) * visibleHeightAtDistance;
+            const xShift = (typeof horizontalShift === 'number' ? horizontalShift : 0.4);
 
-            blobGroup.position.x = horizontalShift;
+            blobGroup.position.x = xShift;
             blobGroup.position.y = -visibleHeightAtDistance / 2 + scaledIdleRadius + bottomPaddingInWorldUnits;
-            controls.target.set(horizontalShift, 0, 0);
+            controls.target.set(xShift, 0, 0);
         };
         setBlobSizeAndPosition();
 
