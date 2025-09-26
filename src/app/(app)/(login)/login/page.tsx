@@ -129,11 +129,11 @@ export default function Login() {
     };
 
     return (
-        <div className={`${jakarta.className} w-full h-full overflow-hidden flex items-center justify-center flex-col p-4 sm:p-6 lg:p-8`}>
+        <div className={`${jakarta.className} w-full h-[90%] overflow-hidden flex items-center justify-center flex-col p-4 sm:p-6 lg:p-8`}>
             <Sphere />
             <ShodhAIHero />
-            <div className="w-full max-w-md overflow-auto max-h-full flex flex-col items-center">
-                {/* --- LEARNER/EXPERT TOGGLE --- */}
+            <div className="w-full max-w-md overflow-auto max-h-full flex flex-col items-center custom-scrollbar pr-[2px]" >
+                {/* --- LEARNER/EXPERT TOGGLE --- */} 
                 <div className="flex flex-col items-center gap-2 relative self-stretch w-full mt-6">
                     <div className="flex items-center p-1 relative self-stretch w-full bg-[#566fe91a] rounded-[100px]">
                         <button
@@ -163,7 +163,7 @@ export default function Login() {
                             <Image 
                                 className="relative w-5 h-5" 
                                 alt="Expert Icon" 
-                                src={activeUserType === "expert" ? "/expertactive.svg" : "/expert.svg"} 
+                                src={activeUserType === "expert" ? "/Expertactive.svg" : "/Expert.svg"} 
                                 width={20}
                                 height={20}
                             />

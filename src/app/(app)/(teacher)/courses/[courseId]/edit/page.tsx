@@ -6,103 +6,128 @@ import CirriculumEditor from "@/components/CirriculumEditor";
 import { SectionData } from "@/components/CurriculumSection";
 import { useApiService } from "@/lib/api";
 import { useCourse, useLessons } from "@/hooks/useApi";
+import { useQueryClient } from "@tanstack/react-query";
 import Footer from "@/components/Footer";
+import { toast } from "sonner";
+import { v4 as uuidv4 } from 'uuid';
 
 export default function EditCoursePage() {
   const { courseId } = useParams<{ courseId: string }>();
   const router = useRouter();
   const api = useApiService();
+  const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
 
-  // Fetch existing course and lessons
   const { data: course, isLoading: courseLoading, error: courseError } = useCourse(courseId);
   const { data: lessons = [], isLoading: lessonsLoading, error: lessonsError } = useLessons(courseId);
-
-  // Prepare initial sections for the editor
   const [initialSections, setInitialSections] = useState<SectionData[] | null>(null);
 
   useEffect(() => {
-    if (!lessonsLoading) {
+    if (!lessonsLoading && course) {
       const formatted: SectionData[] = (lessons || []).map((lesson: any) => {
-        // Prefer first-class scope, fallback to legacy content JSON
         let scope = lesson.scope ?? "";
-        if (!scope) {
-          try {
-            const parsed = lesson.content ? JSON.parse(lesson.content) : {};
-            scope = parsed?.scope ?? "";
-          } catch (_) {
-            scope = "";
-          }
+        let environment = null;
+        if (lesson.content) {
+            try {
+                const parsed = JSON.parse(lesson.content);
+                scope = parsed?.scope ?? scope;
+                environment = parsed?.environment ?? null;
+            } catch (_) { /* Keep existing scope */ }
         }
         return {
           id: lesson.id,
           title: lesson.title,
           description: lesson.description || "",
-          modules: [],
+          environment: environment,
           scope,
         } as SectionData;
       });
-      setInitialSections(formatted);
+      if (course.title === 'Untitled Course' && formatted.length === 0) {
+        setInitialSections([{ id: uuidv4(), title: "", description: "", scope: "", environment: null }]);
+      } else {
+        setInitialSections(formatted);
+      }
     }
-  }, [lessons, lessonsLoading]);
+  }, [lessons, lessonsLoading, course]);
 
-  // Save handler invoked by CirriculumEditor on finalize
-  const handleUpdateCourse = async (data: { title: string; description: string; sections: SectionData[] }) => {
-    setIsSaving(true);
+  const handleUpdateCourse = async (data: { sections: SectionData[] }, status: 'DRAFT' | 'PUBLISHED') => {
+    const isPublishAction = status === 'PUBLISHED';
+    if (isPublishAction) setIsPublishing(true);
+    else setIsSaving(true);
+
+    const actionVerb = isPublishAction ? "Publishing" : "Saving";
+    toast.loading(`${actionVerb} curriculum...`);
+
     try {
-      // Update core course details
       await api.updateCourse(courseId, {
-        title: data.title.trim(),
-        description: data.description.trim(),
+        status: status,
       });
 
-      // Replace lessons with the new set from editor
-      for (const lesson of lessons) {
-        await api.deleteLesson(lesson.id);
+      const existingLessonIds = lessons.map(l => l.id);
+      
+      for (const lessonId of existingLessonIds) {
+        await api.deleteLesson(lessonId);
       }
+      
       for (let i = 0; i < data.sections.length; i++) {
-        const s = data.sections[i];
-        await api.createLesson(courseId, {
-          title: s.title.trim() || `Section ${i + 1}`,
-          description: s.description?.trim(),
-          order: i + 1,
-          // Persist scope both as first-class and in content for compatibility
-          content: JSON.stringify({ scope: s.scope ?? "" }),
-          scope: s.scope ?? "",
-        } as any);
+        const section = data.sections[i];
+
+        // --- MODIFICATION START ---
+        // The `order` is now `i + 1` to ensure it starts from 1, not 0.
+        const lessonPayload = {
+            title: section.title.trim() || `Lesson ${i + 1}`,
+            description: section.description?.trim(),
+            order: i + 1, // <-- THE FIX IS HERE
+            content: JSON.stringify({ 
+                scope: section.scope ?? "", 
+                environment: section.environment ?? null 
+            }),
+            scope: section.scope ?? "",
+        };
+
+        await api.createLesson(courseId, lessonPayload);
+        // --- MODIFICATION END ---
       }
 
-      alert("Course updated successfully!");
-      // Route to existing course overview page
+      await queryClient.invalidateQueries({ queryKey: ['courses', courseId] });
+      await queryClient.invalidateQueries({ queryKey: ['lessons', courseId] });
+      await queryClient.invalidateQueries({ queryKey: ['teacherCourses'] });
+      
+      toast.dismiss();
+      toast.success(isPublishAction ? "Course published successfully!" : "Draft saved successfully!");
+      
       router.push(`/courses/${courseId}`);
+
     } catch (error) {
-      console.error("Failed to update course:", error);
-      alert(`Error: Could not update the course. ${(error as Error).message}`);
-      setIsSaving(false);
+      toast.dismiss();
+      toast.error(`Error: Could not ${actionVerb.toLowerCase()} the curriculum.`);
+      console.error(`Failed to ${actionVerb}:`, error);
+    } finally {
+      if (isPublishAction) setIsPublishing(false);
+      else setIsSaving(false);
     }
   };
 
-  // Loading and error states
   const isLoading = courseLoading || lessonsLoading || initialSections === null;
   const error = courseError || lessonsError;
 
-  if (isLoading) {
-    return <div className="p-6 text-center">Loading curriculum for editing…</div>;
-  }
-  if (error) {
-    return <div className="p-6 text-red-500 text-center">Error loading data: {(error as Error).message}</div>;
-  }
+  if (isLoading) return <div className="p-6 text-center">Loading curriculum…</div>;
+  if (error) return <div className="p-6 text-red-500 text-center">Error: {(error as Error).message}</div>;
 
   return (
-    <><CirriculumEditor
-      initialSections={initialSections || []}
-      initialTitle={course?.title || ""}
-      initialDescription={course?.description || ""}
-      onFinalize={handleUpdateCourse}
-      finalizeLabel={isSaving ? "Saving..." : "Save Changes"}
-      courseId={courseId} />
-      <div className="fixed bottom-0 left-0 right-0">
+    <>
+      <CirriculumEditor
+        initialSections={initialSections || []}
+        onSaveDraft={(data) => handleUpdateCourse(data, 'DRAFT')}
+        onPublish={(data) => handleUpdateCourse(data, 'PUBLISHED')}
+        isSaving={isSaving}
+        isPublishing={isPublishing}
+        courseId={courseId} 
+      />
+      <div className="fixed bottom-[2%] left-0 right-0">
         <Footer />
-      </div></>
+      </div>
+    </>
   );
 }
