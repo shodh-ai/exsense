@@ -175,7 +175,7 @@ export default function TeacherCoursePage(): JSX.Element {
 
               <CourseIntroduction tags={course.tags || []} title={course.title} description={course.description} />
               <CourseAnalyticsSection details={courseAnalyticsDetails} courseId={course.id} unresolvedDoubts={course.analytics?.unsolvedDoubts || 0} />
-              <CourseDetailsSection details={courseDetails} />
+              {/* <CourseDetailsSection details={courseDetails} />
               <section className="flex flex-col gap-4">
                 <h2 className="text-xl font-bold text-[#394169]">Lessons</h2>
                 {lessonsLoading ? (
@@ -203,7 +203,7 @@ export default function TeacherCoursePage(): JSX.Element {
                     )}
                   </div>
                 )}
-              </section>
+              </section> */}
               <WhatYouWillLearnSection skills={course.skills || []} outcomes={course.learningOutcomes || []} />
               <CourseMap />
               <TeacherProfileSection name={course.teacher?.name} title={course.teacher?.title} bio={course.teacher?.bio} />
