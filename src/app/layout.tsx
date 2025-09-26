@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import "./(app)/globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { RrwebPlayer } from "@/components/RrwebPlayer";
+import AppNavbar from "@/components/nav/AppNavbar";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta-sans",
@@ -34,6 +35,7 @@ export default function RootLayout({
         <body
           className={`${plusJakartaSans.variable} antialiased m-0 p-0`}
         >
+          <AppNavbar />
           {children}
           <RrwebPlayer />
         </body>

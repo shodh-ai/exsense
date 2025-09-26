@@ -1,6 +1,6 @@
 // exsense/src/services/imprinter.ts
 export async function createThesis(authorId: string, thesisId: string, seed: string, sessionId: string) {
-  const base = process.env.NEXT_PUBLIC_IMPRINTER_BASE || 'http://localhost:8080';
+  const base = process.env.NEXT_PUBLIC_IMPRINTER_BASE || 'http://localhost:8002';
   const res = await fetch(`${base}/thesis/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -11,7 +11,7 @@ export async function createThesis(authorId: string, thesisId: string, seed: str
 }
 
 export async function thesisTurn(thesisId: string, sessionId: string, text: string): Promise<{ action: string; text: string }>{
-  const base = process.env.NEXT_PUBLIC_IMPRINTER_BASE || 'http://localhost:8080';
+  const base = process.env.NEXT_PUBLIC_IMPRINTER_BASE || 'http://localhost:8002';
   const res = await fetch(`${base}/thesis/turn`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

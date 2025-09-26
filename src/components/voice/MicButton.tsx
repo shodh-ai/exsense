@@ -25,6 +25,7 @@ export default function MicButton(props: MicButtonProps) {
   const roomRef = useRef<Room | null>(null);
   const micRef = useRef<LocalAudioTrack | null>(null);
   const agentAudioElRef = useRef<HTMLAudioElement | null>(null);
+  const isHoldingRef = useRef<boolean>(false);
 
   const connect = useCallback(async () => {
     try {
@@ -64,28 +65,9 @@ export default function MicButton(props: MicButtonProps) {
       await room.connect(url, token);
       roomRef.current = room;
 
-      setStatus("publishing");
-      const mic = await createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
-      micRef.current = mic;
-
-      // publish with a couple retries for engine settle
-      for (let i = 0; i < 3; i++) {
-        try {
-          await room.localParticipant.publishTrack(mic);
-          setStatus("published");
-          break;
-        } catch (err: any) {
-          const msg = String(err?.message || err);
-          if (/not connected/i.test(msg)) {
-            await new Promise((r) => setTimeout(r, 300));
-            continue;
-          }
-          throw err;
-        }
-      }
-
-      // Ask backend/agent to join & start
+      // Ask backend/agent to join & start. Do not publish mic yet.
       await startVoiceBot({ room: roomId, sessionId, thesisId, mode, studentId, authorId });
+      setStatus("connected");
     } catch (e: any) {
       console.error("[MicButton] connect error", e);
       setError(e?.message || "Failed to connect");
@@ -119,25 +101,83 @@ export default function MicButton(props: MicButtonProps) {
     };
   }, [disconnect]);
 
-  const onClick = async () => {
-    if (status === "idle" || status === "error") {
-      await connect();
-    } else {
-      await disconnect();
+  const startTalking = useCallback(async () => {
+    try {
+      isHoldingRef.current = true;
+      setError(null);
+      // Ensure connected
+      if (!roomRef.current) {
+        await connect();
+      }
+      // User may have released before connect finished
+      if (!isHoldingRef.current) return;
+      const room = roomRef.current;
+      if (!room) return;
+      setStatus("publishing");
+      const mic = await createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+      micRef.current = mic;
+      // publish with a couple retries for engine settle
+      for (let i = 0; i < 3; i++) {
+        try {
+          await room.localParticipant.publishTrack(mic);
+          if (!isHoldingRef.current) {
+            // If user released during publish, immediately stop
+            try { await room.localParticipant.unpublishTrack(mic); } catch {}
+            try { mic.stop(); } catch {}
+            micRef.current = null;
+            setStatus("connected");
+            return;
+          }
+          setStatus("published");
+          break;
+        } catch (err: any) {
+          const msg = String(err?.message || err);
+          if (/not connected/i.test(msg)) {
+            await new Promise((r) => setTimeout(r, 300));
+            continue;
+          }
+          throw err;
+        }
+      }
+    } catch (e: any) {
+      console.error("[MicButton] startTalking error", e);
+      setError(e?.message || "Failed to start talking");
+      setStatus("error");
     }
-  };
+  }, [connect]);
 
-  const label = status === "idle" || status === "error" ? "Enable mic" : "Disable mic";
+  const stopTalking = useCallback(async () => {
+    isHoldingRef.current = false;
+    const room = roomRef.current;
+    const mic = micRef.current;
+    if (room && mic) {
+      try { await room.localParticipant.unpublishTrack(mic); } catch {}
+      try { mic.stop(); } catch {}
+    }
+    micRef.current = null;
+    if (room) {
+      setStatus("connected");
+    } else {
+      setStatus("idle");
+    }
+  }, []);
+
+  const label = error || (status === "published" ? "Release to stop talking" : "Hold to talk");
   const isBusy = status === "connecting" || status === "publishing";
 
   return (
     <button
-      onClick={onClick}
-      disabled={isBusy}
+      onPointerDown={() => { startTalking(); }}
+      onPointerUp={() => { stopTalking(); }}
+      onPointerLeave={() => { stopTalking(); }}
+      onPointerCancel={() => { stopTalking(); }}
+      onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); startTalking(); } }}
+      onKeyUp={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); stopTalking(); } }}
+      disabled={false}
       className={`px-3 py-1 rounded text-white text-sm ${status === "published" ? "bg-rose-600" : "bg-sky-600"} ${className || ""}`}
-      title={error || label}
+      title={label}
     >
-      {isBusy ? "Connecting..." : status === "published" ? "Mic On" : "Mic Off"}
+      {isBusy ? (status === "connecting" ? "Connecting..." : "Starting...") : status === "published" ? "Talking..." : "Hold to Talk"}
     </button>
   );
 }
