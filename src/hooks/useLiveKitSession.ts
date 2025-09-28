@@ -790,6 +790,71 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         } catch (error) {
           console.error('[B2F RPC] GENERATE_VISUALIZATION handler failed:', error);
         }
+      } else if (
+        // ADD_EXCALIDRAW_BLOCK: fall back to numeric if enum not present
+        (ClientUIActionType as any).ADD_EXCALIDRAW_BLOCK ?
+          request.actionType === (ClientUIActionType as any).ADD_EXCALIDRAW_BLOCK :
+          (request.actionType as number) === 201
+      ) {
+        console.log('[B2F RPC] Handling ADD_EXCALIDRAW_BLOCK');
+        try {
+          const params = (request as any).parameters || {};
+          const id = params.id || `exb_${Date.now()}`;
+          const summary = params.summary || params.title || 'Diagram';
+          let elements: any[] = [];
+          const raw = params.elements;
+          if (Array.isArray(raw)) {
+            elements = raw as any[];
+          } else if (typeof raw === 'string') {
+            try { elements = JSON.parse(raw); } catch { elements = []; }
+          }
+          const block = { id, type: 'excalidraw', summary, elements } as any;
+          useSessionStore.getState().addBlock(block);
+          // Switch to whiteboard view so the user sees the block
+          try { setActiveView('excalidraw' as SessionView); } catch {}
+        } catch (e) {
+          console.error('[B2F RPC] Failed to add excalidraw block:', e);
+        }
+      } else if (
+        (ClientUIActionType as any).UPDATE_EXCALIDRAW_BLOCK ?
+          request.actionType === (ClientUIActionType as any).UPDATE_EXCALIDRAW_BLOCK :
+          (request.actionType as number) === 202
+      ) {
+        console.log('[B2F RPC] Handling UPDATE_EXCALIDRAW_BLOCK');
+        try {
+          const params = (request as any).parameters || {};
+          const blockId = params.id || params.block_id || params.blockId;
+          if (!blockId) throw new Error('Missing block id');
+          let elements: any[] | undefined = undefined;
+          const raw = params.elements;
+          if (Array.isArray(raw)) {
+            elements = raw as any[];
+          } else if (typeof raw === 'string') {
+            try { elements = JSON.parse(raw); } catch { elements = undefined; }
+          }
+          if (elements) {
+            useSessionStore.getState().updateBlock(blockId, { elements } as any);
+          }
+        } catch (e) {
+          console.error('[B2F RPC] Failed to update excalidraw block:', e);
+        }
+      } else if (
+        (ClientUIActionType as any).FOCUS_ON_BLOCK ?
+          request.actionType === (ClientUIActionType as any).FOCUS_ON_BLOCK :
+          (request.actionType as number) === 203
+      ) {
+        console.log('[B2F RPC] Handling FOCUS_ON_BLOCK');
+        try {
+          const params = (request as any).parameters || {};
+          const blockId = params.id || params.block_id || params.blockId;
+          if (blockId && typeof document !== 'undefined') {
+            const el = document.getElementById(String(blockId));
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+          try { setActiveView('excalidraw' as SessionView); } catch {}
+        } catch (e) {
+          console.error('[B2F RPC] Failed to focus on block:', e);
+        }
       } else {
         if (LIVEKIT_DEBUG) console.log('[B2F RPC] Unknown action type:', request.actionType);
       }
