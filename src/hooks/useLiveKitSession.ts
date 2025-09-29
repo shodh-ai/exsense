@@ -545,6 +545,28 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         const params = (request as unknown as Record<string, unknown>).parameters;
         console.log('[SET_UI_STATE] Extracted params:', params);
         
+        // --- Lightweight request/response hook: GET_BLOCK_CONTENT ---
+        try {
+          const innerAction = ((params as any)?.action || (params as any)?.Action || '').toString();
+          if (innerAction === 'GET_BLOCK_CONTENT') {
+            const blockId = ((params as any)?.block_id || (params as any)?.blockId || (params as any)?.id || '').toString();
+            let result: any = null;
+            if (blockId) {
+              const { whiteboardBlocks } = useSessionStore.getState();
+              const found = (whiteboardBlocks || []).find(b => b.id === blockId);
+              if (found) result = found;
+            }
+            const response = ClientUIActionResponse.create({
+              requestId: rpcData.requestId,
+              success: !!result,
+              message: result ? JSON.stringify(result) : ''
+            });
+            return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
+          }
+        } catch (e) {
+          console.warn('[SET_UI_STATE] Inline GET_BLOCK_CONTENT handling error:', e);
+        }
+
         if (params && typeof params === 'object') {
           // Handle status text update
           if ('statusText' in params || 'status_text' in params) {
@@ -704,7 +726,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         // default ack
         const response = ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true });
         return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
-      } else if ((request.actionType as number) === 64) { // EXCALIDRAW_CLEAR_CANVAS
+      } else if (
+        // Prefer enum when available, but also handle numeric value for backward compatibility
+        (ClientUIActionType as any).EXCALIDRAW_CLEAR_CANVAS ?
+          request.actionType === (ClientUIActionType as any).EXCALIDRAW_CLEAR_CANVAS :
+          (request.actionType as number) === 64
+      ) { // EXCALIDRAW_CLEAR_CANVAS
         console.log('[B2F RPC] Handling EXCALIDRAW_CLEAR_CANVAS');
         // Clear canvas via debug functions if available
         if (typeof window !== 'undefined' && window.__excalidrawDebug) {
@@ -717,7 +744,11 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         } else {
           console.warn('[B2F RPC] ⚠️ Excalidraw debug functions not available for canvas clear');
         }
-      } else if ((request.actionType as number) === 49) { // GENERATE_VISUALIZATION
+      } else if (
+        (ClientUIActionType as any).GENERATE_VISUALIZATION ?
+          request.actionType === (ClientUIActionType as any).GENERATE_VISUALIZATION :
+          (request.actionType as number) === 49
+      ) { // GENERATE_VISUALIZATION
         console.log('[B2F RPC] Handling GENERATE_VISUALIZATION');
         try {
           const params = request.parameters || {} as any;
@@ -866,6 +897,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           }
           if (elements) {
             useSessionStore.getState().updateBlock(blockId, { elements } as any);
+            // Ensure the user sees the updated block
+            try { setActiveView('excalidraw' as SessionView); } catch {}
           }
         } catch (e) {
           console.error('[B2F RPC] Failed to update excalidraw block:', e);
