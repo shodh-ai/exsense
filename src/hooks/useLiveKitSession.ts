@@ -672,6 +672,38 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         } else {
           console.error('[B2F RPC] RRWEB_REPLAY action received without a valid events_url.');
         }
+      } else if (
+        // SET_UI_STATE is used for a lightweight request/response hook as well
+        (ClientUIActionType as any).SET_UI_STATE ?
+          request.actionType === (ClientUIActionType as any).SET_UI_STATE :
+          (request.actionType as number) === 41
+      ) {
+        // If the agent is asking for block content, return it in the response message
+        try {
+          const p = (request as any).parameters || {};
+          const inner = typeof p === 'object' ? p : {};
+          const innerAction = (inner.action || inner.Action || '').toString();
+          if (innerAction === 'GET_BLOCK_CONTENT') {
+            const blockId = (inner.block_id || inner.blockId || inner.id || '').toString();
+            let result: any = null;
+            if (blockId) {
+              const { whiteboardBlocks } = useSessionStore.getState();
+              const found = (whiteboardBlocks || []).find(b => b.id === blockId);
+              if (found) result = found;
+            }
+            const response = ClientUIActionResponse.create({
+              requestId: rpcData.requestId,
+              success: !!result,
+              message: result ? JSON.stringify(result) : ''
+            });
+            return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
+          }
+        } catch (e) {
+          console.warn('[B2F RPC] SET_UI_STATE handler error:', e);
+        }
+        // default ack
+        const response = ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true });
+        return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
       } else if ((request.actionType as number) === 64) { // EXCALIDRAW_CLEAR_CANVAS
         console.log('[B2F RPC] Handling EXCALIDRAW_CLEAR_CANVAS');
         // Clear canvas via debug functions if available
@@ -1188,6 +1220,29 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       }
     } catch {}
   }, [isConnected]);
+
+  // --- Send restored_feed_summary to the agent once after connect ---
+  const sentSummaryRef = useRef(false);
+  useEffect(() => {
+    if (!isConnected || sentSummaryRef.current) return;
+    try {
+      const blocks = (useSessionStore.getState().whiteboardBlocks || []).map((b: any) => {
+        if (b?.type === 'excalidraw') {
+          return { id: b.id, type: b.type, summary: b.summary || '', elements_count: Array.isArray(b.elements) ? b.elements.length : 0 };
+        } else if (b?.type === 'rrweb') {
+          return { id: b.id, type: b.type, summary: b.summary || '', eventsUrl: (b as any).eventsUrl || null };
+        }
+        return { id: b?.id, type: b?.type };
+      });
+      const payload = { restored_feed_summary: { blocks } };
+      // Fire-and-forget: if this fails, normal flow continues
+      void startTask('start_tutoring_session', payload);
+      sentSummaryRef.current = true;
+      console.log('[F2B RPC] Sent start_tutoring_session with restored_feed_summary');
+    } catch (e) {
+      console.warn('[F2B RPC] Failed to send restored_feed_summary (non-fatal):', e);
+    }
+  }, [isConnected, startTask]);
 
   // --- Deletion helper shared by multiple event hooks ---
   useEffect(() => {
