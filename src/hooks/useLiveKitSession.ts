@@ -961,7 +961,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             if (data?.type === 'ai_debrief_question' && typeof data?.text === 'string' && data.text.length > 0) {
                 console.log('[FLOW] Received AI debrief question from pod:', data.text);
                 try {
-                    const { setDebriefMessage, setImprintingMode, setActiveView, setConceptualStarted } = useSessionStore.getState();
+                    const { setDebriefMessage, setImprintingMode, setActiveView, setConceptualStarted, setIsAwaitingAIResponse } = useSessionStore.getState();
+                    // Stop global loading when AI response arrives
+                    try { setIsAwaitingAIResponse(false); } catch {}
                     setDebriefMessage({ text: data.text });
                     setImprintingMode('DEBRIEF_CONCEPTUAL');
                     setActiveView('excalidraw');

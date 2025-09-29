@@ -77,6 +77,8 @@ interface SessionState {
     suggestedResponses: { id: string; text: string; reason?: string }[];
     suggestedTitle?: string;
     isNavigating: boolean; // <-- State for our loader
+    // Global loading flag while waiting for AI/imprinter analysis
+    isAwaitingAIResponse: boolean;
     // --- rrweb replay state ---
     replayEventsUrl: string | null;
 
@@ -110,6 +112,7 @@ interface SessionState {
     setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
     clearSuggestedResponses: () => void;
     setIsNavigating: (isNavigating: boolean) => void; // <-- Action for our loader
+    setIsAwaitingAIResponse: (isAwaiting: boolean) => void;
     // rrweb replay actions
     showReplay: (url: string) => void;
     hideReplay: () => void;
@@ -152,6 +155,7 @@ export const useSessionStore = create<SessionState>()(
             suggestedResponses: [],
             suggestedTitle: undefined,
             isNavigating: false, // <-- Initial state is false
+            isAwaitingAIResponse: false,
             // rrweb replay defaults
             replayEventsUrl: null,
 
@@ -186,6 +190,7 @@ export const useSessionStore = create<SessionState>()(
             setSuggestedResponses: (suggestions, title) => set({ suggestedResponses: suggestions, suggestedTitle: title }),
             clearSuggestedResponses: () => set({ suggestedResponses: [], suggestedTitle: undefined }),
             setIsNavigating: (isNavigating) => set({ isNavigating }), // <-- Action implementation
+            setIsAwaitingAIResponse: (isAwaiting: boolean) => set({ isAwaitingAIResponse: isAwaiting }),
             // rrweb replay actions
             showReplay: (url) => set({ replayEventsUrl: url }),
             hideReplay: () => set({ replayEventsUrl: null }),

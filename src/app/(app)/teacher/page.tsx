@@ -154,6 +154,7 @@ function SessionContent({
     onOpenNewTab,
     onCloseTab,
 }: SessionContentProps) {
+    const isAwaitingAIResponse = useSessionStore((s: ReturnType<typeof useSessionStore.getState>) => s.isAwaitingAIResponse);
     return (
         <div className='w-full h-[90%] flex flex-col items-center justify-between'>
             <div className="w-full flex justify-center pt-[20px]">
@@ -178,6 +179,13 @@ function SessionContent({
             </div>
             
             <div className="flex-grow relative w-full h-full">
+                {isAwaitingAIResponse && (
+                    <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center z-50 animate-fade-in">
+                        <Wand className="w-10 h-10 text-white animate-pulse mb-4" />
+                        <p className="text-white text-lg">AI is analyzing your demonstration...</p>
+                        <p className="text-white/70 text-sm">This may take a moment.</p>
+                    </div>
+                )}
                 <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
                     <ConceptualDebriefView
                         debrief={currentDebrief}
@@ -547,7 +555,8 @@ export default function Session() {
     // eslint-disable-next-line no-console
     console.log('[TeacherPage] INIT', { MOCK_BACKEND, now: new Date().toISOString() });
 
-    const { activeView, setActiveView, imprinting_mode, setImprintingMode, currentLO, setCurrentLO, imprintingPhase, setImprintingPhase, curriculumDraft, setCurriculumDraft } = useSessionStore();
+    const { activeView, setActiveView, imprinting_mode, setImprintingMode, currentLO, setCurrentLO, imprintingPhase, setImprintingPhase, curriculumDraft, setCurriculumDraft, setConceptualStarted, setDebriefMessage } = useSessionStore();
+    const setIsAwaitingAIResponse = useSessionStore((s) => s.setIsAwaitingAIResponse);
     const [isIntroActive, setIsIntroActive] = useState(false);
     const handleIntroComplete = () => setIsIntroActive(false);
     const { user, isSignedIn, isLoaded } = useUser();
@@ -1082,6 +1091,8 @@ export default function Session() {
         setSubmitMessage(null);
         setSubmitError(null);
         setIsSubmitting(true);
+        // Start global loading; will be stopped when AI response arrives via LiveKit
+        try { setIsAwaitingAIResponse(true); } catch {}
         setIsStartAllowed(false);
         // Ensure we stop recording to finalize audio and actions
         if (isRecording) {
@@ -1113,10 +1124,11 @@ export default function Session() {
                         hypothesis = aiText.substring(0, lastSentenceEnd + 1);
                         question = aiText.substring(lastSentenceEnd + 2).trim();
                     }
-                    setDebriefMessage({ hypothesis, text: question });
-                    setImprintingMode('DEBRIEF_CONCEPTUAL');
-                    setActiveView('excalidraw');
-                    setConceptualStarted(true);
+                    try { setDebriefMessage({ hypothesis, text: question }); } catch {}
+                    try { setImprintingMode('DEBRIEF_CONCEPTUAL'); } catch {}
+                    try { setActiveView('excalidraw'); } catch {}
+                    try { setConceptualStarted(true); } catch {}
+                    try { setIsAwaitingAIResponse(false); } catch {}
                     setIsStartAllowed(false);
                     setStatusMessage('AI has a question for you (Mocked).');
                     setTimeout(() => topicInputRef.current?.focus(), 0);
@@ -1186,6 +1198,7 @@ export default function Session() {
             } catch (postErr: any) {
                 setSubmitError(postErr?.message || 'Failed to submit via pod');
                 setStatusMessage('Submit failed.');
+                try { setIsAwaitingAIResponse(false); } catch {}
                 // eslint-disable-next-line no-console
                 console.error('[TeacherPage] handleSubmitEpisode ✗', postErr);
                 // Optional direct fallback to imprinter if pod submission fails
@@ -1228,6 +1241,7 @@ export default function Session() {
             setSubmitError(err?.message || 'Failed to submit');
             // eslint-disable-next-line no-console
             console.error('[TeacherPage] handleSubmitEpisode catch ✗', err);
+            try { setIsAwaitingAIResponse(false); } catch {}
         } finally {
             setIsSubmitting(false);
             // eslint-disable-next-line no-console
