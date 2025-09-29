@@ -24,6 +24,23 @@ export interface VisualizationElement {
   [key: string]: unknown;
 }
 
+// --- Whiteboard Feed Types ---
+export interface ExcalidrawBlock {
+  id: string;
+  type: 'excalidraw';
+  summary: string;
+  elements: VisualizationElement[] | any[]; // allow upstream element shapes
+}
+
+export interface RrwebBlock {
+  id: string;
+  type: 'rrweb';
+  summary: string;
+  eventsUrl: string; // URL to fetch rrweb events JSON
+}
+
+export type WhiteboardBlock = ExcalidrawBlock | RrwebBlock;
+
 // --- Browser Tabs ---
 export interface BrowserTab {
   id: string;
@@ -70,6 +87,8 @@ interface SessionState {
     isMusicButtonPlaying: boolean;
     isMicActivatingPending: boolean;
     visualizationData: unknown[] | null;
+    // New dynamic whiteboard feed blocks (supersedes visualizationData)
+    whiteboardBlocks: WhiteboardBlock[];
     // Mermaid diagram definition used as single source of truth for visualization
     diagramDefinition: string;
     // Centralized loading state for diagram generation
@@ -107,6 +126,10 @@ interface SessionState {
     setIsMusicButtonPlaying: (isPlaying: boolean) => void;
     setIsMicActivatingPending: (isPending: boolean) => void;
     setVisualizationData: (data: unknown[] | null) => void;
+    // Whiteboard feed actions
+    addBlock: (block: WhiteboardBlock) => void;
+    updateBlock: (blockId: string, newContent: Partial<ExcalidrawBlock> | Partial<RrwebBlock>) => void;
+    setBlocks: (blocks: WhiteboardBlock[]) => void;
     setDiagramDefinition: (definition: string) => void;
     setIsDiagramGenerating: (isGenerating: boolean) => void;
     setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
@@ -150,6 +173,7 @@ export const useSessionStore = create<SessionState>()(
             isMusicButtonPlaying: false,
             isMicActivatingPending: false,
             visualizationData: null,
+            whiteboardBlocks: [],
             diagramDefinition: '',
             isDiagramGenerating: false,
             suggestedResponses: [],
@@ -185,6 +209,21 @@ export const useSessionStore = create<SessionState>()(
             setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
             setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }),
             setVisualizationData: (data) => set({ visualizationData: data }),
+            addBlock: (block) => set((state) => ({ whiteboardBlocks: [...state.whiteboardBlocks, block] })),
+            updateBlock: (blockId, newContent) => set((state) => ({
+              whiteboardBlocks: state.whiteboardBlocks.map((b) => {
+                if (b.id !== blockId) return b;
+                // Merge content based on block type, preserving id/type
+                if (b.type === 'excalidraw') {
+                  return { ...b, ...(newContent as Partial<ExcalidrawBlock>) } as ExcalidrawBlock;
+                }
+                if (b.type === 'rrweb') {
+                  return { ...b, ...(newContent as Partial<RrwebBlock>) } as RrwebBlock;
+                }
+                return b;
+              })
+            })),
+            setBlocks: (blocks) => set({ whiteboardBlocks: blocks }),
             setDiagramDefinition: (definition) => set({ diagramDefinition: definition }),
             setIsDiagramGenerating: (isGenerating) => set({ isDiagramGenerating: isGenerating }),
             setSuggestedResponses: (suggestions, title) => set({ suggestedResponses: suggestions, suggestedTitle: title }),

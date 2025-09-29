@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Footer from '@/components/Footer';
 import type { Room } from 'livekit-client';
 
@@ -18,7 +18,8 @@ import SuggestedResponses from '@/components/session/SuggestedResponses';
 
 const IntroPage = NextDynamic(() => import('@/components/session/IntroPage'));
 
-const ExcalidrawWrapper = NextDynamic(() => import('@/components/session/ExcalidrawWrapper'), { ssr: false });
+const ExcalidrawBlockView = NextDynamic<{ initialElements: any[] }>(() => import('@/components/session/ExcalidrawBlockView'), { ssr: false });
+const RrwebBlockView = NextDynamic<{ eventsUrl: string }>(() => import('@/components/session/RrwebBlockView'), { ssr: false });
 const LiveKitViewer = NextDynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
 
 const VideoViewer = NextDynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
@@ -54,6 +55,7 @@ interface SessionContentProps {
 }
 
 function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab }: SessionContentProps) {
+    const whiteboardBlocks = useSessionStore((s) => s.whiteboardBlocks);
     return (
         <div className='w-full h-full flex flex-col'>
             <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
@@ -71,10 +73,36 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                 </div>
             </div>
 
-            {/* MODIFICATION: Always render Excalidraw and overlay loader */}
+            {/* Whiteboard feed view and other views */}
             <div className="flex-1 w-full overflow-hidden" style={{ minHeight: 0, paddingBottom: '8.5rem' }}>
-                <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full relative`}>
-                    <ExcalidrawWrapper />
+                <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full relative overflow-y-auto`}>
+                    <div className="max-w-5xl mx-auto w-full px-4 py-4 space-y-8">
+                        {whiteboardBlocks.length === 0 && (
+                            <div className="text-center text-gray-400">Whiteboard feed is empty.</div>
+                        )}
+                        {whiteboardBlocks.map((block) => (
+                            <div key={block.id} id={block.id} className="rounded-xl overflow-hidden border border-white/10 bg-transparent shadow-sm">
+                                <div className="w-full" style={{ minHeight: 320 }}>
+                                    {block.type === 'excalidraw' && (
+                                        <ExcalidrawBlockView initialElements={block.elements as any[]} />
+                                    )}
+                                    {block.type === 'rrweb' && (
+                                        <RrwebBlockView eventsUrl={(block as any).eventsUrl} />
+                                    )}
+                                </div>
+                                <div className="px-3 pb-3 pt-1 select-none flex items-center justify-center gap-2 text-gray-600">
+                                  <img
+                                    src={block.type === 'excalidraw' ? '/whiteboard-inactive.svg' : '/video-inactive.svg'}
+                                    alt="block icon"
+                                    className="w-4 h-4 opacity-90"
+                                  />
+                                  <span className="text-xs leading-5">
+                                    {(block as any).summary || (block.type === 'excalidraw' ? 'Whiteboard' : 'Replay')}
+                                  </span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                     {isDiagramGenerating && (
                         <div className="absolute inset-0 flex items-center justify-center text-gray-500 pointer-events-none">
                             <p>Generating Diagram...</p>
@@ -109,6 +137,7 @@ export default function Session() {
     const activeView = useSessionStore((s) => s.activeView);
     const setActiveView = useSessionStore((s) => s.setActiveView);
     const setVisualizationData = useSessionStore((s) => s.setVisualizationData);
+    const setBlocks = useSessionStore((s) => s.setBlocks);
 
     const [isIntroActive, setIsIntroActive] = useState(true);
     // Centralized diagramDefinition and generation state from store
@@ -186,6 +215,7 @@ export default function Session() {
         openNewTab,
         switchTab,
         closeTab,
+        sessionManagerSessionId,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? roomName : '',
         shouldInitializeLiveKit ? userName : '',
@@ -200,6 +230,24 @@ export default function Session() {
             (window as any).__sessionStore = useSessionStore;
         }
     }, []);
+
+    // Session restoration on initial load
+    const restoredRef = useRef<string | null>(null);
+    useEffect(() => {
+        const sid = sessionManagerSessionId || null;
+        if (!sid || restoredRef.current === sid) return;
+        restoredRef.current = sid;
+        (async () => {
+            try {
+                const resp = await fetch(`/api/session-state/${sid}`, { cache: 'no-store' });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (data && Array.isArray(data.blocks)) {
+                    setBlocks(data.blocks);
+                }
+            } catch {}
+        })();
+    }, [sessionManagerSessionId, setBlocks]);
 
     
     // LiveKit-only: no per-session URLs or legacy VNC state required
