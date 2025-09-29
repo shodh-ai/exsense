@@ -2,20 +2,20 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 // Import the specific buttons we need for the new footer
-import { MicButton } from '@/components/MicButton';
+
 import { UploadButton } from '@/components/UploadButton';
-import { MessageButton } from '@/components/MessageButton';
-// MODIFICATION: Added Send icon for the new chat input
-import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic } from 'lucide-react';
+
+// MODIFICATION: Removed Mic icon, as we'll use an SVG file instead.
+import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send } from 'lucide-react';
 // Keep other existing imports
 import dynamic from 'next/dynamic';
-import Image from 'next/image';
+
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { Room } from 'livekit-client';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Sphere from '@/components/Sphere';
+
 import { submitImprintingEpisode, stageAsset, conversationalTurn, conversationalTurnAudio, submitSeed, processSeedDocument, fetchCurriculumDraft, saveSetupScript, finalizeLO } from '@/lib/imprinterService';
 import SeedInput from '@/components/imprinting/SeedInput';
 import CurriculumEditor from '@/components/imprinting/CurriculumEditor';
@@ -36,61 +36,25 @@ interface DebriefMessage {
 }
 
 // --- NEW: The component for the conceptual chat view ---
+// MODIFICATION: This component now only displays the debrief content. The input bar is moved to the footer.
 interface ConceptualDebriefViewProps {
   debrief: DebriefMessage | null;
-  userInput: string;
-  onUserInput: (value: string) => void;
-  onSubmit: () => void;
-  inputRef: React.RefObject<HTMLTextAreaElement | null>;
-  // conceptual audio recording controls
-  onToggleRecording: () => void;
-  isRecording: boolean;
-  recordingDuration: number;
 }
 
-const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef, onToggleRecording, isRecording, recordingDuration }: ConceptualDebriefViewProps) => {
+const ConceptualDebriefView = ({ debrief }: ConceptualDebriefViewProps) => {
   return (
-    // MODIFICATION: Changed background to light, and default text to black
-    <div className="w-full h-full flex flex-col justify-between items-center text-black bg-transparent p-4 md:p-8">
+    // MODIFICATION: Changed to justify-start as the input is no longer at the bottom of this container.
+    <div className="w-full h-full flex flex-col justify-start items-center text-black bg-transparent p-4 md:p-8">
       {/* Debrief Content */}
       <div className="w-full max-w-4xl space-y-8 overflow-y-auto pr-4 animate-fade-in">
         {debrief && (
           <div className="space-y-4">
             {debrief.hypothesis && (
-              // MODIFICATION: Set hypothesis text color to #566FE9
               <p className="text-lg text-[#566FE9] leading-relaxed">{debrief.hypothesis}</p>
             )}
-            {/* MODIFICATION: Set question text color to black */}
             <p className="text-lg text-black leading-relaxed">{debrief.text}</p>
           </div>
         )}
-      </div>
-
-      {/* Input Bar with specific styling */}
-      <div className="w-full max-w-[850px] h-[86px] flex-shrink-0">
-          <div className="flex items-center justify-between w-full h-full bg-transparent border border-[#C7CCF8] rounded-xl pl-4 pr-[6px] pt-[6px] pb-1">
-            <textarea
-              ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-              value={userInput}
-              onChange={(e) => onUserInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSubmit(); } }}
-              className="w-full h-full bg-transparent focus:outline-none resize-none text-lg text-black placeholder-gray-500"
-              placeholder="Define the in-scope and out-of-scope boundaries for this LO..."
-            />
-            {/* Conceptual audio recorder button */}
-            <button onClick={onToggleRecording} className={`self-start p-3 rounded-md ${isRecording ? 'bg-red-600 hover:bg-red-500' : 'bg-[#566FE9] hover:bg-blue-500'} transition-colors`} title={isRecording ? 'Stop and send' : 'Record an audio answer'}>
-              {isRecording ? <Square className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}
-            </button>
-            <button onClick={onSubmit} className="self-start p-3 rounded-md bg-blue-600 hover:bg-blue-500 transition-colors">
-              <Send className="w-5 h-5 text-white" />
-            </button>
-          </div>
-          {isRecording && (
-            <div className="mt-2 text-sm text-[#566FE9] flex items-center gap-2">
-              <Timer className="w-4 h-4" />
-              <span>Recording... {String(Math.floor(recordingDuration / 60)).padStart(2, '0')}:{String(recordingDuration % 60).padStart(2, '0')}</span>
-            </div>
-          )}
       </div>
     </div>
   );
@@ -114,16 +78,8 @@ interface SessionContentProps {
     livekitToken: string;
     isConnected: boolean;
     controlPanel?: React.ReactNode;
-    // Props for the debrief view
     currentDebrief: DebriefMessage | null;
-    topicInput: string;
-    setTopicInput: (value: string) => void;
-    handleSendConceptual: () => void;
-    topicInputRef: React.RefObject<HTMLTextAreaElement | null>;
     sendBrowserInteraction: (payload: object) => Promise<void>;
-    onToggleConceptualRecording: () => void;
-    isConceptualRecording: boolean;
-    conceptualRecordingDuration: number;
 }
 
 function SessionContent({
@@ -135,16 +91,8 @@ function SessionContent({
     livekitToken,
     isConnected,
     controlPanel,
-    // Destructure new props
     currentDebrief,
-    topicInput,
-    setTopicInput,
-    handleSendConceptual,
-    topicInputRef,
     sendBrowserInteraction,
-    onToggleConceptualRecording,
-    isConceptualRecording,
-    conceptualRecordingDuration,
 }: SessionContentProps) {
     return (
         <div className='w-full h-[90%] flex flex-col items-center justify-between'>
@@ -156,12 +104,10 @@ function SessionContent({
                             onClick={button.onClick}
                             className={`w-[49%] h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${imprintingMode === button.key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
                         >
-
                             <img
                                 src={imprintingMode === button.key ? button.activeImagePath : button.inactiveImagePath}
                                 alt={button.label}
                                 className="w-[20px] h-[20px]"
-
                             />
                             {button.label}
                         </button>
@@ -173,13 +119,6 @@ function SessionContent({
                 <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
                     <ConceptualDebriefView
                         debrief={currentDebrief}
-                        userInput={topicInput}
-                        onUserInput={setTopicInput}
-                        onSubmit={handleSendConceptual}
-                        inputRef={topicInputRef}
-                        onToggleRecording={onToggleConceptualRecording}
-                        isRecording={isConceptualRecording}
-                        recordingDuration={conceptualRecordingDuration}
                     />
                 </div>
                 <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
@@ -296,17 +235,13 @@ interface TeacherFooterProps {
     onCaptureClick?: () => void;
     onIncreaseTimer: () => void;
     screenshotIntervalSec: number;
-    onSaveScriptClick?: () => void;
     onVSCodeClick?: () => void;
-    onPasteClick?: () => void;
     isRecording: boolean;
     isPaused: boolean;
     recordingDuration: number;
     onStartRecording: () => void;
     onTogglePauseResume: () => void;
     onSubmitEpisode: () => void;
-    onShowMeClick?: () => void;
-    isShowMeDisabled?: boolean;
     onFinalizeTopicClick?: () => void;
     isFinalizeDisabled?: boolean;
     onFinishClick?: () => void;
@@ -317,17 +252,13 @@ const TeacherFooter = ({
     onCaptureClick, 
     onIncreaseTimer, 
     screenshotIntervalSec, 
-    onSaveScriptClick,
     onVSCodeClick,
-    onPasteClick,
     isRecording,
     isPaused,
     recordingDuration,
     onStartRecording,
     onTogglePauseResume,
     onSubmitEpisode,
-    onShowMeClick,
-    isShowMeDisabled,
     onFinalizeTopicClick,
     isFinalizeDisabled,
     onFinishClick,
@@ -340,11 +271,11 @@ const TeacherFooter = ({
     };
 
     return (
-        <footer className="absolute bottom-[32px] w-full h-[60px] p-4 z-10">
+        <footer className="fixed bottom-[32px] w-full h-[60px] p-4 z-20">
             <div className="relative w-full h-full">
                 <div 
-                  className="absolute top-1/2 right-1/2 flex items-center gap-6" 
-                  style={{ marginRight: '150px', transform: 'translateY(-50%)' }}
+                  className="absolute top-1/2 left-1/2 flex items-center gap-6" 
+                  style={{ transform: 'translate(-50%, -50%)' }}
                 >
                     <div className="w-[202px] h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] py-2 pr-2 pl-4 rounded-[600px]">
                         <div className='flex items-center gap-2'>
@@ -366,19 +297,7 @@ const TeacherFooter = ({
                            </button>
                         </div>
                     </div>
-                    <button
-                        onClick={onSaveScriptClick}
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
-                    >
-                        <img src="/Code.svg" alt="Save Script" className="w-6 h-6" />
-                    </button>
-                    <button
-                        onClick={onPasteClick}
-                        title="Paste from your clipboard into the session"
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
-                    >
-                        <img src="/clipboard-paste.svg" alt="Paste from Clipboard" className="w-6 h-6" />
-                    </button>
+                    
                     <button
                         onClick={onVSCodeClick}
                         title="Switch to VS Code Environment"
@@ -386,17 +305,12 @@ const TeacherFooter = ({
                     >
                         <img src="/vscode.svg" alt="Switch to VS Code" className="w-6 h-6" />
                     </button>
+
                     <UploadButton
                         isVisible={true}
                         onClick={onUploadClick}
                     />
-                    <MicButton />
-                </div>
-                <div 
-                  className="absolute top-1/2 left-1/2 flex items-center gap-6" 
-                  style={{ marginLeft: '150px', transform: 'translateY(-50%)' }}
-                >
-                    <MessageButton />
+
                     {!isRecording ? (
                         <button
                             onClick={onStartRecording}
@@ -431,18 +345,7 @@ const TeacherFooter = ({
                             </div>
                         </div>
                     )}
-                    <button
-                        onClick={onShowMeClick}
-                        disabled={isShowMeDisabled}
-                        title={isShowMeDisabled ? 'Only available during conceptual debrief' : 'Start a demonstration'}
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${isShowMeDisabled ? 'bg-[#E9EBFD] cursor-not-allowed' : 'bg-[#566FE91A] hover:bg-[#566FE9]/20'}`}
-                    >
-                        <img
-                            src="/demonstrate.svg"
-                            alt="Start Demonstration"
-                            className={`w-6 h-6 ${isShowMeDisabled ? 'filter grayscale' : ''}`}
-                        />
-                    </button>
+                    
                     <button
                         onClick={onFinalizeTopicClick}
                         disabled={isFinalizeDisabled}
@@ -469,50 +372,56 @@ const TeacherFooter = ({
 };
 
 interface ConceptualFooterProps {
-    onFinishClick?: () => void;
-    isFinishDisabled?: boolean;
-    onShowMeClick?: () => void;
-    isShowMeDisabled?: boolean;
+    userInput: string;
+    onUserInput: (value: string) => void;
+    onSubmit: () => void;
+    inputRef: React.RefObject<HTMLTextAreaElement | null>;
+    onToggleRecording: () => void;
+    isRecording: boolean;
+    recordingDuration: number;
 }
-const ConceptualFooter = ({ onFinishClick, isFinishDisabled, onShowMeClick, isShowMeDisabled }: ConceptualFooterProps) => {
+// --- MODIFICATION START ---
+const ConceptualFooter = ({ userInput, onUserInput, onSubmit, inputRef, onToggleRecording, isRecording, recordingDuration }: ConceptualFooterProps) => {
     return (
-        <footer className="absolute bottom-[32px] w-full h-[60px] p-4 z-10">
-            <div className="relative w-full h-full">
-                <div
-                    className="absolute top-1/2 right-1/2 flex items-center gap-6"
-                    style={{ marginRight: '150px', transform: 'translateY(-50%)' }}
-                >
-                    <MicButton />
+        <footer className="fixed bottom-0 left-0 w-full z-20 flex justify-center p-4" style={{ paddingBottom: '32px' }}>
+            <div className="w-full max-w-[850px] h-14 flex-shrink-0">
+                <div className="flex items-center w-full h-full bg-white/[0.01] shadow-[inset_0px_0px_60px_rgba(86,111,233,0.2)]  border border-[#C7CCF8] rounded-[600px] pl-4 pr-2 py-2">
+                    <textarea
+                        ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+                        value={userInput}
+                        onChange={(e) => onUserInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSubmit(); } }}
+                        className="w-full h-full bg-transparent focus:outline-none resize-none text-lg text-black placeholder-gray-500"
+                        placeholder="Define the in-scope and out-of-scope boundaries for this LO..."
+                    />
+                    <div className="flex items-center gap-1">
+                        <button 
+                            onClick={onToggleRecording} 
+                            className={`p-3 rounded-md transition-colors flex items-center justify-center ${isRecording ? 'bg-red-600 hover:bg-red-500' : 'hover:bg-gray-200'}`} 
+                            title={isRecording ? 'Stop and send' : 'Record an audio answer'}
+                        >
+                            {/* {isRecording ? (
+                                <img src="/Stop.svg" alt="Stop Recording" className="w-5 h-5" />
+                            ) : (
+                                <img src="/Mic.svg" alt="Start Recording" className="w-5 h-5" />
+                            )} */}
+                        </button>
+                        <button onClick={onSubmit} className="p-3 rounded-full bg-[#566FE9]">
+                            <Send className="w-5 h-5 text-white" />
+                        </button>
+                    </div>
                 </div>
-                <div
-                    className="absolute top-1/2 left-1/2 flex items-center gap-6"
-                    style={{ marginLeft: '150px', transform: 'translateY(-50%)' }}
-                >
-                    <MessageButton />
-                    <button
-                        onClick={onShowMeClick}
-                        disabled={isShowMeDisabled}
-                        title={isShowMeDisabled ? 'Answer first, then click Show Me' : 'Switch to browser to demonstrate'}
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${isShowMeDisabled ? 'bg-[#E9EBFD] cursor-not-allowed' : 'bg-[#566FE91A] hover:bg-[#566FE9]/20'}`}
-                    >
-                        <img
-                            src="./demonstrate.svg"
-                            alt="Start Demonstration"
-                            className={`w-6 h-6 ${isShowMeDisabled ? 'filter grayscale' : ''}`}
-                        />
-                    </button>
-                    <button
-                        onClick={onFinishClick}
-                        disabled={isFinishDisabled}
-                        className="w-[134px] h-[56px] flex items-center justify-center rounded-[50px] py-4 px-5 bg-[#566FE9] text-white font-semibold text-sm hover:bg-[#4a5fd1] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                        Finish Session
-                    </button>
+                {isRecording && (
+                <div className="mt-2 text-sm text-[#566FE9] flex items-center gap-2">
+                    <Timer className="w-4 h-4" />
+                    <span>Recording... {String(Math.floor(recordingDuration / 60)).padStart(2, '0')}:{String(recordingDuration % 60).padStart(2, '0')}</span>
                 </div>
+                )}
             </div>
         </footer>
     );
 };
+// --- MODIFICATION END ---
 
 
 export default function Session() {
@@ -654,12 +563,10 @@ export default function Session() {
     const [isRecording, setIsRecording] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isSavingSetup, setIsSavingSetup] = useState(false);
     const [isFinalizingLO, setIsFinalizingLO] = useState(false);
     const [statusMessage, setStatusMessage] = useState<string>('Session started. Waiting for initial prompt.');
     const [submitMessage, setSubmitMessage] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
-    // const [isCreatingSession, setIsCreatingSession] = useState(false); // VNC: unused
     type RecordedPacket = { interaction_type?: string } & Record<string, unknown>;
 
     const packetsRef = useRef<RecordedPacket[]>([]);
@@ -670,7 +577,6 @@ export default function Session() {
     const [stagedAssets, setStagedAssets] = useState<{ filename: string; role: string; asset_id: string }[]>([]);
     const [isStartAllowed, setIsStartAllowed] = useState<boolean>(true);
     const [screenshotIntervalSec, setScreenshotIntervalSec] = useState<number>(10);
-    const [timeToNextScreenshot, setTimeToNextScreenshot] = useState<number | null>(null);
     const [isShowMeRecording, setIsShowMeRecording] = useState<boolean>(false);
     const showMeQuestionRef = useRef<string | null>(null);
     
@@ -678,10 +584,6 @@ export default function Session() {
     const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const curriculumId = courseId as string;
-
-    // VNC session helpers removed
-
-    // VNC cleanup removed
 
     const handleSeedSubmit = async (content: string) => {
         setImprintingPhase('SEED_PROCESSING');
@@ -721,18 +623,15 @@ export default function Session() {
                 setStatusMessage('Stopping conceptual recording and sending...');
                 if (conceptualRecordingIntervalRef.current) clearInterval(conceptualRecordingIntervalRef.current);
                 if (conceptualMediaRecorderRef.current && conceptualMediaRecorderRef.current.state !== 'inactive') {
-                    // Stop and release mic
                     const tracks = conceptualMediaRecorderRef.current.stream.getTracks();
                     conceptualMediaRecorderRef.current.stop();
                     tracks.forEach((t) => t.stop());
                 }
                 setIsConceptualRecording(false);
-                // Wait briefly to ensure dataavailable has flushed
                 await new Promise((r) => setTimeout(r, 150));
                 const blob = new Blob(conceptualAudioChunksRef.current, { type: 'audio/webm' });
                 const audio_b64 = await convertBlobToWavDataURL(blob);
                 conceptualAudioChunksRef.current = [];
-                // Submit to LangGraph via imprinter service
                 try {
                     const resp = await conversationalTurnAudio({
                         curriculum_id: String(curriculumId),
@@ -761,60 +660,14 @@ export default function Session() {
         try {
             if (!isRecording) {
                 setStatusMessage('Start recording to capture and persist screenshots.');
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] captureScreenshot: ignored (not recording)');
                 return;
             }
             setStatusMessage('Capturing screenshot...');
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] captureScreenshot → request');
             await sendBrowser('screenshot');
             setStatusMessage('Manual screenshot captured.');
-            setTimeToNextScreenshot(screenshotIntervalSec);
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] captureScreenshot ✓');
         } catch (e: any) {
-            // eslint-disable-next-line no-console
             console.error('[TeacherPage] captureScreenshot ✗', e);
             setStatusMessage(`Screenshot failed: ${e?.message || e}`);
-        }
-    };
-
-    const [setupActionsText, setSetupActionsText] = useState<string>('');
-
-    const handleSaveSetupText = async () => {
-        if (!currentLO) {
-            setSubmitError('Please enter/select a Topic (LO) before saving setup.');
-            return;
-        }
-        const raw = (setupActionsText || '').trim();
-        if (!raw) {
-            setSubmitError('Please paste setup actions JSON into the textbox.');
-            return;
-        }
-        type BrowserAction = Record<string, unknown>;
-        let actions: BrowserAction[];
-        try {
-            const parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed)) throw new Error('JSON must be an array of action objects');
-            actions = parsed as BrowserAction[];
-        } catch (e: any) {
-            setSubmitError(`Invalid JSON: ${e?.message || e}`);
-            return;
-        }
-
-        setIsSavingSetup(true);
-        setSubmitMessage(null);
-        setSubmitError(null);
-        try {
-            setStatusMessage('Saving setup script...');
-            const resp = await saveSetupScript({ curriculum_id: String(curriculumId), lo_name: currentLO, actions });
-            setSubmitMessage(resp?.message || `Setup script saved for ${currentLO}.`);
-            setStatusMessage('Setup script saved.');
-        } catch (err: any) {
-            setSubmitError(err?.message || 'Failed to save setup script');
-        } finally {
-            setIsSavingSetup(false);
         }
     };
 
@@ -844,41 +697,23 @@ export default function Session() {
     const handleReviewComplete = () => setImprintingPhase('LO_SELECTION');
     const handleLoSelected = (loName: string) => { setCurrentLO(loName); setImprintingPhase('LIVE_IMPRINTING'); };
 
-    // Debrief message now comes from global store so LiveKit updates can re-render UI
     const currentDebrief = useSessionStore((s) => s.debriefMessage);
     const setDebriefMessage = useSessionStore((s) => s.setDebriefMessage);
-    // Conceptual started flag also comes from store (enables Show Me after debrief arrives)
     const conceptualStarted = useSessionStore((s) => s.conceptualStarted);
     const setConceptualStarted = useSessionStore((s) => s.setConceptualStarted);
     const [topicInput, setTopicInput] = useState<string>('');
-    const [seedText, setSeedText] = useState<string>('');
     const topicInputRef = useRef<HTMLTextAreaElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-    // Conceptual side audio recording state
     const conceptualMediaRecorderRef = useRef<MediaRecorder | null>(null);
     const conceptualAudioChunksRef = useRef<BlobPart[]>([]);
     const [isConceptualRecording, setIsConceptualRecording] = useState<boolean>(false);
     const [conceptualRecordingDuration, setConceptualRecordingDuration] = useState(0);
     const conceptualRecordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    const handleSubmitSeed = async () => {
-        if (!user?.id || !seedText.trim()) return;
-        try {
-            setStatusMessage('Submitting seed...');
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] submitSeed →', { expert_id: user.id, session_id: roomName, curriculumId });
-            await submitSeed({ expert_id: user.id, session_id: roomName, curriculum_id: String(curriculumId), content: seedText });
-            setStatusMessage('Seed submitted.');
-            setSeedText('');
-        } catch (e: any) { setStatusMessage(`Seed submit failed: ${e?.message || e}`); }
-    };
-
     const handleStartRecording = async () => {
         if (!user?.id) return;
         try {
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] handleStartRecording: begin', { activeView, screenshotIntervalSec });
             setSubmitMessage(null);
             setSubmitError(null);
             setImprintingMode('WORKFLOW');
@@ -887,9 +722,7 @@ export default function Session() {
             setPacketsCount(0);
             setStagedAssets([]);
             setIsPaused(false);
-            // In LiveKit flow, instruct the browser pod to start recording via data channel
             await sendBrowser('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec, environment: imprintingEnvironment });
-            setTimeToNextScreenshot(screenshotIntervalSec);
 
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -907,22 +740,11 @@ export default function Session() {
             recordingIntervalRef.current = setInterval(() => {
                 setRecordingDuration(prev => prev + 1);
             }, 1000);
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] handleStartRecording: done');
         } catch (err: any) {
-            // eslint-disable-next-line no-console
             console.error('[TeacherPage] handleStartRecording: error', err);
             setSubmitError(err?.message || 'Failed to start recording');
             setIsRecording(false);
         }
-    };
-
-    const handleVncInteraction = (interaction: { action: string; x: number; y: number }) => {
-        if (!isRecording) return;
-        // Send a click through the LiveKit data channel
-        // eslint-disable-next-line no-console
-        console.log('[TeacherPage] onInteraction(click) →', interaction);
-        void sendBrowser('click', { x: interaction.x, y: interaction.y });
     };
 
     const handleSendConceptual = async () => {
@@ -966,31 +788,7 @@ export default function Session() {
         }
     };
 
-    const handleShowMe = async () => {
-        if (imprinting_mode !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted) return;
-        const lastQ = currentDebrief?.text || '';
-        if (!lastQ) return;
-        const msg = (topicInput || '').trim();
-        if (!msg) {
-            setStatusMessage('Type what you want me to demonstrate, then click Show Me.');
-            setTimeout(() => topicInputRef.current?.focus(), 0);
-            return;
-        }
-        showMeQuestionRef.current = lastQ;
-        setIsShowMeRecording(true);
-        setImprintingMode('WORKFLOW');
-        setActiveView('vnc');
-        setStatusMessage('Show Me: switched to Browser. Starting recording...');
-        setTopicInput('');
-        if (!isRecording) {
-            try { await handleStartRecording(); }
-            catch (e: any) { setStatusMessage(`Failed to start Show Me recording: ${e?.message || e}`); }
-        }
-    };
-
     const handleStopRecording = async () => {
-        // eslint-disable-next-line no-console
-        console.log('[TeacherPage] handleStopRecording: begin');
         if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
         try {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -999,91 +797,48 @@ export default function Session() {
             }
         } catch (err) { console.warn('Stop recording warning:', err); }
         setIsRecording(false);
-        setTimeToNextScreenshot(null);
-        // eslint-disable-next-line no-console
-        console.log('[TeacherPage] handleStopRecording: done');
     };
     
     const handleTogglePauseResume = () => {
         if (!mediaRecorderRef.current) return;
         if (isPaused) {
-            // Resume local mic and instruct pod to resume
             mediaRecorderRef.current.resume();
             setIsPaused(false);
             try { void sendBrowser('resume_recording'); } catch {}
             recordingIntervalRef.current = setInterval(() => {
                 setRecordingDuration(prev => prev + 1);
             }, 1000);
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] handleTogglePauseResume: resumed');
         } else {
-            // Pause local mic and instruct pod to pause
             mediaRecorderRef.current.pause();
             setIsPaused(true);
             try { void sendBrowser('pause_recording'); } catch {}
             if (recordingIntervalRef.current) {
                 clearInterval(recordingIntervalRef.current);
             }
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] handleTogglePauseResume: paused');
         }
     };
 
-    useEffect(() => {
-        if (!isRecording) return;
-        setTimeToNextScreenshot((prev) => (prev == null ? screenshotIntervalSec : prev));
-        const id = setInterval(() => {
-            setTimeToNextScreenshot((prev) => {
-                if (prev == null) return screenshotIntervalSec;
-                const next = prev - 1;
-                if (next <= 1) {
-                    // eslint-disable-next-line no-console
-                    console.log('[TeacherPage] T-minus next periodic screenshot', { next });
-                }
-                return next <= 0 ? screenshotIntervalSec : next;
-            });
-        }, 1000);
-        return () => clearInterval(id);
-    }, [isRecording, screenshotIntervalSec]);
-
     const handleSubmitEpisode = async () => {
-        // eslint-disable-next-line no-console
-        console.log('[TeacherPage] handleSubmitEpisode: begin', { MOCK_BACKEND, isRecording, stagedAssetsCount: stagedAssets.length, currentLO });
         setSubmitMessage(null);
         setSubmitError(null);
         setIsSubmitting(true);
         setIsStartAllowed(false);
-        // Ensure we stop recording to finalize audio and actions
         if (isRecording) {
             await handleStopRecording();
-            // Give MediaRecorder.onstop a moment to populate the blob
             await new Promise((r) => setTimeout(r, 150));
         }
 
         try {
             if (MOCK_BACKEND) {
-                setStatusMessage('Stopping recording and preparing data (Mocked)...');
-                await new Promise(r => setTimeout(r, 1000));
                 setStatusMessage('Submitting episode (Mocked)...');
                 await new Promise(r => setTimeout(r, 2000));
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] handleSubmitEpisode: MOCK flow');
                 const fakeResponse = {
                     action: 'SPEAK_AND_INITIATE_DEBRIEF',
-                    text: "Great question! On the real axis, the root locus exists between an odd number of poles and zeros. Count the total number of poles and zeros to the right of any point on the real axis. If it's odd, that section is part of the root locus."
+                    text: "Great question! Let's break that down."
                 };
-                setSubmitMessage(`Submitted. Processed 123 fake actions.`);
-                setStatusMessage('Episode submitted. AI is analyzing (Mocked)...');
+                setSubmitMessage(`Submitted. Processed mock actions.`);
                 if (fakeResponse.action === 'SPEAK_AND_INITIATE_DEBRIEF') {
-                    const aiText = fakeResponse.text || '';
-                    let hypothesis = 'Great question!';
-                    let question = aiText.replace('Great question! ', '');
-                    const lastSentenceEnd = Math.max(aiText.lastIndexOf('. '), aiText.lastIndexOf('! '), aiText.lastIndexOf('? '));
-                    if (lastSentenceEnd > -1 && lastSentenceEnd < aiText.length - 2) {
-                        hypothesis = aiText.substring(0, lastSentenceEnd + 1);
-                        question = aiText.substring(lastSentenceEnd + 2).trim();
-                    }
-                    setDebriefMessage({ hypothesis, text: question });
+                    setDebriefMessage({ text: fakeResponse.text });
                     setImprintingMode('DEBRIEF_CONCEPTUAL');
                     setActiveView('excalidraw');
                     setConceptualStarted(true);
@@ -1091,16 +846,10 @@ export default function Session() {
                     setStatusMessage('AI has a question for you (Mocked).');
                     setTimeout(() => topicInputRef.current?.focus(), 0);
                 }
-                return; // Do not hit real backend in mock mode
+                return;
             }
 
-            // Real backend flow
-            // Prepare audio: upload via HTTP to get an asset_id (avoid sending audio over LiveKit data channel)
             const blob = audioBlobRef.current;
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] handleSubmitEpisode: audio prepared', { blobPresent: !!blob, blobSize: blob?.size });
-
-            // Upload audio first (staging), then send only a small payload over LiveKit
             let audioAssetId: string | null = null;
             if (blob && user?.id) {
                 try {
@@ -1113,80 +862,31 @@ export default function Session() {
                         file: audioFile,
                     });
                     audioAssetId = assetInfo.asset_id;
-                    // eslint-disable-next-line no-console
-                    console.log('[TeacherPage] Audio uploaded, asset_id:', audioAssetId);
                 } catch (e) {
-                    // eslint-disable-next-line no-console
-                    console.warn('[TeacherPage] Audio upload failed (continuing without audio asset):', e);
+                    console.warn('[TeacherPage] Audio upload failed:', e);
                 }
             }
 
-            // In LiveKit flow, instruct the browser pod to stop and submit payload to imprinter.
             setStatusMessage('Submitting episode via browser pod...');
-            try {
-                // Merge any previously staged assets with the new audio asset reference (if any)
-                const staged_assets_compact = [
-                    ...stagedAssets,
-                    ...(audioAssetId ? [{ asset_id: audioAssetId, filename: 'narration.wav', role: 'AUDIO_NARRATION' }] : []),
-                ];
+            const staged_assets_compact = [
+                ...stagedAssets,
+                ...(audioAssetId ? [{ asset_id: audioAssetId, filename: 'narration.wav', role: 'AUDIO_NARRATION' }] : []),
+            ];
+            const payload = {
+                expert_id: user?.id || 'expert',
+                session_id: roomName,
+                curriculum_id: String(curriculumId),
+                staged_assets: staged_assets_compact,
+                current_lo: currentLO || undefined,
+                imprinting_mode: imprinting_mode,
+                imprinting_environment: imprintingEnvironment,
+                environment: imprintingEnvironment,
+                in_response_to_question: (isShowMeRecording && showMeQuestionRef.current) ? showMeQuestionRef.current : undefined,
+            };
+            await sendBrowser('stop_recording', payload);
+            setSubmitMessage('Submitted. Processing on server...');
+            setStatusMessage('Episode submitted. AI is analyzing...');
 
-                const payload: Record<string, unknown> = {
-                    expert_id: user?.id || 'expert',
-                    session_id: roomName,
-                    curriculum_id: String(curriculumId),
-                    // Do NOT include audio_b64 in data-channel payload
-                    staged_assets: staged_assets_compact,
-                    current_lo: currentLO || undefined,
-                    narration: 'Expert narration from episode.',
-                    imprinting_mode: imprinting_mode,
-                    // Use selected environment for both keys (backend + browser_manager)
-                    imprinting_environment: imprintingEnvironment,
-                    environment: imprintingEnvironment,
-                };
-                if (isShowMeRecording && showMeQuestionRef.current) {
-                    (payload as any).in_response_to_question = showMeQuestionRef.current;
-                }
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] handleSubmitEpisode → sendBrowser(stop_recording)', { keys: Object.keys(payload) });
-                await sendBrowser('stop_recording', payload);
-                setSubmitMessage('Submitted. Processing on server...');
-                setStatusMessage('Episode submitted. AI is analyzing...');
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] handleSubmitEpisode ✓ submitted via pod');
-            } catch (postErr: any) {
-                setSubmitError(postErr?.message || 'Failed to submit via pod');
-                setStatusMessage('Submit failed.');
-                // eslint-disable-next-line no-console
-                console.error('[TeacherPage] handleSubmitEpisode ✗', postErr);
-                // Optional direct fallback to imprinter if pod submission fails
-                const DIRECT_FALLBACK = (process.env.NEXT_PUBLIC_TEACHER_DIRECT_SUBMIT_IF_POD_FAILS ?? 'true') === 'true';
-                if (DIRECT_FALLBACK) {
-                    try {
-                        // eslint-disable-next-line no-console
-                        console.warn('[TeacherPage] Falling back to direct imprinter submission');
-                        const audio_b64: string = blob ? await convertBlobToWavDataURL(blob) : '';
-                        const directPayload = {
-                            expert_id: user?.id || 'expert',
-                            session_id: roomName,
-                            curriculum_id: String(curriculumId),
-                            narration: 'Expert narration from episode.',
-                            audio_b64,
-                            expert_actions: [], // No local action capture in Teacher; rely on audio and staged assets
-                            current_lo: currentLO || undefined,
-                            staged_assets: stagedAssets,
-                            in_response_to_question: (isShowMeRecording && showMeQuestionRef.current) ? showMeQuestionRef.current : undefined,
-                        };
-                        const resp = await submitImprintingEpisode(directPayload as any);
-                        setSubmitMessage('Submitted directly. Processing on server...');
-                        setStatusMessage('Episode submitted (direct). AI is analyzing...');
-                        console.log('[TeacherPage] Direct submit ✓', { keys: Object.keys(resp || {}) });
-                    } catch (directErr: any) {
-                        console.error('[TeacherPage] Direct submit ✗', directErr);
-                    }
-                }
-            }
-
-            // Reset buffers/state after submit
             packetsRef.current = [];
             setPacketsCount(0);
             audioChunksRef.current = [];
@@ -1196,114 +896,42 @@ export default function Session() {
             showMeQuestionRef.current = null;
         } catch (err: any) {
             setSubmitError(err?.message || 'Failed to submit');
-            // eslint-disable-next-line no-console
-            console.error('[TeacherPage] handleSubmitEpisode catch ✗', err);
         } finally {
             setIsSubmitting(false);
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] handleSubmitEpisode: end');
         }
     };
 
-    const handleAssetUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file || !user?.id) return;
-        const role = window.prompt("Role for this file? (e.g., STARTER_CODE, DATASET)", "STARTER_CODE") || "STARTER_CODE";
-        try {
-            const assetInfo = await stageAsset({ expert_id: user.id, session_id: roomName, curriculum_id: String(curriculumId), file });
-            const item = { filename: assetInfo.filename || file.name, role: role || "ASSET", asset_id: assetInfo.asset_id };
-            setStagedAssets(prev => [...prev, item]);
-        } catch (e: any) {
-            setStatusMessage(`Error uploading asset: ${e?.message || e}`);
-        } finally {
-            if (event.target) event.target.value = '';
-        }
-    };
-    
-    // Remove a staged asset by index
-    const handleRemoveStagedAsset = (index: number) => setStagedAssets(prev => prev.filter((_, i) => i !== index));
-
-    // Finish session: stop recording, cleanup VNC session, reset URLs
     const executeFinishSession = async () => {
         try {
             setIsFinishModalOpen(false);
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] executeFinishSession: begin', { isRecording, hasAudioBlob: !!audioBlobRef.current, stagedAssets: stagedAssets.length });
             if (isRecording || audioBlobRef.current) {
-                // If we have something to submit (either still recording or we have captured audio), submit it.
                 await handleSubmitEpisode();
-            } else {
-                // If nothing to submit, just ensure local mic is stopped
-                if (isRecording) await handleStopRecording();
+            } else if (isRecording) {
+                await handleStopRecording();
             }
         } catch (e: any) {
             setSubmitError(e?.message || 'Failed to finish session');
-            // eslint-disable-next-line no-console
-            console.error('[TeacherPage] executeFinishSession ✗', e);
-        } finally {
-            // eslint-disable-next-line no-console
-            console.log('[TeacherPage] executeFinishSession: end');
         }
     };
 
-    const handleFinishClick = () => {
-        setIsFinishModalOpen(true);
-    };
-
-    // Removed legacy VNC sensor connect effect
-
-    const handleIncreaseTimer = () => {
-        setScreenshotIntervalSec(prev => prev + 5);
-    };
-
-    // --- NEW: VS Code environment switch ---
+    const handleFinishClick = () => setIsFinishModalOpen(true);
+    const handleIncreaseTimer = () => setScreenshotIntervalSec(prev => prev + 5);
     const handleSwitchToVSCode = () => {
-        // 1) Set environment for subsequent recording/submission
         setImprintingEnvironment('vscode');
-        // 2) Navigate browser pod to code-server
         void sendBrowser('navigate', { url: 'http://localhost:4600' });
-        // 3) Feedback
         setStatusMessage('Switched to VS Code environment.');
-        // eslint-disable-next-line no-console
-        console.log('[TeacherPage] UI: Switched to VS Code. Subsequent recordings will capture VS Code actions.');
     };
-
-    // Paste text from local clipboard into the remote session
-    const handlePasteFromLocal = async () => {
-        try {
-            const clipboardText = await navigator.clipboard.readText();
-            if (clipboardText) {
-                setStatusMessage('Pasting from clipboard...');
-                await sendBrowser('paste_from_local', { text: clipboardText });
-                setStatusMessage('Pasted content into session.');
-                // eslint-disable-next-line no-console
-                console.log('[TeacherPage] Pasted text from local clipboard into pod.');
-            } else {
-                setStatusMessage('Your clipboard is empty.');
-            }
-        } catch (err: any) {
-            // eslint-disable-next-line no-console
-            console.error('[TeacherPage] Clipboard read failed:', err);
-            setStatusMessage('Could not access clipboard. Please grant permission in your browser.');
-            setSubmitError(`Clipboard Error: ${err?.message || String(err)}`);
-        }
-    };
-
 
     if (!isLoaded) return <div className="w-full h-full flex items-center justify-center text-white">Loading...</div>;
     if (isIntroActive) return <IntroPage onAnimationComplete={handleIntroComplete} />;
 
-    // Guard: require a courseId in the URL. Prevents accidental fallback to a hardcoded curriculum.
     if (!courseId) {
         return (
             <div className="w-full h-full flex items-center justify-center text-white">
                 <div className="text-center max-w-md">
                     <h2 className="text-xl mb-3">Missing courseId</h2>
                     <p className="mb-4 opacity-80">Please open this page with a valid course identifier, e.g. /teacher?courseId=your_course_id</p>
-                    <button
-                        onClick={() => router.push('/')}
-                        className="bg-[#566FE9] text-white px-6 py-2 rounded-full hover:bg-[#566FE9]/95 transition"
-                    >
+                    <button onClick={() => router.push('/')} className="bg-[#566FE9] text-white px-6 py-2 rounded-full hover:bg-[#566FE9]/95 transition">
                         Go Home
                     </button>
                 </div>
@@ -1311,52 +939,37 @@ export default function Session() {
         );
     }
 
-// ...
-
-
     return (
         <>
             {(DEV_BYPASS || isSignedIn) ? (
                 <>
-                    <Sphere />
-                    {
-                        imprintingPhase !== 'LIVE_IMPRINTING' ? (
-                            <div className='w-full h-full'>
-                                {imprintingPhase === 'SEED_INPUT' && (<SeedInput onSubmit={handleSeedSubmit} />)}
-                                {imprintingPhase === 'REVIEW_DRAFT' && (<CurriculumEditor initialDraft={curriculumDraft} onFinalize={handleReviewComplete} curriculumId={String(curriculumId)} />)}
-                                {imprintingPhase === 'LO_SELECTION' && (<LoSelector learningObjectives={curriculumDraft} onSelect={handleLoSelected} />)}
+                    {imprintingPhase !== 'LIVE_IMPRINTING' ? (
+                        <div className='w-full h-full'>
+                            {imprintingPhase === 'SEED_INPUT' && (<SeedInput onSubmit={handleSeedSubmit} />)}
+                            {imprintingPhase === 'REVIEW_DRAFT' && (<CurriculumEditor initialDraft={curriculumDraft} onFinalize={handleReviewComplete} curriculumId={String(curriculumId)} />)}
+                            {imprintingPhase === 'LO_SELECTION' && (<LoSelector learningObjectives={curriculumDraft} onSelect={handleLoSelected} />)}
+                        </div>
+                    ) : (
+                        <>
+                            <div className={`flex flex-col w-full h-full items-center justify-between ${imprinting_mode === 'DEBRIEF_CONCEPTUAL' ? 'pb-[120px]' : ''}`}>
+                                <SessionContent
+                                    activeView={activeView}
+                                    imprintingMode={imprinting_mode}
+                                    componentButtons={componentButtons}
+                                    room={room}
+                                    livekitUrl={livekitUrl}
+                                    livekitToken={livekitToken}
+                                    isConnected={isConnected}
+                                    currentDebrief={currentDebrief}
+                                    sendBrowserInteraction={sendBrowserInteraction}
+                                />
                             </div>
-                        ) : (
-                            <>
-                                <div className='flex flex-col w-full h-full items-center justify-between'>
-                                    <SessionContent
-                                        activeView={activeView}
-                                        imprintingMode={imprinting_mode}
-                                        componentButtons={componentButtons}
-                                        room={room}
-                                        livekitUrl={livekitUrl}
-                                        livekitToken={livekitToken}
-                                        isConnected={isConnected}
-                                        currentDebrief={currentDebrief}
-                                        topicInput={topicInput}
-                                        setTopicInput={setTopicInput}
-                                        handleSendConceptual={handleSendConceptual}
-                                        topicInputRef={topicInputRef}
-                                        sendBrowserInteraction={sendBrowserInteraction}
-                                        onToggleConceptualRecording={handleToggleConceptualRecording}
-                                        isConceptualRecording={isConceptualRecording}
-                                        conceptualRecordingDuration={conceptualRecordingDuration}
-                                    />
-                                    
-                                </div>
-                                {imprinting_mode === 'WORKFLOW' ? (
+                            {imprinting_mode === 'WORKFLOW' ? (
                                 <TeacherFooter
                                     onUploadClick={() => fileInputRef.current?.click()}
                                     onCaptureClick={handleCaptureScreenshot}
                                     onIncreaseTimer={handleIncreaseTimer}
                                     screenshotIntervalSec={screenshotIntervalSec}
-                                    onSaveScriptClick={handleSaveSetupText}
-                                    onPasteClick={handlePasteFromLocal}
                                     onVSCodeClick={handleSwitchToVSCode}
                                     isRecording={isRecording}
                                     isPaused={isPaused}
@@ -1364,24 +977,24 @@ export default function Session() {
                                     onStartRecording={handleStartRecording}
                                     onTogglePauseResume={handleTogglePauseResume}
                                     onSubmitEpisode={handleSubmitEpisode}
-                                    onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted || isRecording}
                                     onFinalizeTopicClick={handleFinalizeTopic}
                                     isFinalizeDisabled={!currentLO || isFinalizingLO}
                                     onFinishClick={handleFinishClick}
                                     isFinishDisabled={isSubmitting}
                                 />
-                                ) : (
+                            ) : (
                                 <ConceptualFooter
-                                    onFinishClick={handleFinishClick}
-                                    isFinishDisabled={isSubmitting}
-                                    onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={!conceptualStarted || isRecording}
+                                    userInput={topicInput}
+                                    onUserInput={setTopicInput}
+                                    onSubmit={handleSendConceptual}
+                                    inputRef={topicInputRef}
+                                    onToggleRecording={handleToggleConceptualRecording}
+                                    isRecording={isConceptualRecording}
+                                    recordingDuration={conceptualRecordingDuration}
                                 />
-                                )}
-                            </>
-                        )
-                    }
+                            )}
+                        </>
+                    )}
                     <SendModal
                         isModalOpen={isFinishModalOpen}
                         onClose={() => setIsFinishModalOpen(false)}
