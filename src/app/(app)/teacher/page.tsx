@@ -885,10 +885,8 @@ export default function Session() {
 
     // Debrief message now comes from global store so LiveKit updates can re-render UI
     const currentDebrief = useSessionStore((s) => s.debriefMessage);
-    const setDebriefMessage = useSessionStore((s) => s.setDebriefMessage);
     // Conceptual started flag also comes from store (enables Show Me after debrief arrives)
     const conceptualStarted = useSessionStore((s) => s.conceptualStarted);
-    const setConceptualStarted = useSessionStore((s) => s.setConceptualStarted);
     const [topicInput, setTopicInput] = useState<string>('');
     const [seedText, setSeedText] = useState<string>('');
     const topicInputRef = useRef<HTMLTextAreaElement | null>(null);
