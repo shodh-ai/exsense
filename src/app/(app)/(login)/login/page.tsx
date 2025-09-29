@@ -213,9 +213,9 @@ export default function Login() {
                     <Link href="/forgotpassword" className="text-sm text-black hover:underline font-medium">
                         Forgot Password?
                     </Link>
-                    <Link href="/register" className="text-sm text-black hover:underline font-medium">
+                    {/* <Link href="/register" className="text-sm text-black hover:underline font-medium">
                         Don't have an account? <span className="text-[#566FE9]">Register</span>
-                    </Link>
+                    </Link> */}
                 </div>
             </div>
         </div>
