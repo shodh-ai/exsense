@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeftIcon, PlusIcon, Trash2Icon } from "lucide-react";
+import { ChevronLeftIcon, PlusIcon, Trash2Icon, UploadCloudIcon } from "lucide-react";
 import { toast } from "sonner";
 
 // --- State Management & API Hooks ---
@@ -44,15 +44,15 @@ const DynamicInputList: React.FC<DynamicInputListProps> = ({ label, placeholder,
       <label className="text-sm font-semibold text-[#394169]">{label}</label>
       <div className="space-y-2">
         {items.map((item, index) => (
-          <div key={index} className="flex items-center bg-white border border-[#c7ccf8] rounded-full p-1">
+          <div key={index} className="flex items-center bg-white border border-[#c7ccf8] h-[50px] rounded-full ">
             <span className="flex-1 px-4 text-sm font-semibold text-[#394169]">{item}</span>
             <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full" onClick={() => handleRemoveItem(index)}>
               <Trash2Icon className="w-5 h-5" />
             </Button>
           </div>
         ))}
-        <div className="flex items-center bg-white border border-[#c7ccf8] rounded-full p-1">
-          <Input placeholder={placeholder} className="flex-1 border-0 bg-transparent px-4 text-sm font-semibold" value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={handleKeyDown} />
+        <div className="flex items-center bg-white border border-[#c7ccf8] rounded-full ">
+          <Input placeholder={placeholder} className="flex-1 h-[50px] border-0 bg-transparent px-4 text-sm font-semibold" value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={handleKeyDown} />
           <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full" onClick={handleAddItem}><PlusIcon className="w-5 h-5" /></Button>
         </div>
       </div>
@@ -65,10 +65,13 @@ const DynamicInputList: React.FC<DynamicInputListProps> = ({ label, placeholder,
 export default function CourseForm({ courseId }: { courseId?: string }) {
   const router = useRouter();
   const api = useApiService();
-  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const isEditMode = !!courseId;
 
   const [isSaving, setIsSaving] = useState(false);
+  const [bannerImage, setBannerImage] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
   const courseIdStr = courseId ?? '';
   const { data: existingCourse, isLoading: isLoadingCourse } = useCourse(courseIdStr, { enabled: isEditMode });
   const [localState, setLocalState] = useState({ title: "", description: "", tags: [] as string[], skills: [] as string[], learningOutcomes: [] as string[], difficulty: "Intermediate" });
@@ -97,12 +100,26 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
     }
   };
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setBannerImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
-  
+
     if (isEditMode) {
       try {
         const cid = courseId as string;
+        // In a real application, you would handle the bannerImage upload here
+        // and get back a URL to save in the course details.
         await api.updateCourse(cid, formState);
         toast.success("Course updated successfully!");
         router.push(`/courses/${cid}`);
@@ -113,7 +130,7 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
       }
     } else {
       toast.loading("Creating your new course draft...");
-      
+
       if (!globalState.title.trim()) {
         toast.dismiss();
         toast.error("A course title is required to create a draft.");
@@ -122,6 +139,8 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
       }
 
       try {
+        // In a real application, you would handle the bannerImage upload here
+        // and get back a URL to save in the course details.
         const coursePayload = {
           title: globalState.title,
           description: globalState.description,
@@ -140,7 +159,7 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
 
         toast.dismiss();
         toast.success("Draft created successfully! Let's build the curriculum.");
-        
+
         useNewCourseStore.getState().reset();
 
         router.push(`/courses/${newCourse.id}/edit`);
@@ -152,7 +171,7 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
       }
     }
   };
-  
+
   if (isEditMode && isLoadingCourse) {
     return <div className="p-8 text-center text-lg">Loading Course Settings...</div>;
   }
@@ -168,8 +187,6 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
               <nav className="flex items-center gap-2 text-sm font-semibold">
                 <Link href="/teacher-dash" className="text-[#8187a0] hover:underline">Dashboard</Link>
                 <span className="text-[#8187a0]">·</span>
-                <Link href={isEditMode ? `/courses/${courseId}` : "/courses/new"} className="text-[#8187a0] hover:underline">{isEditMode ? 'Course Overview' : 'Curriculum Editor'}</Link>
-                <span className="text-[#8187a0]">·</span>
                 <span className="text-[#394169]">{isEditMode ? 'Settings' : 'Course Details'}</span>
               </nav>
             </header>
@@ -180,23 +197,55 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
             <CardContent className="p-4 space-y-5">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-[#394169]">Course Title</label>
-                <Input value={formState.title} onChange={(e) => handleUpdateField('title', e.target.value)} className={`h-[46px] rounded-full border border-[#c7ccf8] bg-white px-4`} placeholder={"Enter course title"}/>
+                <Input value={formState.title} onChange={(e) => handleUpdateField('title', e.target.value)} className={`h-[50px] rounded-full border border-[#c7ccf8] bg-white px-4`} placeholder={"Enter course title"} />
               </div>
               <div className="space-y-2">
-                  <label className="text-sm font-semibold text-[#394169]">Course Description</label>
-                  <Textarea value={formState.description} onChange={(e) => handleUpdateField('description', e.target.value)} className="h-[100px] border-[1px] border-[#c7ccf8] bg-white px- rounded-[12px]" />
+                <label className="text-sm font-semibold text-[#394169]">Course Banner</label>
+                <div className="flex items-center bg-white border border-[#c7ccf8] rounded-full p-0">
+                  <Input
+                    readOnly
+                    value={bannerImage ? bannerImage.name : "Upload Course Banner"}
+                    className="flex-1 border-0 bg-transparent px-4 text-sm font-normal text-gray-500"
+                    placeholder="Upload course banner"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-auto h-10 rounded-full px-4"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <UploadCloudIcon className="w-5 h-5 mr-2" />
+                    Upload
+                  </Button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    className="hidden"
+                    accept="image/*"
+                  />
+                </div>
+                {preview && (
+                  <div className="mt-4">
+                    <img src={preview} alt="Banner Preview" className="w-full h-auto rounded-lg" />
+                  </div>
+                )}
               </div>
-              
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-[#394169]">Course Description</label>
+                <Textarea value={formState.description} onChange={(e) => handleUpdateField('description', e.target.value)} className="h-[100px] border-[1px] border-[#c7ccf8] bg-white px- rounded-[12px]" />
+              </div>
+
               <DynamicInputList label="Course Highlights (Tags)" placeholder="Add new highlight" items={formState.tags} onItemsChange={(items) => handleUpdateField('tags', items)} />
               <DynamicInputList label="Learning Outcomes" placeholder="e.g., Learn fundamentals" items={formState.learningOutcomes} onItemsChange={(items) => handleUpdateField('learningOutcomes', items)} />
               <DynamicInputList label="Course Keywords (Skills)" placeholder="e.g., TensorFlow, NLP" items={formState.skills} onItemsChange={(items) => handleUpdateField('skills', items)} />
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-[#394169]">Select Course Difficulty</label>
-                <div className="bg-white border border-[#c7ccf8] rounded-full p-1">
+                <div className="bg-white border border-[#c7ccf8] rounded-full">
                   <ToggleGroup type="single" value={formState.difficulty} onValueChange={(val) => val && handleUpdateField('difficulty', val)} className="justify-start">
                     {["Beginner", "Intermediate", "Advanced"].map(level => (
-                      <ToggleGroupItem key={level} value={level} className="w-[150px] h-[42px] rounded-full data-[state=on]:bg-[#e9ebfd]"><span className="text-sm font-semibold text-[#566fe9]">{level}</span></ToggleGroupItem>
+                      <ToggleGroupItem key={level} value={level} className="w-[150px] h-[50px] rounded-full data-[state=on]:bg-[#e9ebfd] "><span className="text-sm font-semibold text-[#566fe9]">{level}</span></ToggleGroupItem>
                     ))}
                   </ToggleGroup>
                 </div>
@@ -204,24 +253,23 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
 
             </CardContent>
           </Card>
-          
+
           <div className="h-full space-y-4 mt-6">
 
             <Link href="/courses/new/preview" passHref>
               <Button asChild variant="outline" className="w-full h-auto px-7 py-4 rounded-full border-2 border-[#566fe9] text-[#566fe9] hover:bg-[#e9ebfd] hover:text-[#566fe9] mb-[16px]">
-                  <span className="text-sm font-semibold">Preview Course Details</span>
+                <span className="text-sm font-semibold">Preview Course Details</span>
               </Button>
             </Link>
-            {/* --- MODIFICATION END --- */}
-            
+
             <Button onClick={handleSave} disabled={isSaving} className="w-full h-auto px-7 pt-4 py-4 rounded-full bg-[#566fe9] hover:bg-[#4557d2]">
               <span className="text-sm font-semibold text-white">{isSaving ? 'Saving...' : (isEditMode ? 'Update Course Details' : 'Save & Continue to Curriculum')}</span>
             </Button>
-           
+
           </div>
 
         </div>
-        
+
       </div>
       <Footer />
     </>

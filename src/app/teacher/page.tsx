@@ -5,8 +5,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MicButton } from '@/components/MicButton';
 import { UploadButton } from '@/components/UploadButton';
 import { MessageButton } from '@/components/MessageButton';
-// MODIFICATION: Added Send icon for the new chat input
-import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic, ExternalLink } from 'lucide-react';
+// MODIFICATION: Added Send and RefreshCcw icons
+import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic, ExternalLink, RefreshCcw } from 'lucide-react';
 // Keep other existing imports
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
@@ -51,25 +51,27 @@ interface ConceptualDebriefViewProps {
 
 const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef, onToggleRecording, isRecording, recordingDuration }: ConceptualDebriefViewProps) => {
   return (
-    // MODIFICATION: Changed background to light, and default text to black
-    <div className="w-full h-full flex flex-col justify-between items-center text-black bg-transparent p-4 md:p-8">
+    // MODIFICATION: Increased padding-bottom to prevent overlap with the new fixed footer.
+    <div className="w-full h-full flex flex-col justify-between items-center text-black bg-transparent p-4 md:p-8 pb-[120px]">
       {/* Debrief Content */}
       <div className="w-full max-w-4xl space-y-8 overflow-y-auto pr-4 animate-fade-in">
         {debrief && (
           <div className="space-y-4">
             {debrief.hypothesis && (
-              // MODIFICATION: Set hypothesis text color to #566FE9
               <p className="text-lg text-[#566FE9] leading-relaxed">{debrief.hypothesis}</p>
             )}
-            {/* MODIFICATION: Set question text color to black */}
             <p className="text-lg text-black leading-relaxed">{debrief.text}</p>
           </div>
         )}
       </div>
 
-      {/* Input Bar with specific styling */}
-      <div className="w-full max-w-[850px] h-[86px] flex-shrink-0">
-          <div className="flex items-center justify-between w-full h-full bg-transparent border border-[#C7CCF8] rounded-xl pl-4 pr-[6px] pt-[6px] pb-1">
+      {/* 
+        MODIFICATION: 
+        - Changed positioning from 'absolute' to 'fixed' to position relative to the browser window.
+        - Centered the bar and set its width to 97% to match the main content area from AppLayout.
+      */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[97%] max-w-[1392px] z-10">
+          <div className="flex items-center justify-between w-full h-[56px] bg-transparent border border-[#C7CCF8] rounded-[600px] pl-5 pr-2 py-2 backdrop-blur-sm">
             <textarea
               ref={inputRef as React.RefObject<HTMLTextAreaElement>}
               value={userInput}
@@ -78,16 +80,23 @@ const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inpu
               className="w-full h-full bg-transparent focus:outline-none resize-none text-lg text-black placeholder-gray-500"
               placeholder="Define the in-scope and out-of-scope boundaries for this LO..."
             />
-            {/* Conceptual audio recorder button */}
-            <button onClick={onToggleRecording} className={`self-start p-3 rounded-md ${isRecording ? 'bg-red-600 hover:bg-red-500' : 'bg-[#566FE9] hover:bg-blue-500'} transition-colors`} title={isRecording ? 'Stop and send' : 'Record an audio answer'}>
-              {isRecording ? <Square className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}
-            </button>
-            <button onClick={onSubmit} className="self-start p-3 rounded-md bg-blue-600 hover:bg-blue-500 transition-colors">
-              <Send className="w-5 h-5 text-white" />
-            </button>
+            {/* Button Group */}
+            <div className="flex items-center gap-2">
+                {/* Conceptual audio recorder button */}
+                <button
+                    onClick={onToggleRecording}
+                    className={`flex items-center justify-center w-10 h-10 rounded-full ${isRecording ? 'bg-red-600 hover:bg-red-500' : 'bg-[#566FE9] hover:bg-blue-500'} transition-colors`}
+                    title={isRecording ? 'Stop and send' : 'Record an audio answer'}
+                >
+                  {isRecording ? <Square className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}
+                </button>
+                <button onClick={onSubmit} className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 transition-colors">
+                  <Send className="w-5 h-5 text-white" />
+                </button>
+            </div>
           </div>
           {isRecording && (
-            <div className="mt-2 text-sm text-[#566FE9] flex items-center gap-2">
+            <div className="mt-2 text-sm text-[#566FE9] flex items-center gap-2 pl-4">
               <Timer className="w-4 h-4" />
               <span>Recording... {String(Math.floor(recordingDuration / 60)).padStart(2, '0')}:{String(recordingDuration % 60).padStart(2, '0')}</span>
             </div>
@@ -316,6 +325,9 @@ async function convertBlobToWavDataURL(blob: Blob): Promise<string> {
     return dataUrl;
 }
 
+// =================================================================================================
+// === MODIFIED COMPONENT STARTS HERE ==============================================================
+// =================================================================================================
 interface TeacherFooterProps {
     onUploadClick?: () => void;
     onCaptureClick?: () => void;
@@ -330,13 +342,12 @@ interface TeacherFooterProps {
     recordingDuration: number;
     onStartRecording: () => void;
     onTogglePauseResume: () => void;
+    onRestartRecording: () => void; // Added prop for restarting
     onSubmitEpisode: () => void;
     onShowMeClick?: () => void;
     isShowMeDisabled?: boolean;
     onFinalizeTopicClick?: () => void;
     isFinalizeDisabled?: boolean;
-    onFinishClick?: () => void;
-    isFinishDisabled?: boolean;
 }
 const TeacherFooter = ({ 
     onUploadClick, 
@@ -352,13 +363,12 @@ const TeacherFooter = ({
     recordingDuration,
     onStartRecording,
     onTogglePauseResume,
+    onRestartRecording, // Destructure new prop
     onSubmitEpisode,
     onShowMeClick,
     isShowMeDisabled,
     onFinalizeTopicClick,
     isFinalizeDisabled,
-    onFinishClick,
-    isFinishDisabled
 }: TeacherFooterProps) => {
     const formatTime = (seconds: number) => {
         const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
@@ -368,186 +378,101 @@ const TeacherFooter = ({
 
     return (
         <footer className="absolute bottom-[32px] w-full h-[60px] p-4 z-10">
-            <div className="relative w-full h-full">
-                <div 
-                  className="absolute top-1/2 right-1/2 flex items-center gap-6" 
-                  style={{ marginRight: '150px', transform: 'translateY(-50%)' }}
+            <div className="absolute top-1/2 left-1/2 flex items-center gap-6" style={{ transform: 'translate(-50%, -50%)' }}>
+                {/* 1st Button Group */}
+                <div className="w-[202px] h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] py-2 pr-2 pl-4 rounded-[600px]">
+                    <div className='flex items-center gap-2'>
+                        <Timer className="w-6 h-6 text-[#566FE9]" />
+                        <span className="font-semibold text-sm text-[#566FE9] font-[500] text-[16px]">{formatTime(screenshotIntervalSec)}</span>
+                    </div>
+                    <div className='flex items-center gap-2'>
+                        <button 
+                            onClick={onIncreaseTimer}
+                            className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
+                        >
+                            <Plus className="w-5 h-5 text-[#566FE9]" />
+                        </button>
+                        <button
+                            onClick={onCaptureClick}
+                            className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9] hover:bg-[#4a5fd1] transition-colors"
+                        >
+                            <Camera className="w-5 h-5 text-white" />
+                        </button>
+                    </div>
+                </div>
+                {/* 4th Button */}
+                <button
+                    onClick={onVSCodeClick}
+                    title="Switch to VS Code Environment"
+                    className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
                 >
-                    <div className="w-[202px] h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] py-2 pr-2 pl-4 rounded-[600px]">
+                    <img src="/vscode.svg" alt="Switch to VS Code" className="w-6 h-6" />
+                </button>
+                {/* 6th Button */}
+                <UploadButton
+                    isVisible={true}
+                    onClick={onUploadClick}
+                />
+                {/* 9th Button Group (Recording Controls) */}
+                {!isRecording ? (
+                    <button
+                        onClick={onStartRecording}
+                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#E9EBFD] hover:bg-[#566FE9]/20 transition-colors`}
+                    >
+                        <img src="/RecordStart.svg" alt="Start Recording" className="w-6 h-6" />
+                    </button>
+                ) : (
+                    // MODIFICATION: Increased width to fit the new restart button
+                    <div className="w-[252px] h-[56px] flex items-center justify-between bg-[#EBEFFF] py-2 pr-2 pl-4 rounded-[600px]">
                         <div className='flex items-center gap-2'>
-                           <Timer className="w-6 h-6 text-[#566FE9]" />
-                           <span className="font-semibold text-sm text-[#566FE9] font-[500] text-[16px]">{formatTime(screenshotIntervalSec)}</span>
+                            <Timer className="w-6 h-6 text-[#566FE9]" />
+                            <span className="font-semibold text-sm text-[#566FE9] font-[500] text-[16px]">{formatTime(recordingDuration)}</span>
                         </div>
                         <div className='flex items-center gap-2'>
-                           <button 
-                                onClick={onIncreaseTimer}
+                            {/* NEW: Restart Recording Button */}
+                            <button
+                                onClick={onRestartRecording}
                                 className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
-                           >
-                               <Plus className="w-5 h-5 text-[#566FE9]" />
-                           </button>
-                           <button
-                                onClick={onCaptureClick}
+                                aria-label="Restart Recording"
+                                title="Restart Recording"
+                            >
+                                <RefreshCcw className="w-5 h-5 text-[#566FE9]" />
+                            </button>
+                            <button 
+                                onClick={onTogglePauseResume}
+                                className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
+                                aria-label={isPaused ? "Resume Recording" : "Pause Recording"}
+                            >
+                                {isPaused ? (
+                                    <img src="/Play.svg" alt="Resume Recording" className="w-5 h-5" />
+                                ) : (
+                                    <img src="/Pause.svg" alt="Pause Recording" className="w-5 h-5" />
+                                )}
+                            </button>
+                            <button
+                                onClick={onSubmitEpisode}
                                 className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9] hover:bg-[#4a5fd1] transition-colors"
-                           >
-                               <Camera className="w-5 h-5 text-white" />
-                           </button>
+                            >
+                                <Square className="w-5 h-5 text-white" />
+                            </button>
                         </div>
                     </div>
-                    <button
-                        onClick={onSaveScriptClick}
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
-                    >
-                        <img src="/Code.svg" alt="Save Script" className="w-6 h-6" />
-                    </button>
-                    <button
-                        onClick={onPasteClick}
-                        title="Paste from your clipboard into the session"
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
-                    >
-                        <img src="/clipboard-paste.svg" alt="Paste from Clipboard" className="w-6 h-6" />
-                    </button>
-                    <button
-                        onClick={onVSCodeClick}
-                        title="Switch to VS Code Environment"
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
-                    >
-                        <img src="/vscode.svg" alt="Switch to VS Code" className="w-6 h-6" />
-                    </button>
-                    <button
-                        onClick={onSalesforceClick}
-                        title="Open Salesforce Home"
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#566FE91A] hover:bg-[#566FE9]/20 transition-colors`}
-                    >
-                        <ExternalLink className="w-5 h-5 text-[#566FE9]" />
-                    </button>
-                    <UploadButton
-                        isVisible={true}
-                        onClick={onUploadClick}
-                    />
-                    <MicButton />
-                </div>
-                <div 
-                  className="absolute top-1/2 left-1/2 flex items-center gap-6" 
-                  style={{ marginLeft: '150px', transform: 'translateY(-50%)' }}
+                )}
+                {/* MODIFIED 11th Button (Finalize Topic) */}
+                <button
+                    onClick={onFinalizeTopicClick}
+                    disabled={isFinalizeDisabled}
+                    className="w-[150px] h-[56px] flex items-center justify-center rounded-[50px] py-4 px-5 bg-[#566FE9] text-white font-semibold text-sm hover:bg-[#4a5fd1] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
-                    <MessageButton />
-                    {!isRecording ? (
-                        <button
-                            onClick={onStartRecording}
-                            className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#E9EBFD] hover:bg-[#566FE9]/20 transition-colors`}
-                        >
-                            <img src="/RecordStart.svg" alt="Start Recording" className="w-6 h-6" />
-                        </button>
-                    ) : (
-                        <div className="w-[202px] h-[56px] flex items-center justify-between bg-[#EBEFFF] py-2 pr-2 pl-4 rounded-[600px]">
-                            <div className='flex items-center gap-2'>
-                               <Timer className="w-6 h-6 text-[#566FE9]" />
-                               <span className="font-semibold text-sm text-[#566FE9] font-[500] text-[16px]">{formatTime(recordingDuration)}</span>
-                            </div>
-                            <div className='flex items-center gap-2'>
-                               <button 
-                                    onClick={onTogglePauseResume}
-                                    className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
-                                    aria-label={isPaused ? "Resume Recording" : "Pause Recording"}
-                               >
-                                   {isPaused ? (
-                                       <img src="/Play.svg" alt="Resume Recording" className="w-5 h-5" />
-                                   ) : (
-                                       <img src="/Pause.svg" alt="Pause Recording" className="w-5 h-5" />
-                                   )}
-                               </button>
-                               <button
-                                    onClick={onSubmitEpisode}
-                                    className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9] hover:bg-[#4a5fd1] transition-colors"
-                               >
-                                   <Square className="w-5 h-5 text-white" />
-                               </button>
-                            </div>
-                        </div>
-                    )}
-                    <button
-                        onClick={onShowMeClick}
-                        disabled={isShowMeDisabled}
-                        title={isShowMeDisabled ? 'Only available during conceptual debrief' : 'Start a demonstration'}
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${isShowMeDisabled ? 'bg-[#E9EBFD] cursor-not-allowed' : 'bg-[#566FE91A] hover:bg-[#566FE9]/20'}`}
-                    >
-                        <img
-                            src="/demonstrate.svg"
-                            alt="Start Demonstration"
-                            className={`w-6 h-6 ${isShowMeDisabled ? 'filter grayscale' : ''}`}
-                        />
-                    </button>
-                    <button
-                        onClick={onFinalizeTopicClick}
-                        disabled={isFinalizeDisabled}
-                        title={isFinalizeDisabled ? 'Select a topic to finalize' : 'Finalize Topic'}
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${isFinalizeDisabled ? 'bg-[#E9EBFD] cursor-not-allowed' : 'bg-[#566FE91A] hover:bg-[#566FE9]/20'}`}
-                    >
-                        <img
-                            src="/Correct.svg"
-                            alt="Finalize Topic"
-                            className={`w-6 h-6 ${isFinalizeDisabled ? 'filter grayscale' : ''}`}
-                        />
-                    </button>
-                    <button
-                        onClick={onFinishClick}
-                        disabled={isFinishDisabled}
-                        className="w-[134px] h-[56px] flex items-center justify-center rounded-[50px] py-4 px-5 bg-[#566FE9] text-white font-semibold text-sm hover:bg-[#4a5fd1] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                        Finish Session
-                    </button>
-                </div>
+                    Finalize Topic
+                </button>
             </div>
         </footer>
     );
 };
-
-interface ConceptualFooterProps {
-    onFinishClick?: () => void;
-    isFinishDisabled?: boolean;
-    onShowMeClick?: () => void;
-    isShowMeDisabled?: boolean;
-}
-const ConceptualFooter = ({ onFinishClick, isFinishDisabled, onShowMeClick, isShowMeDisabled }: ConceptualFooterProps) => {
-    return (
-        <footer className="absolute bottom-[32px] w-full h-[60px] p-4 z-10">
-            <div className="relative w-full h-full">
-                <div
-                    className="absolute top-1/2 right-1/2 flex items-center gap-6"
-                    style={{ marginRight: '150px', transform: 'translateY(-50%)' }}
-                >
-                    <MicButton />
-                </div>
-                <div
-                    className="absolute top-1/2 left-1/2 flex items-center gap-6"
-                    style={{ marginLeft: '150px', transform: 'translateY(-50%)' }}
-                >
-                    <MessageButton />
-                    <button
-                        onClick={onShowMeClick}
-                        disabled={isShowMeDisabled}
-                        title={isShowMeDisabled ? 'Answer first, then click Show Me' : 'Switch to browser to demonstrate'}
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${isShowMeDisabled ? 'bg-[#E9EBFD] cursor-not-allowed' : 'bg-[#566FE91A] hover:bg-[#566FE9]/20'}`}
-                    >
-                        <img
-                            src="./demonstrate.svg"
-                            alt="Start Demonstration"
-                            className={`w-6 h-6 ${isShowMeDisabled ? 'filter grayscale' : ''}`}
-                        />
-                    </button>
-                    <button
-                        onClick={onFinishClick}
-                        disabled={isFinishDisabled}
-                        className="w-[134px] h-[56px] flex items-center justify-center rounded-[50px] py-4 px-5 bg-[#566FE9] text-white font-semibold text-sm hover:bg-[#4a5fd1] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                        Finish Session
-                    </button>
-                </div>
-            </div>
-        </footer>
-    );
-};
-
+// =================================================================================================
+// === MODIFIED COMPONENT ENDS HERE ================================================================
+// =================================================================================================
 
 export default function Session() {
     // --- MOCK BACKEND FLAG ---
@@ -574,8 +499,9 @@ export default function Session() {
     const lessonTitle = searchParams.get('lessonTitle');
 
 
-    // --- MODIFICATION: Add state for the finish confirmation modal ---
+    // --- MODIFICATION: Add state for the finish and finalize confirmation modals ---
     const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
+    const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false);
 
 
     
@@ -856,17 +782,19 @@ export default function Session() {
             setIsSavingSetup(false);
         }
     };
-
-    const handleFinalizeTopic = async () => {
+    
+    const executeFinalizeTopic = async () => {
         if (!currentLO) {
             setSubmitError('Please select a Topic (LO) before finalizing.');
+            setIsFinalizeModalOpen(false);
             return;
         }
-        const ok = window.confirm(`Finalize topic "${currentLO}"? This stops further questions for this topic.`);
-        if (!ok) return;
+        
         setIsFinalizingLO(true);
         setSubmitMessage(null);
         setSubmitError(null);
+        setIsFinalizeModalOpen(false);
+
         try {
             setStatusMessage(`Finalizing "${currentLO}"...`);
             const resp = await finalizeLO({ curriculum_id: String(curriculumId), lo_name: currentLO });
@@ -878,6 +806,10 @@ export default function Session() {
         } finally {
             setIsFinalizingLO(false);
         }
+    };
+
+    const handleFinalizeTopicClick = () => {
+        setIsFinalizeModalOpen(true);
     };
 
     const handleReviewComplete = () => setImprintingPhase('LO_SELECTION');
@@ -953,6 +885,46 @@ export default function Session() {
             setIsRecording(false);
         }
     };
+    
+    // =================================================================================================
+    // === NEW LOGIC STARTS HERE =======================================================================
+    // =================================================================================================
+    const handleRestartRecording = async () => {
+        const confirmed = window.confirm(
+            "Are you sure you want to restart the recording? This will delete the current take."
+        );
+        if (confirmed) {
+            setStatusMessage('Restarting recording...');
+            
+            // 1. Stop the current recording and clean up local resources
+            await handleStopRecording(); // This already clears intervals and stops media recorder
+            
+            // 2. Clear out old data that handleStopRecording doesn't touch
+            audioBlobRef.current = null;
+            audioChunksRef.current = [];
+            packetsRef.current = [];
+            setPacketsCount(0);
+            setStagedAssets([]);
+
+            // 3. Tell the browser pod to stop and discard its current recording
+            try {
+                console.log('[TeacherPage] Instructing pod to discard current recording segment.');
+                await sendBrowser('stop_recording', { discard: true, session_id: roomName });
+            } catch (e) {
+                console.warn('[TeacherPage] Pod discard instruction failed during restart, may result in orphaned data segment on pod.', e);
+            }
+
+            // 4. Wait a moment for everything to settle
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            // 5. Start a fresh recording
+            console.log('[TeacherPage] Starting new recording after restart.');
+            await handleStartRecording();
+        }
+    };
+    // =================================================================================================
+    // === NEW LOGIC ENDS HERE =========================================================================
+    // =================================================================================================
 
     const handleVncInteraction = (interaction: { action: string; x: number; y: number }) => {
         if (!isRecording) return;
@@ -1372,7 +1344,7 @@ export default function Session() {
         <>
             {(DEV_BYPASS || isSignedIn) ? (
                 <>
-                    <Sphere />
+                   
                     {
                         imprintingPhase !== 'LIVE_IMPRINTING' ? (
                             <div className='w-full h-full'>
@@ -1406,46 +1378,48 @@ export default function Session() {
                                     />
                                     
                                 </div>
-                                {imprinting_mode === 'WORKFLOW' ? (
-                                <TeacherFooter
-                                    onUploadClick={() => fileInputRef.current?.click()}
-                                    onCaptureClick={handleCaptureScreenshot}
-                                    onIncreaseTimer={handleIncreaseTimer}
-                                    screenshotIntervalSec={screenshotIntervalSec}
-                                    onSaveScriptClick={handleSaveSetupText}
-                                    onPasteClick={handlePasteFromLocal}
-                                    onVSCodeClick={handleSwitchToVSCode}
-                                    onSalesforceClick={handleOpenSalesforce}
-                                    isRecording={isRecording}
-                                    isPaused={isPaused}
-                                    recordingDuration={recordingDuration}
-                                    onStartRecording={handleStartRecording}
-                                    onTogglePauseResume={handleTogglePauseResume}
-                                    onSubmitEpisode={handleSubmitEpisode}
-                                    onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted || isRecording}
-                                    onFinalizeTopicClick={handleFinalizeTopic}
-                                    isFinalizeDisabled={!currentLO || isFinalizingLO}
-                                    onFinishClick={handleFinishClick}
-                                    isFinishDisabled={isSubmitting}
-                                />
-                                ) : (
-                                <ConceptualFooter
-                                    onFinishClick={handleFinishClick}
-                                    isFinishDisabled={isSubmitting}
-                                    onShowMeClick={handleShowMe}
-                                    isShowMeDisabled={!conceptualStarted || isRecording}
-                                />
+                                {/* MODIFICATION: Conditionally render TeacherFooter. */}
+                                {imprinting_mode === 'WORKFLOW' && (
+                                    <TeacherFooter
+                                        onUploadClick={() => fileInputRef.current?.click()}
+                                        onCaptureClick={handleCaptureScreenshot}
+                                        onIncreaseTimer={handleIncreaseTimer}
+                                        screenshotIntervalSec={screenshotIntervalSec}
+                                        onSaveScriptClick={handleSaveSetupText}
+                                        onPasteClick={handlePasteFromLocal}
+                                        onVSCodeClick={handleSwitchToVSCode}
+                                        onSalesforceClick={handleOpenSalesforce}
+                                        isRecording={isRecording}
+                                        isPaused={isPaused}
+                                        recordingDuration={recordingDuration}
+                                        onStartRecording={handleStartRecording}
+                                        onTogglePauseResume={handleTogglePauseResume}
+                                        onRestartRecording={handleRestartRecording}
+                                        onSubmitEpisode={handleSubmitEpisode}
+                                        onShowMeClick={handleShowMe}
+                                        isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted || isRecording}
+                                        onFinalizeTopicClick={handleFinalizeTopicClick}
+                                        isFinalizeDisabled={!currentLO || isFinalizingLO}
+                                    />
                                 )}
                             </>
                         )
                     }
+                    {/* This modal is for finishing the session, which is no longer triggered by the footer but might be used elsewhere. */}
                     <SendModal
                         isModalOpen={isFinishModalOpen}
                         onClose={() => setIsFinishModalOpen(false)}
                         onSubmit={executeFinishSession}
                         title="Finish this session?"
                         description="Any unsaved recordings will be submitted before ending the session."
+                    />
+                    {/* This is the NEW modal for finalizing the topic. */}
+                    <SendModal
+                        isModalOpen={isFinalizeModalOpen}
+                        onClose={() => setIsFinalizeModalOpen(false)}
+                        onSubmit={executeFinalizeTopic}
+                        title="Finalize this Topic?"
+                        description={`This will lock the topic "${currentLO}" and prevent further questions. Are you sure you want to continue?`}
                     />
                 </>
             ) : (
