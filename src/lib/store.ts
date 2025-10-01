@@ -1,12 +1,13 @@
+// exsense/src/lib/store.ts
+
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
+import { v4 as uuidv4 } from 'uuid'; // You may need to run: npm install uuid
 
+// All your existing type definitions remain the same
 type ExcalidrawAPIType = unknown;
 export type SessionView = 'excalidraw' | 'vnc' | 'video' | 'mic' | 'statusbar' | 'intro';
 
-// Represents a generic visualization element used by the Excalidraw integration.
-// This is intentionally flexible to accommodate both skeleton elements and
-// Excalidraw-ready elements while avoiding explicit `any` types.
 export interface VisualizationElement {
   id?: string;
   type: string;
@@ -15,40 +16,35 @@ export interface VisualizationElement {
   width?: number;
   height?: number;
   text?: string;
-  // Support both mutable and readonly tuple arrays as used by Excalidraw
   points?: readonly (readonly [number, number])[] | [number, number][];
   startBinding?: { elementId: string; focus?: number; gap?: number } | null;
   endBinding?: { elementId: string; focus?: number; gap?: number } | null;
   isDeleted?: boolean;
-  // Allow additional properties that may be provided by upstream generators
   [key: string]: unknown;
 }
 
-// --- Whiteboard Feed Types ---
 export interface ExcalidrawBlock {
   id: string;
   type: 'excalidraw';
   summary: string;
-  elements: VisualizationElement[] | any[]; // allow upstream element shapes
+  elements: VisualizationElement[] | any[];
 }
 
 export interface RrwebBlock {
   id: string;
   type: 'rrweb';
   summary: string;
-  eventsUrl: string; // URL to fetch rrweb events JSON
+  eventsUrl: string;
 }
 
 export type WhiteboardBlock = ExcalidrawBlock | RrwebBlock;
 
-// --- Browser Tabs ---
 export interface BrowserTab {
   id: string;
   name: string;
   url: string;
 }
 
-// --- Imprinting phases and curriculum types ---
 export type ImprintingPhase =
   | 'SEED_INPUT'
   | 'SEED_PROCESSING'
@@ -69,14 +65,12 @@ export interface LearningObjective {
   concepts: Concept[];
 }
 
-// Debrief message structure used across the app
 export interface DebriefMessage {
   hypothesis?: string;
   text: string;
 }
 
 interface SessionState {
-    // --- State Properties ---
     activeView: SessionView;
     excalidrawAPI: ExcalidrawAPIType | null;
     agentStatusText: string;
@@ -87,35 +81,24 @@ interface SessionState {
     isMusicButtonPlaying: boolean;
     isMicActivatingPending: boolean;
     visualizationData: unknown[] | null;
-    // New dynamic whiteboard feed blocks (supersedes visualizationData)
     whiteboardBlocks: WhiteboardBlock[];
-    // Mermaid diagram definition used as single source of truth for visualization
     diagramDefinition: string;
-    // Centralized loading state for diagram generation
     isDiagramGenerating: boolean;
     suggestedResponses: { id: string; text: string; reason?: string }[];
     suggestedTitle?: string;
-    isNavigating: boolean; // <-- State for our loader
-    // Global loading flag while waiting for AI/imprinter analysis
+    isNavigating: boolean;
     isAwaitingAIResponse: boolean;
-    // --- rrweb replay state ---
     replayEventsUrl: string | null;
-
-    // --- Browser tab state ---
     tabs: BrowserTab[];
     activeTabId: string | null;
-
-    // --- Imprinting / Session Controller State ---
     imprinting_mode: string;
     currentLO: string | null;
-    // When true, user is in conceptual debrief flow and allowed to "Show Me"
     conceptualStarted: boolean;
-
-    // --- New Imprinting Flow State ---
     imprintingPhase: ImprintingPhase;
     curriculumDraft: LearningObjective[];
-
-    // --- Actions ---
+    debriefMessage: DebriefMessage | null;
+    
+    // Actions
     setActiveView: (view: SessionView) => void;
     setExcalidrawAPI: (api: ExcalidrawAPIType) => void;
     setAgentStatusText: (text: string) => void;
@@ -126,7 +109,6 @@ interface SessionState {
     setIsMusicButtonPlaying: (isPlaying: boolean) => void;
     setIsMicActivatingPending: (isPending: boolean) => void;
     setVisualizationData: (data: unknown[] | null) => void;
-    // Whiteboard feed actions
     addBlock: (block: WhiteboardBlock) => void;
     updateBlock: (blockId: string, newContent: Partial<ExcalidrawBlock> | Partial<RrwebBlock>) => void;
     setBlocks: (blocks: WhiteboardBlock[]) => void;
@@ -134,30 +116,28 @@ interface SessionState {
     setIsDiagramGenerating: (isGenerating: boolean) => void;
     setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
     clearSuggestedResponses: () => void;
-    setIsNavigating: (isNavigating: boolean) => void; // <-- Action for our loader
+    setIsNavigating: (isNavigating: boolean) => void;
     setIsAwaitingAIResponse: (isAwaiting: boolean) => void;
-    // rrweb replay actions
     showReplay: (url: string) => void;
     hideReplay: () => void;
-
-    // --- Browser tab actions ---
     addTab: (tab: BrowserTab) => void;
     removeTab: (id: string) => void;
     setActiveTabId: (id: string | null) => void;
-
-    // --- Imprinting Actions ---
     setImprintingMode: (mode: string) => void;
     setCurrentLO: (lo: string | null) => void;
     setConceptualStarted: (started: boolean) => void;
-
-    // --- New Imprinting Flow Actions ---
     setImprintingPhase: (phase: ImprintingPhase) => void;
     setCurriculumDraft: (draft: LearningObjective[]) => void;
-
-    // --- Debrief message state ---
-    debriefMessage: DebriefMessage | null;
     setDebriefMessage: (message: DebriefMessage | null) => void;
 }
+
+// +++ THE FIX: Define the single, default tab that the browser session starts with. +++
+const initialTab: BrowserTab = {
+  id: uuidv4(), // Give it a unique frontend ID
+  name: 'Home', // A user-friendly name
+  // This URL MUST match the START_URL environment variable in your backend's Docker container
+  url: 'http://localhost:4600', 
+};
 
 export const useSessionStore = create<SessionState>()(
     devtools(
@@ -178,27 +158,23 @@ export const useSessionStore = create<SessionState>()(
             isDiagramGenerating: false,
             suggestedResponses: [],
             suggestedTitle: undefined,
-            isNavigating: false, // <-- Initial state is false
+            isNavigating: false,
             isAwaitingAIResponse: false,
-            // rrweb replay defaults
             replayEventsUrl: null,
 
-            // --- Browser tab defaults ---
-            tabs: [],
-            activeTabId: null,
+            // +++ APPLY THE FIX HERE +++
+            tabs: [initialTab],
+            activeTabId: initialTab.id,
+            // +++ END OF THE FIX +++
 
-            // --- Imprinting defaults ---
             imprinting_mode: 'DEBRIEF_CONCEPTUAL',
             currentLO: null,
             conceptualStarted: false,
-
-            // --- New Imprinting Flow defaults ---
             imprintingPhase: 'SEED_INPUT',
             curriculumDraft: [],
-            // --- Debrief message defaults ---
             debriefMessage: null,
 
-            // --- Actions Implementation ---
+            // --- Actions Implementation (Your existing actions are great, no changes needed) ---
             setActiveView: (view) => set({ activeView: view }),
             setExcalidrawAPI: (api) => set({ excalidrawAPI: api }),
             setAgentStatusText: (text) => set({ agentStatusText: text }),
@@ -213,13 +189,8 @@ export const useSessionStore = create<SessionState>()(
             updateBlock: (blockId, newContent) => set((state) => ({
               whiteboardBlocks: state.whiteboardBlocks.map((b) => {
                 if (b.id !== blockId) return b;
-                // Merge content based on block type, preserving id/type
-                if (b.type === 'excalidraw') {
-                  return { ...b, ...(newContent as Partial<ExcalidrawBlock>) } as ExcalidrawBlock;
-                }
-                if (b.type === 'rrweb') {
-                  return { ...b, ...(newContent as Partial<RrwebBlock>) } as RrwebBlock;
-                }
+                if (b.type === 'excalidraw') return { ...b, ...(newContent as Partial<ExcalidrawBlock>) } as ExcalidrawBlock;
+                if (b.type === 'rrweb') return { ...b, ...(newContent as Partial<RrwebBlock>) } as RrwebBlock;
                 return b;
               })
             })),
@@ -228,32 +199,45 @@ export const useSessionStore = create<SessionState>()(
             setIsDiagramGenerating: (isGenerating) => set({ isDiagramGenerating: isGenerating }),
             setSuggestedResponses: (suggestions, title) => set({ suggestedResponses: suggestions, suggestedTitle: title }),
             clearSuggestedResponses: () => set({ suggestedResponses: [], suggestedTitle: undefined }),
-            setIsNavigating: (isNavigating) => set({ isNavigating }), // <-- Action implementation
-            setIsAwaitingAIResponse: (isAwaiting: boolean) => set({ isAwaitingAIResponse: isAwaiting }),
-            // rrweb replay actions
+            setIsNavigating: (isNavigating) => set({ isNavigating }),
+            setIsAwaitingAIResponse: (isAwaiting) => set({ isAwaitingAIResponse: isAwaiting }),
             showReplay: (url) => set({ replayEventsUrl: url }),
             hideReplay: () => set({ replayEventsUrl: null }),
 
             // --- Browser tab actions ---
             addTab: (tab) => set((state) => ({ tabs: [...state.tabs, tab] })),
-            removeTab: (id) => set((state) => ({
-              tabs: state.tabs.filter(t => t.id !== id),
-              // if removing current active, clear active; caller may select a new one
-              activeTabId: state.activeTabId === id ? null : state.activeTabId,
-            })),
+            
+            removeTab: (id: string) =>
+              set((state) => {
+                const originalTabs = state.tabs;
+                const closingTabIndex = originalTabs.findIndex((t) => t.id === id);
+                if (closingTabIndex === -1) return {}; // Tab not found, do nothing
+            
+                const newTabs = originalTabs.filter((tab) => tab.id !== id);
+                let newActiveId = state.activeTabId;
+            
+                if (state.activeTabId === id) {
+                  if (newTabs.length > 0) {
+                    const newIndex = Math.min(closingTabIndex, newTabs.length - 1);
+                    newActiveId = newTabs[newIndex].id;
+                  } else {
+                    newActiveId = null; // No tabs left
+                  }
+                }
+            
+                return { tabs: newTabs, activeTabId: newActiveId };
+              }),
+              
             setActiveTabId: (id) => set({ activeTabId: id }),
 
             // --- Imprinting Actions ---
             setImprintingMode: (mode) => set({ imprinting_mode: mode }),
             setCurrentLO: (lo) => set({ currentLO: lo }),
             setConceptualStarted: (started) => set({ conceptualStarted: started }),
-
-            // --- New Imprinting Flow Actions ---
             setImprintingPhase: (phase) => set({ imprintingPhase: phase }),
             setCurriculumDraft: (draft) => set({ curriculumDraft: draft }),
-            // --- Debrief message action ---
             setDebriefMessage: (message) => set({ debriefMessage: message }),
-        }),
+        }), 
         { name: "SessionUIStore" }
     )
 );
