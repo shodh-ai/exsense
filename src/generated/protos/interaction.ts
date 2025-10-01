@@ -121,6 +121,8 @@ export enum ClientUIActionType {
   /** UPLOAD_FILE_TO_JUPYTER - Upload a file to Jupyter notebook environment */
   UPLOAD_FILE_TO_JUPYTER = 62,
   HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION = 63,
+  /** RRWEB_REPLAY - rrweb replay action */
+  RRWEB_REPLAY = 73,
   /** SUGGESTED_RESPONSES - Suggested responses (quick replies) list */
   SUGGESTED_RESPONSES = 65,
   UNRECOGNIZED = -1,
@@ -305,6 +307,9 @@ export function clientUIActionTypeFromJSON(object: any): ClientUIActionType {
     case 63:
     case "HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION":
       return ClientUIActionType.HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION;
+    case 73:
+    case "RRWEB_REPLAY":
+      return ClientUIActionType.RRWEB_REPLAY;
     case 65:
     case "SUGGESTED_RESPONSES":
       return ClientUIActionType.SUGGESTED_RESPONSES;
@@ -435,6 +440,8 @@ export function clientUIActionTypeToJSON(object: ClientUIActionType): string {
       return "UPLOAD_FILE_TO_JUPYTER";
     case ClientUIActionType.HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION:
       return "HIGHLIGHT_CELL_FOR_DOUBT_RESOLUTION";
+    case ClientUIActionType.RRWEB_REPLAY:
+      return "RRWEB_REPLAY";
     case ClientUIActionType.SUGGESTED_RESPONSES:
       return "SUGGESTED_RESPONSES";
     case ClientUIActionType.UNRECOGNIZED:
