@@ -593,7 +593,40 @@ function TeacherSession() {
         console.log('[TeacherPage] activeView changed:', activeView);
     }, [activeView]);
 
-    // VNC auto-create and cache restore removed
+    // --- AUTO-OPEN VSCODE: When imprintingPhase becomes LIVE_IMPRINTING and environment is vscode, navigate to code-server ---
+    useEffect(() => {
+        if (imprintingPhase === 'LIVE_IMPRINTING' && imprintingEnvironment === 'vscode' && isConnected) {
+            // Only auto-open once per session
+            const key = `vscode_auto_opened_${currentLO}`;
+            if (sessionStorage.getItem(key)) return;
+            sessionStorage.setItem(key, 'true');
+            
+            // Navigate to VSCode
+            void sendBrowser('navigate', { url: 'http://localhost:4600' });
+            setStatusMessage('Auto-opened VSCode environment.');
+            console.log('[TeacherPage] Auto-opened VSCode for LO:', currentLO);
+        }
+    }, [imprintingPhase, imprintingEnvironment, isConnected, currentLO, sendBrowser]);
+
+    // --- WRAPPED TAB FUNCTIONS: Capture setup actions when teacher opens new tabs ---
+    const handleOpenNewTabWithCapture = React.useCallback(async (name: string, url: string) => {
+        try {
+            // First, execute the actual tab opening
+            await openNewTab(name, url);
+            
+            // Then, capture this as a setup action for the lesson
+            const setupAction = {
+                tool_name: 'browser_navigate',
+                parameters: { url },
+            };
+            setSetupActions(prev => [...prev, setupAction]);
+            
+            console.log('[TeacherPage] Captured tab navigation as setup action:', { name, url });
+            setStatusMessage(`Opened tab: ${name}`);
+        } catch (err) {
+            console.error('[TeacherPage] handleOpenNewTabWithCapture failed:', err);
+        }
+    }, [openNewTab]);
 
     const handleSelectPractical = () => {
         // eslint-disable-next-line no-console
@@ -633,6 +666,8 @@ function TeacherSession() {
     const audioChunksRef = useRef<BlobPart[]>([]);
     const audioBlobRef = useRef<Blob | null>(null);
     const [stagedAssets, setStagedAssets] = useState<{ filename: string; role: string; asset_id: string }[]>([]);
+    // NEW: Track setup actions captured during session (e.g., tab navigation)
+    const [setupActions, setSetupActions] = useState<Array<{tool_name: string; parameters: Record<string, unknown>}>>([]);
     const [isStartAllowed, setIsStartAllowed] = useState<boolean>(true);
     const [screenshotIntervalSec, setScreenshotIntervalSec] = useState<number>(10);
     const [timeToNextScreenshot, setTimeToNextScreenshot] = useState<number | null>(null);
@@ -1154,6 +1189,8 @@ function TeacherSession() {
                     // Use selected environment for both keys (backend + browser_manager)
                     imprinting_environment: imprintingEnvironment,
                     environment: imprintingEnvironment,
+                    // Include captured setup actions
+                    setup_actions: setupActions,
                 };
                 if (isShowMeRecording && showMeQuestionRef.current) {
                     (payload as any).in_response_to_question = showMeQuestionRef.current;
@@ -1205,6 +1242,7 @@ function TeacherSession() {
             audioChunksRef.current = [];
             audioBlobRef.current = null;
             setStagedAssets([]);
+            setSetupActions([]);
             setIsShowMeRecording(false);
             showMeQuestionRef.current = null;
         } catch (err: any) {
@@ -1222,11 +1260,36 @@ function TeacherSession() {
     const handleAssetUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !user?.id) return;
-        const role = window.prompt("Role for this file? (e.g., STARTER_CODE, DATASET)", "STARTER_CODE") || "STARTER_CODE";
+        
+        // Determine the role based on file type
+        let role: string;
+        if (file.name.endsWith('.zip')) {
+            role = 'WORKSPACE_ARCHIVE';
+        } else {
+            role = window.prompt("Role for this file? (e.g., STARTER_CODE, DATASET)", "STARTER_CODE") || "STARTER_CODE";
+        }
+        
         try {
+            setStatusMessage('Uploading asset...');
             const assetInfo = await stageAsset({ expert_id: user.id, session_id: roomName, curriculum_id: String(curriculumId), file });
-            const item = { filename: assetInfo.filename || file.name, role: role || "ASSET", asset_id: assetInfo.asset_id };
+            const item = { filename: assetInfo.filename || file.name, role: role, asset_id: assetInfo.asset_id };
             setStagedAssets(prev => [...prev, item]);
+            
+            // If it's a workspace archive, immediately unzip it in the teacher's pod
+            if (role === 'WORKSPACE_ARCHIVE') {
+                try {
+                    setStatusMessage('Extracting workspace...');
+                    await sendBrowser('unzip_staged_asset_in_workspace', { asset_id: assetInfo.asset_id });
+                    setStatusMessage('Workspace uploaded and extracted successfully.');
+                    // eslint-disable-next-line no-console
+                    console.log('[TeacherPage] Workspace extracted for teacher preview:', assetInfo.asset_id);
+                } catch (unzipErr: any) {
+                    console.error('[TeacherPage] Workspace extraction failed:', unzipErr);
+                    setStatusMessage(`Workspace uploaded but extraction failed: ${unzipErr?.message || unzipErr}`);
+                }
+            } else {
+                setStatusMessage('Asset uploaded.');
+            }
         } catch (e: any) {
             setStatusMessage(`Error uploading asset: ${e?.message || e}`);
         } finally {
@@ -1373,7 +1436,7 @@ function TeacherSession() {
                                         isConceptualRecording={isConceptualRecording}
                                         conceptualRecordingDuration={conceptualRecordingDuration}
                                         onSwitchTab={switchTab}
-                                        onOpenNewTab={openNewTab}
+                                        onOpenNewTab={handleOpenNewTabWithCapture}
                                         onCloseTab={closeTab}
                                     />
                                     
