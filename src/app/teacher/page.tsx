@@ -1468,6 +1468,14 @@ function TeacherSession() {
                             </>
                         )
                     }
+                    {/* Hidden file input for asset uploads */}
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleAssetUpload}
+                        style={{ display: 'none' }}
+                        accept=".zip,.csv,.json,.py,.ipynb,.txt,.md"
+                    />
                     {/* This modal is for finishing the session, which is no longer triggered by the footer but might be used elsewhere. */}
                     <SendModal
                         isModalOpen={isFinishModalOpen}
