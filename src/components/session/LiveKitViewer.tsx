@@ -19,13 +19,11 @@ export default function LiveKitViewer({ room }: { room: Room }) {
   const [videoTracks, setVideoTracks] = useState<{ pub: RemoteTrackPublication; track: RemoteVideoTrack }[]>([]);
   const [captureSize, setCaptureSize] = useState<{ w: number; h: number } | null>(null);
 
-  // +++ FIX FOR THE INFINITE LOOP +++
-  // Select each piece of state individually. This is the correct way to use Zustand.
+  // Select each piece of state individually to prevent infinite loops
   const tabs = useSessionStore((s) => s.tabs);
   const addTab = useSessionStore((s) => s.addTab);
   const removeTab = useSessionStore((s) => s.removeTab);
   const setActiveTabId = useSessionStore((s) => s.setActiveTabId);
-  // +++ END OF FIX +++
 
   // Get the function to send commands to the backend
   const { executeBrowserAction } = useBrowserActionExecutor(room);
@@ -67,7 +65,7 @@ export default function LiveKitViewer({ room }: { room: Room }) {
   }, [tabs, executeBrowserAction, removeTab]);
   // --- END: TAB MANAGEMENT "TRANSLATOR" LOGIC ---
 
-  // --- START: VIDEO STREAM & DATA HANDLING LOGIC (This section is also correct) ---
+  // --- START: VIDEO STREAM & DATA HANDLING LOGIC (This section is correct) ---
   const rebuildFromRoom = useCallback(() => {
     const next: { pub: RemoteTrackPublication; track: RemoteVideoTrack }[] = [];
     room.remoteParticipants.forEach((p: RemoteParticipant) => {
@@ -109,7 +107,7 @@ export default function LiveKitViewer({ room }: { room: Room }) {
     room.on(RoomEvent.TrackUnsubscribed, onTrackChange);
     room.on(RoomEvent.DataReceived, onData);
 
-    rebuildFromRoom(); // Initial check for already-existing tracks
+    rebuildFromRoom();
 
     return () => {
       room.off(RoomEvent.TrackSubscribed, onTrackChange);
@@ -259,22 +257,40 @@ function VideoRenderer({ track, executeBrowserAction, captureSize }: VideoRender
     }
   };
 
-  const handleKeyDown = async (event: React.KeyboardEvent<HTMLDivElement>) => {
+  // +++ THIS IS THE FIXED KEY HANDLER +++
+  const handleKeyDown = useCallback(async (event: React.KeyboardEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const command: BrowserActionCommand = {
+    const { key, ctrlKey, altKey, metaKey, shiftKey } = event;
+
+    let command: BrowserActionCommand;
+
+    // Condition for sending a 'type' command:
+    // 1. The key is a single, printable character.
+    // 2. It's not a control, alt, or meta (Cmd) shortcut. Shift is allowed for typing uppercase letters.
+    if (key.length === 1 && !ctrlKey && !altKey && !metaKey) {
+      command = {
+        tool_name: 'type',
+        parameters: { text: key },
+      };
+    } 
+    // All other keys (Enter, Backspace, Tab, F-keys) or shortcuts (Ctrl+C, etc.) are 'keypress'.
+    else {
+      // The backend expects modifiers as an array of strings.
+      const modifiers: string[] = [];
+      if (ctrlKey) modifiers.push('Control');
+      if (altKey) modifiers.push('Alt');
+      if (metaKey) modifiers.push('Meta');
+      if (shiftKey) modifiers.push('Shift');
+      
+      command = {
         tool_name: 'keypress',
-        parameters: {
-            key: event.key,
-            modifiers: {
-                ctrlKey: event.ctrlKey,
-                altKey: event.altKey,
-                shiftKey: event.shiftKey,
-                metaKey: event.metaKey,
-            }
-        },
-    };
-    executeBrowserAction(command);
-  };
+        parameters: { key, modifiers },
+      };
+    }
+
+    await executeBrowserAction(command);
+  }, [executeBrowserAction]);
+  // +++ END OF THE FIX +++
   
   const handleScroll = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -300,9 +316,7 @@ function VideoRenderer({ track, executeBrowserAction, captureSize }: VideoRender
         ref={videoRef}
         autoPlay
         playsInline
-        // +++ FIX FOR THE NOTALLOWEDERROR +++
         muted={true}
-        // +++ END OF FIX +++
         className="w-full h-full"
         style={{ objectFit: 'contain' }}
       />
