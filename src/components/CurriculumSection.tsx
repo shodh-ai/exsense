@@ -108,7 +108,10 @@ export const CurriculumSection = ({
             <div className="flex items-center flex-shrink-0">
                 {courseId && (
                     <Button asChild variant="ghost" size="icon" className="text-[#566FE9] hover:text-blue-700 hover:bg-blue-50 w-10 h-10 rounded-[100px]">
-                        <Link href={`/teacher?courseId=${courseId}&lessonId=${section.id}&lessonTitle=${encodeURIComponent(section.title)}`} title={`Teach this lesson: ${section.title}`}>
+                        <Link
+                            href={`/teacher?courseId=${courseId}&lessonId=${section.id}&lessonTitle=${encodeURIComponent(section.title)}&lessonEnv=${encodeURIComponent(section.environment === 'VS Code Editor' ? 'vscode' : 'browser')}`}
+                            title={`Teach this lesson: ${section.title}`}
+                        >
                             <EditIcon className="w-5 h-5" />
                         </Link>
                     </Button>

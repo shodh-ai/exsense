@@ -555,6 +555,8 @@ export default function Session() {
     const searchParams = useSearchParams();
     // --- NEW: Track active environment for recording/imprinting ---
     const [imprintingEnvironment, setImprintingEnvironment] = useState<'browser' | 'vscode'>('browser');
+    // Capture teacher-declared setup actions (e.g., tabs opened via the dialog)
+    const [setupActions, setSetupActions] = useState<{ tool_name: string; parameters: Record<string, unknown> }[]>([]);
     const SESSION_DEBUG = false;
     const DEV_BYPASS = true;
     // Disable legacy VNC session management; we use LiveKit data channel to control the browser pod
@@ -563,6 +565,7 @@ export default function Session() {
     const courseTitle = searchParams.get('title');
     const lessonId = searchParams.get('lessonId');
     const lessonTitle = searchParams.get('lessonTitle');
+    const lessonEnv = searchParams.get('lessonEnv');
 
 
     // --- MODIFICATION: Add state for the finish confirmation modal ---
@@ -581,6 +584,26 @@ export default function Session() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lessonId, lessonTitle]);
+
+    // Initialize environment from URL parameter (lessonEnv=vscode|browser)
+    useEffect(() => {
+        if (!lessonEnv) return;
+        const env = (lessonEnv === 'vscode') ? 'vscode' : 'browser';
+        setImprintingEnvironment(env);
+        // eslint-disable-next-line no-console
+        console.log('[TeacherPage] Env from URL:', env);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [lessonEnv]);
+
+    // Auto-open VSCode when entering LIVE_IMPRINTING and environment is vscode
+    useEffect(() => {
+        try {
+            if (imprintingPhase === 'LIVE_IMPRINTING' && imprintingEnvironment === 'vscode') {
+                void sendBrowser('navigate', { url: 'http://localhost:4600' });
+            }
+        } catch {}
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [imprintingPhase, imprintingEnvironment]);
 
     // NOTE: Do not early-return here to avoid conditional hook calls. We will render a fallback later.
     
@@ -722,6 +745,16 @@ export default function Session() {
             setImprintingPhase('REVIEW_DRAFT');
         } catch (error) {
             setImprintingPhase('SEED_INPUT');
+        }
+    };
+
+    // When the teacher opens a new tab via the dialog, also capture a setup action
+    const handleOpenNewTabAndCapture = async (name: string, url: string) => {
+        try {
+            await openNewTab(name, url);
+            setSetupActions(prev => [...prev, { tool_name: 'browser_navigate', parameters: { url } }]);
+        } catch (e) {
+            console.warn('[TeacherPage] handleOpenNewTabAndCapture failed', e);
         }
     };
 
@@ -1173,6 +1206,8 @@ export default function Session() {
                     imprinting_environment: imprintingEnvironment,
                     environment: imprintingEnvironment,
                 };
+                // Include captured setup actions (tabs opened via dialog)
+                (payload as any).setup_actions = setupActions;
                 if (isShowMeRecording && showMeQuestionRef.current) {
                     (payload as any).in_response_to_question = showMeQuestionRef.current;
                 }
@@ -1204,6 +1239,7 @@ export default function Session() {
                             expert_actions: [], // No local action capture in Teacher; rely on audio and staged assets
                             current_lo: currentLO || undefined,
                             staged_assets: stagedAssets,
+                            setup_actions: setupActions,
                             in_response_to_question: (isShowMeRecording && showMeQuestionRef.current) ? showMeQuestionRef.current : undefined,
                         };
                         const resp = await submitImprintingEpisode(directPayload as any);
@@ -1222,6 +1258,8 @@ export default function Session() {
             audioChunksRef.current = [];
             audioBlobRef.current = null;
             setStagedAssets([]);
+            // Clear captured setup actions after a successful submit/reset
+            setSetupActions([]);
             setIsShowMeRecording(false);
             showMeQuestionRef.current = null;
         } catch (err: any) {
@@ -1238,11 +1276,19 @@ export default function Session() {
     const handleAssetUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !user?.id) return;
-        const role = window.prompt("Role for this file? (e.g., STARTER_CODE, DATASET)", "STARTER_CODE") || "STARTER_CODE";
+        // Determine role based on file type
+        const role = file.name.toLowerCase().endsWith('.zip') ? 'WORKSPACE_ARCHIVE' : 'ASSET';
         try {
+            // Upload asset to GCS via backend
             const assetInfo = await stageAsset({ expert_id: user.id, session_id: roomName, curriculum_id: String(curriculumId), file });
-            const item = { filename: assetInfo.filename || file.name, role: role || "ASSET", asset_id: assetInfo.asset_id };
+            const item = { filename: assetInfo.filename || file.name, role, asset_id: assetInfo.asset_id };
             setStagedAssets(prev => [...prev, item]);
+
+            // If workspace archive, ask the pod to unzip immediately into /home/appuser/workspace
+            if (role === 'WORKSPACE_ARCHIVE') {
+                await sendBrowser('unzip_staged_asset_in_workspace', { asset_id: assetInfo.asset_id });
+                setStatusMessage('Workspace uploaded and extracted.');
+            }
         } catch (e: any) {
             setStatusMessage(`Error uploading asset: ${e?.message || e}`);
         } finally {
@@ -1389,7 +1435,7 @@ export default function Session() {
                                         isConceptualRecording={isConceptualRecording}
                                         conceptualRecordingDuration={conceptualRecordingDuration}
                                         onSwitchTab={switchTab}
-                                        onOpenNewTab={openNewTab}
+                                        onOpenNewTab={handleOpenNewTabAndCapture}
                                         onCloseTab={closeTab}
                                     />
                                     
@@ -1434,6 +1480,15 @@ export default function Session() {
                         onSubmit={executeFinishSession}
                         title="Finish this session?"
                         description="Any unsaved recordings will be submitted before ending the session."
+                    />
+                    {/* Hidden file input for asset uploads (including .zip workspaces) */}
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        onChange={handleAssetUpload}
+                        // Accept any file; teacher logic detects .zip extension
+                        accept="*/*"
                     />
                 </>
             ) : (
