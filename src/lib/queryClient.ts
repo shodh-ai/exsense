@@ -9,13 +9,14 @@ export const queryClient = new QueryClient({
       // Cache time: How long data stays in cache after component unmounts
       gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
       // Retry configuration
-      retry: (failureCount: number, error: any) => {
+      retry: (failureCount: number, error: unknown) => {
         // Don't retry on 401/403 errors (auth issues)
-        if (error?.status === 401 || error?.status === 403) {
+        const status = (error as { status?: number })?.status;
+        if (status === 401 || status === 403) {
           return false;
         }
         // Don't retry on 429 (rate limited) globally
-        if (error?.status === 429) {
+        if (status === 429) {
           return false;
         }
         // Retry up to 3 times for other errors
@@ -32,7 +33,7 @@ export const queryClient = new QueryClient({
     },
     mutations: {
       // Global mutation error handling
-      onError: (error: any) => {
+      onError: (error: unknown) => {
         console.error('Mutation error:', error);
         // You can add global error handling here
       },

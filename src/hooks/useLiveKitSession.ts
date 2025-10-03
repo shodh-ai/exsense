@@ -689,10 +689,17 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         const url = (request as any).parameters?.events_url;
         if (url && typeof url === 'string') {
           try {
-            useSessionStore.getState().showReplay(url);
-            console.log('[B2F RPC] rrweb replay URL set in store');
+            // Add rrweb replay as a block in the whiteboard feed
+            const params = (request as any).parameters || {};
+            const id = params.id || `rrweb_${Date.now()}`;
+            const summary = params.summary || params.title || 'Session Replay';
+            const block = { id, type: 'rrweb', summary, eventsUrl: url } as any;
+            useSessionStore.getState().addBlock(block);
+            // Switch to whiteboard view so the user sees the replay
+            try { setActiveView('excalidraw' as SessionView); } catch {}
+            console.log('[B2F RPC] rrweb replay block added to whiteboard feed');
           } catch (e) {
-            console.error('[B2F RPC] Failed to set rrweb replay URL:', e);
+            console.error('[B2F RPC] Failed to add rrweb replay block:', e);
           }
         } else {
           console.error('[B2F RPC] RRWEB_REPLAY action received without a valid events_url.');

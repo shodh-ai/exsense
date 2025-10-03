@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import 'rrweb-player/dist/style.css';
 
+// Lazy import to avoid SSR issues; rrweb-player relies on DOM APIs
 let ReplayerCtor: any = null;
 
 export interface RrwebBlockViewProps {
@@ -18,8 +18,8 @@ const RrwebBlockView: React.FC<RrwebBlockViewProps> = ({ eventsUrl }) => {
     let replayer: any | null = null;
     let cancelled = false;
 
-    const setup = async () => {
-      if (!containerRef.current || !eventsUrl) return;
+    const setupReplayer = async (url: string) => {
+      if (!containerRef.current) return;
       setIsLoading(true);
       setError(null);
       try {
@@ -27,39 +27,82 @@ const RrwebBlockView: React.FC<RrwebBlockViewProps> = ({ eventsUrl }) => {
           const mod: any = await import('rrweb-player');
           ReplayerCtor = mod?.Replayer || mod?.default;
         }
-        const resp = await fetch(eventsUrl, { cache: 'no-store' });
+        const resp = await fetch(url, { cache: 'no-store' });
         if (!resp.ok) throw new Error(`Failed to fetch events: ${resp.status} ${resp.statusText}`);
         const events = await resp.json();
         if (!Array.isArray(events) || events.length === 0) {
           throw new Error('No events found in the provided data.');
         }
         if (cancelled) return;
+
         replayer = new ReplayerCtor({
           target: containerRef.current,
-          props: { events },
+          props: {
+            events,
+          },
         });
         replayer.play();
         setIsLoading(false);
       } catch (e: unknown) {
         if (cancelled) return;
-        const msg = e instanceof Error ? e.message : 'Unknown error';
-        setError(msg);
+        console.error('[RrwebBlockView] Failed to setup replayer:', e);
+        const message = e instanceof Error ? e.message : 'Unknown error';
+        setError(message);
         setIsLoading(false);
       }
     };
 
-    setup();
-    return () => { cancelled = true; try { replayer?.destroy?.(); } catch {} };
+    if (eventsUrl && containerRef.current) {
+      setupReplayer(eventsUrl);
+    }
+
+    return () => {
+      cancelled = true;
+      try { replayer?.destroy?.(); } catch {}
+    };
   }, [eventsUrl]);
 
+  if (!eventsUrl) return null;
+
   return (
-    <div style={{ width: '100%', minHeight: 360, background: '#000', position: 'relative' }}>
-      <div ref={containerRef} style={{ width: '100%', height: 360 }} />
+    <div
+      style={{
+        width: '100%',
+        minHeight: 360,
+        backgroundColor: '#000',
+        position: 'relative',
+        borderRadius: 8,
+        overflow: 'hidden'
+      }}
+    >
+      <div ref={containerRef} style={{ width: '100%', height: '100%', minHeight: 360 }} />
       {isLoading && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc' }}>Loading replay…</div>
+        <div style={{ 
+          position: 'absolute', 
+          inset: 0, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          color: '#ccc',
+          backgroundColor: 'rgba(0, 0, 0, 0.8)'
+        }}>
+          Loading Replay...
+        </div>
       )}
       {error && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'tomato' }}>Error: {error}</div>
+        <div style={{ 
+          position: 'absolute', 
+          inset: 0, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          color: '#ff6b6b',
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          padding: 20,
+          textAlign: 'center'
+        }}>
+          Error: {error}
+        </div>
       )}
     </div>
   );

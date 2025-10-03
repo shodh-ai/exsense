@@ -6,9 +6,21 @@ export type ThesisSummary = {
   description?: string;
 };
 
+export interface ReactFlowNode {
+  id: string;
+  [key: string]: unknown;
+}
+
+export interface ReactFlowEdge {
+  id: string;
+  source: string;
+  target: string;
+  [key: string]: unknown;
+}
+
 export type ReactFlowGraph = {
-  nodes: any[];
-  edges: any[];
+  nodes: ReactFlowNode[];
+  edges: ReactFlowEdge[];
 };
 
 const BRUM_BASE = process.env.NEXT_PUBLIC_BRUM_BASE || 'http://localhost:8000';

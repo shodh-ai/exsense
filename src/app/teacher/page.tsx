@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 // Import the specific buttons we need for the new footer
 import { MicButton } from '@/components/MicButton';
 import { UploadButton } from '@/components/UploadButton';
@@ -474,7 +474,7 @@ const TeacherFooter = ({
 // === MODIFIED COMPONENT ENDS HERE ================================================================
 // =================================================================================================
 
-export default function Session() {
+function TeacherSession() {
     // --- MOCK BACKEND FLAG ---
     const MOCK_BACKEND = (process.env.NEXT_PUBLIC_MOCK_BACKEND ?? 'false') === 'true';
     // eslint-disable-next-line no-console
@@ -1434,5 +1434,20 @@ export default function Session() {
                 </div>
             )}
         </>
+    );
+}
+
+export default function Session() {
+    return (
+        <Suspense fallback={
+            <div className="w-full h-full flex items-center justify-center text-white">
+                <div className="text-center">
+                    <Wand className="w-10 h-10 text-white animate-pulse mb-4 mx-auto" />
+                    <p className="text-lg">Loading session...</p>
+                </div>
+            </div>
+        }>
+            <TeacherSession />
+        </Suspense>
     );
 }

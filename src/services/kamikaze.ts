@@ -1,6 +1,6 @@
 // exsense/src/services/kamikaze.ts
 export type DeliveryPlan = {
-  actions: Array<{ tool_name: string; parameters: Record<string, any> }>;
+  actions: Array<{ tool_name: string; parameters: Record<string, unknown> }>;
   metadata?: {
     suggested_responses?: Array<string | { id?: string; text: string; reason?: string; title?: string }>;
     focus_nodes?: string[];
