@@ -162,6 +162,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const setAgentStatusText = useSessionStore((s) => s.setAgentStatusText);
   const setIsAgentSpeaking = useSessionStore((s) => s.setIsAgentSpeaking);
   const setIsMicEnabled = useSessionStore((s) => s.setIsMicEnabled); // mic control
+  const setIsMicActivatingPending = useSessionStore((s) => s.setIsMicActivatingPending);
   const setSuggestedResponses = useSessionStore((s) => s.setSuggestedResponses);
   const clearSuggestedResponses = useSessionStore((s) => s.clearSuggestedResponses);
   // Browser tab actions from store
@@ -489,6 +490,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         }
       } else if (request.actionType === ClientUIActionType.START_LISTENING_VISUAL) {
         setIsMicEnabled(true);
+        // Safety net: ensure pending flag is cleared when backend enables mic
+        try { setIsMicActivatingPending(false); } catch {}
         // Enable microphone so user can be heard
         if (roomInstance.localParticipant) {
           await roomInstance.localParticipant.setMicrophoneEnabled(true);
@@ -1223,9 +1226,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }
     try {
       console.log(`[F2B RPC] Starting task: ${taskName}`);
+      // Generate a per-action trace id for distributed tracing
+      const traceId = uuidv4();
+      // Expose for devtools debugging
+      try { (window as any).__lastTraceId = traceId; } catch {}
       const request = {
         taskName: taskName,
-        jsonPayload: JSON.stringify(payload),
+        // Inject trace_id into the payload so downstream services can correlate
+        jsonPayload: JSON.stringify({ ...(payload as any), trace_id: traceId }),
       };
       // InvokeAgentTask returns an Observable<AgentResponse> (server-streaming).
       // Our transport currently yields a single response; await the first emission.
@@ -1394,7 +1402,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         console.warn('[Interaction] Cannot send, room not connected');
         return;
       }
-      const json = JSON.stringify(payload);
+      // Attach a trace id for correlation with backend actions
+      const traceId = (payload as any)?.trace_id || uuidv4();
+      const json = JSON.stringify({ ...(payload as any), trace_id: traceId });
       const bytes = new TextEncoder().encode(json);
       await roomInstance.localParticipant.publishData(bytes);
     } catch (e) {
