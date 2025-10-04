@@ -80,8 +80,11 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
     };
     const onPub = (pub: RemoteTrackPublication) => {
       if (pub.kind === Track.Kind.Video) {
+        // FIXED: Request HIGH quality immediately to avoid blurry startup
+        // This prevents LiveKit's adaptive bitrate from starting low
         pub.setSubscribed(true);
         pub.setVideoQuality(VideoQuality.HIGH);
+        console.log('[LK][viewer] Requested HIGH quality for new video track');
       }
     };
 

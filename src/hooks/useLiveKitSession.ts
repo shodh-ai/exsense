@@ -1097,6 +1097,24 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             const data = JSON.parse(new TextDecoder().decode(payload));
             console.log('[DataReceived] Packet from', participant.identity, { kind, topic, data });
 
+            // --- Handle initial tab created by backend ---
+            if (data?.type === 'initial_tab_created' && data?.tab_id) {
+                console.log('[Tabs] Received initial tab from backend:', data);
+                try {
+                    const tab = {
+                        id: data.tab_id,
+                        name: data.name || 'Home',
+                        url: data.url || 'about:blank'
+                    };
+                    addTab(tab);
+                    setActiveTabIdInStore(data.tab_id);
+                    console.log('[Tabs] Registered initial tab in store:', tab);
+                } catch (e) {
+                    console.warn('[Tabs] Failed to register initial tab:', e);
+                }
+                return; // Stop further processing for this packet
+            }
+
             // --- Handle AI debrief question relayed by the browser pod ---
             if (data?.type === 'ai_debrief_question' && typeof data?.text === 'string' && data.text.length > 0) {
                 console.log('[FLOW] Received AI debrief question from pod:', data.text);

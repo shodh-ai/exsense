@@ -235,7 +235,15 @@ export const useSessionStore = create<SessionState>()(
             setIsAwaitingAIResponse: (isAwaiting: boolean) => set({ isAwaitingAIResponse: isAwaiting }),
 
             // --- Browser tab actions ---
-            addTab: (tab) => set((state) => ({ tabs: [...state.tabs, tab] })),
+            addTab: (tab) => set((state) => {
+              // Prevent duplicate tabs with same ID
+              const exists = state.tabs.some(t => t.id === tab.id);
+              if (exists) {
+                console.warn(`[Store] Tab with ID ${tab.id} already exists, skipping addTab`);
+                return state;
+              }
+              return { tabs: [...state.tabs, tab] };
+            }),
             removeTab: (id) => set((state) => ({
               tabs: state.tabs.filter(t => t.id !== id),
               // if removing current active, clear active; caller may select a new one
