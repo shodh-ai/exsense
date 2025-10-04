@@ -39,7 +39,14 @@ export interface RrwebBlock {
   eventsUrl: string; // URL to fetch rrweb events JSON
 }
 
-export type WhiteboardBlock = ExcalidrawBlock | RrwebBlock;
+export interface VideoBlock {
+  id: string;
+  type: 'video';
+  summary: string;
+  videoUrl: string; // URL to the video source (iframe src or video file)
+}
+
+export type WhiteboardBlock = ExcalidrawBlock | RrwebBlock | VideoBlock;
 
 // --- Browser Tabs ---
 export interface BrowserTab {
@@ -212,6 +219,9 @@ export const useSessionStore = create<SessionState>()(
                 }
                 if (b.type === 'rrweb') {
                   return { ...b, ...(newContent as Partial<RrwebBlock>) } as RrwebBlock;
+                }
+                if (b.type === 'video') {
+                  return { ...b, ...(newContent as Partial<VideoBlock>) } as VideoBlock;
                 }
                 return b;
               })

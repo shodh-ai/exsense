@@ -940,8 +940,10 @@ function TeacherSession() {
             packetsRef.current = [];
             setPacketsCount(0);
             setStagedAssets([]);
+            setRecordingDuration(0);
+            setIsPaused(false);
 
-            // 3. Tell the browser pod to stop and discard its current recording
+            // 3. Tell the browser pod to stop and discard its current recording (rrweb, screenshots, VS Code actions)
             try {
                 console.log('[TeacherPage] Instructing pod to discard current recording segment.');
                 await sendBrowser('stop_recording', { discard: true, session_id: roomName });

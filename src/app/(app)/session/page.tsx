@@ -20,9 +20,8 @@ const IntroPage = NextDynamic(() => import('@/components/session/IntroPage'));
 
 const ExcalidrawBlockView = NextDynamic<{ initialElements: any[] }>(() => import('@/components/session/ExcalidrawBlockView'), { ssr: false });
 const RrwebBlockView = NextDynamic<{ eventsUrl: string }>(() => import('@/components/session/RrwebBlockView'), { ssr: false });
+const VideoBlockView = NextDynamic<{ videoUrl: string }>(() => import('@/components/session/VideoBlockView'), { ssr: false });
 const LiveKitViewer = NextDynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
-
-const VideoViewer = NextDynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
 const MessageDisplay = NextDynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
 
 // Prevent static prerendering of this page at build time
@@ -59,12 +58,12 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
     return (
         <div className='w-full h-full flex flex-col'>
             <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
-                <div className="p-0 w-full md:w-1/2 lg/w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center">
+                <div className="p-0 w-full md:w-1/2 lg/w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center gap-2 px-1">
                     {componentButtons.map(({ key, label, inactiveImagePath, activeImagePath }) => (
                         <button
                             key={key}
                             onClick={() => setActiveView(key)}
-                            className={`w-[32.5%] h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
+                            className={`flex-1 h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
                         >
                             <img src={activeView === key ? activeImagePath : inactiveImagePath} alt={label} className="w-[20px] h-[20px]" />
                             {label}
@@ -89,15 +88,24 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                                     {block.type === 'rrweb' && (
                                         <RrwebBlockView eventsUrl={(block as any).eventsUrl} />
                                     )}
+                                    {block.type === 'video' && (
+                                        <VideoBlockView videoUrl={(block as any).videoUrl} />
+                                    )}
                                 </div>
                                 <div className="px-3 pb-3 pt-1 select-none flex items-center justify-center gap-2 text-gray-600">
                                   <img
-                                    src={block.type === 'excalidraw' ? '/whiteboard-inactive.svg' : '/video-inactive.svg'}
+                                    src={
+                                      block.type === 'excalidraw' ? '/whiteboard-inactive.svg' : 
+                                      block.type === 'video' ? '/video-inactive.svg' : 
+                                      '/video-inactive.svg'
+                                    }
                                     alt="block icon"
                                     className="w-4 h-4 opacity-90"
                                   />
                                   <span className="text-xs leading-5">
-                                    {(block as any).summary || (block.type === 'excalidraw' ? 'Whiteboard' : 'Replay')}
+                                    {(block as any).summary || 
+                                      (block.type === 'excalidraw' ? 'Whiteboard' : 
+                                       block.type === 'video' ? 'Video' : 'Replay')}
                                   </span>
                                 </div>
                             </div>
@@ -124,9 +132,6 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-300">Connecting to LiveKit...</div>
                     )}
-                </div>
-                <div className={`${activeView === 'video' ? 'block' : 'hidden'} w-full h-full`}>
-                    <VideoViewer />
                 </div>
             </div>
         </div>
@@ -258,7 +263,6 @@ export default function Session() {
     const componentButtons: ButtonConfig[] = [
         { key: 'vnc', label: 'Browser', inactiveImagePath: '/browser-inactive.svg', activeImagePath: '/browser-active.svg' },
         { key: 'excalidraw', label: 'Whiteboard', inactiveImagePath: '/whiteboard-inactive.svg', activeImagePath: '/whiteboard-active.svg' },
-        { key: 'video', label: 'Video', inactiveImagePath: '/video-inactive.svg', activeImagePath: '/video-active.svg' },
     ];
 
     // Legacy VNC/session-manager flow removed.
