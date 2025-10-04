@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Observable, firstValueFrom } from 'rxjs';
-import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment } from 'livekit-client';
+import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment, VideoPresets } from 'livekit-client';
 import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
 import { useSessionStore, SessionView } from '@/lib/store';
 import { useAuth } from '@clerk/nextjs';
@@ -116,10 +116,13 @@ class LiveKitRpcAdapter implements Rpc {
 }
 
 // A single room instance to survive React Strict Mode re-mounts.
-// For reliability, disable adaptiveStream/dynacast so remote video is always delivered.
+// CRITICAL: Disable adaptive streaming and request maximum quality immediately
 const roomInstance = new Room({
-    adaptiveStream: false,
-    dynacast: false,
+    adaptiveStream: false,  // No gradual quality ramp-up
+    dynacast: false,        // No dynamic casting
+    videoCaptureDefaults: {
+        resolution: VideoPresets.h720.resolution,  // Request 720p
+    },
 });
 
 // Main hook

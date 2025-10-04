@@ -80,10 +80,19 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
     };
     const onPub = (pub: RemoteTrackPublication) => {
       if (pub.kind === Track.Kind.Video) {
-        // FIXED: Request HIGH quality immediately to avoid blurry startup
-        // This prevents LiveKit's adaptive bitrate from starting low
+        // CRITICAL FIX: Request HIGH quality AND disable adaptive layers immediately
         pub.setSubscribed(true);
         pub.setVideoQuality(VideoQuality.HIGH);
+        // Force the track to use maximum quality settings
+        try {
+          const videoTrack = pub.videoTrack;
+          if (videoTrack) {
+            // Request the highest available layer
+            pub.setVideoQuality(VideoQuality.HIGH);
+          }
+        } catch (e) {
+          console.warn('[LK][viewer] Could not set video track quality:', e);
+        }
         console.log('[LK][viewer] Requested HIGH quality for new video track');
       }
     };
@@ -133,7 +142,7 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
     };
   }, [room]);
 
-  // Watchdog: periodically ensure we remain subscribed to remote video pubs
+  // CRITICAL: Watchdog to ensure HIGH quality is maintained
   useEffect(() => {
     const t = setInterval(() => {
       room.remoteParticipants.forEach((p) => {
@@ -142,16 +151,44 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
           if (!pub.isSubscribed) {
             try { pub.setSubscribed(true); } catch {}
           }
+          // CRITICAL: Re-request HIGH quality periodically to prevent quality degradation
+          if (pub.kind === Track.Kind.Video) {
+            try { pub.setVideoQuality(VideoQuality.HIGH); } catch {}
+          }
         });
       });
     }, 4000);
     return () => clearInterval(t);
   }, [room]);
 
-  // Force high quality for any tracked video publications
+  // CRITICAL: Force MAXIMUM quality - bypass all LiveKit optimizations
   useEffect(() => {
-    videoTracks.forEach(({ pub }) => {
-      if (pub.kind === Track.Kind.Video) pub.setVideoQuality(VideoQuality.HIGH);
+    videoTracks.forEach(({ pub, track }) => {
+      if (pub.kind === Track.Kind.Video) {
+        // Try every possible quality setting
+        pub.setVideoQuality(VideoQuality.HIGH);
+        
+        try {
+          // Access the underlying MediaStreamTrack
+          const mediaStreamTrack = track.mediaStreamTrack;
+          if (mediaStreamTrack && 'getSettings' in mediaStreamTrack) {
+            const settings = mediaStreamTrack.getSettings();
+            console.log('[LK][viewer] Current video settings:', settings);
+          }
+          
+          // Request maximum bandwidth and layers
+          if ('setPreferredLayers' in track) {
+            (track as any).setPreferredLayers({ spatial: 2, temporal: 2 });
+          }
+          
+          // Try to disable all adaptive features on the track itself
+          if ('setMaxBitrate' in track) {
+            (track as any).setMaxBitrate(8000000); // 8 Mbps
+          }
+        } catch (e) {
+          console.warn('[LK][viewer] Could not set advanced quality settings:', e);
+        }
+      }
     });
   }, [videoTracks]);
 
