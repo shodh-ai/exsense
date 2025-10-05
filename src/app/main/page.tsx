@@ -1,10 +1,11 @@
 "use client";
 
-import { LinkedinIcon } from "lucide-react";
+import { LinkedinIcon, Copy, Check, Play, Users } from "lucide-react";
 import React, { JSX, useRef, useLayoutEffect, useCallback, useState } from "react";
 
 import { Button } from "@/components/button";
 import { Separator } from "@/components/separator";
+import { useSessionStore } from "@/lib/store";
 
 export default function ShodhAiWebsite(): JSX.Element {
   // Refs for DOM elements
@@ -13,6 +14,13 @@ export default function ShodhAiWebsite(): JSX.Element {
 
   // State to manage text visibility - start with true to prevent hydration mismatch
   const [isTextVisible, setIsTextVisible] = useState(true);
+  
+  // Demo session state
+  const [showDemoModal, setShowDemoModal] = useState(false);
+  const [demoRoomName, setDemoRoomName] = useState<string | null>(null);
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
+  const currentRoomName = useSessionStore((s) => s.currentRoomName);
+  const userRole = useSessionStore((s) => s.userRole);
 
   // Logic for resizing the font
   const fitText = useCallback(() => {
@@ -51,6 +59,36 @@ export default function ShodhAiWebsite(): JSX.Element {
     return () => observer.disconnect();
   }, [fitText]);
 
+  // Generate invite link
+  const generateInviteLink = useCallback(() => {
+    if (!currentRoomName) return '';
+    const baseUrl = window.location.origin;
+    // Use a default demo course ID for the invite
+    const demoCourseId = 'demo_course_01';
+    return `${baseUrl}/session?courseId=${demoCourseId}&joinRoom=${encodeURIComponent(currentRoomName)}`;
+  }, [currentRoomName]);
+
+  // Copy invite link to clipboard
+  const copyInviteLink = useCallback(async () => {
+    const link = generateInviteLink();
+    if (!link) return;
+    
+    try {
+      await navigator.clipboard.writeText(link);
+      setInviteLinkCopied(true);
+      setTimeout(() => setInviteLinkCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy link:', err);
+    }
+  }, [generateInviteLink]);
+
+  // Start demo session
+  const startDemoSession = useCallback(() => {
+    // Navigate to session page with demo course
+    const demoCourseId = 'demo_course_01';
+    window.location.href = `/session?courseId=${demoCourseId}`;
+  }, []);
+
   // Data for footer and social media
   const footerLinks = [
     { text: "All rights reserved by Shodh AI" },
@@ -85,7 +123,7 @@ export default function ShodhAiWebsite(): JSX.Element {
         {/* Main content section */}
         <section className="relative z-10 flex-grow flex flex-col lg:flex-row items-center w-full gap-8">
           
-          <div ref={containerRef} className="order-1 lg:order-2 w-full lg:w-6/10 h-full flex justify-end items-center">
+          <div ref={containerRef} className="order-1 lg:order-2 w-full lg:w-6/10 h-full flex flex-col justify-center items-end gap-6">
             <h1
               ref={textRef}
               className={`font-manrope font-extrabold uppercase text-right text-[#000042] leading-[95%] letter-spacing-[0.05em] transition-opacity duration-300 ${isTextVisible ? 'opacity-100' : 'opacity-0'}`}
@@ -94,6 +132,75 @@ export default function ShodhAiWebsite(): JSX.Element {
               <span className="block tracking-wide">FUTURE OF</span>
               <span className="block tracking-wider">EDUCATION</span>
             </h1>
+            
+            {/* Demo Session Card */}
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-6 border border-[#E9EBFD]">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="bg-[#566fe91a] rounded-full p-2">
+                  <Users className="w-5 h-5 text-[#566FE9]" />
+                </div>
+                <h3 className="text-lg font-bold text-[#000042]">Live Demo Session</h3>
+              </div>
+              
+              {!currentRoomName ? (
+                <>
+                  <p className="text-sm text-[#00004280] mb-4">
+                    Start a live demo session and invite viewers to watch your presentation in real-time.
+                  </p>
+                  <Button 
+                    onClick={startDemoSession}
+                    className="w-full bg-[#566FE9] hover:bg-[#4556d8] text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2"
+                  >
+                    <Play className="w-4 h-4" />
+                    Start Demo Session
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div className="bg-[#f7f9ff] rounded-lg p-3 mb-3">
+                    <p className="text-xs text-[#00004280] mb-1">Your Role</p>
+                    <p className="text-sm font-semibold text-[#000042] capitalize">
+                      {userRole || 'Presenter'}
+                    </p>
+                  </div>
+                  
+                  {userRole === 'presenter' && (
+                    <>
+                      <p className="text-sm text-[#00004280] mb-3">
+                        Share this link with viewers to let them join your session:
+                      </p>
+                      <div className="bg-[#f7f9ff] rounded-lg p-3 mb-3 break-all text-xs text-[#000042] font-mono">
+                        {generateInviteLink()}
+                      </div>
+                      <Button 
+                        onClick={copyInviteLink}
+                        className="w-full bg-[#566FE9] hover:bg-[#4556d8] text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2"
+                      >
+                        {inviteLinkCopied ? (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Link Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4" />
+                            Copy Invite Link
+                          </>
+                        )}
+                      </Button>
+                    </>
+                  )}
+                  
+                  {userRole === 'viewer' && (
+                    <div className="bg-[#f7f9ff] rounded-lg p-4 text-center">
+                      <p className="text-sm text-[#00004280]">
+                        You are viewing this session. Only the presenter can control the demo.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           
           <div className="order-2 lg:order-1 w-full lg:w-4/10 h-full flex justify-center items-center">

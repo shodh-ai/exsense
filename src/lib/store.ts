@@ -105,6 +105,10 @@ interface SessionState {
     isNavigating: boolean; // <-- State for our loader
     // Global loading flag while waiting for AI/imprinter analysis
     isAwaitingAIResponse: boolean;
+    // User role in the session (presenter or viewer for demo mode)
+    userRole: 'presenter' | 'viewer' | null;
+    // Current room name for sharing
+    currentRoomName: string | null;
 
     // --- Browser tab state ---
     tabs: BrowserTab[];
@@ -141,6 +145,8 @@ interface SessionState {
     clearSuggestedResponses: () => void;
     setIsNavigating: (isNavigating: boolean) => void; // <-- Action for our loader
     setIsAwaitingAIResponse: (isAwaiting: boolean) => void;
+    setUserRole: (role: 'presenter' | 'viewer' | null) => void;
+    setCurrentRoomName: (roomName: string | null) => void;
 
     // --- Browser tab actions ---
     addTab: (tab: BrowserTab) => void;
@@ -182,6 +188,8 @@ export const useSessionStore = create<SessionState>()(
             suggestedTitle: undefined,
             isNavigating: false, // <-- Initial state is false
             isAwaitingAIResponse: false,
+            userRole: null,
+            currentRoomName: null,
 
             // --- Browser tab defaults ---
             tabs: [],
@@ -233,6 +241,8 @@ export const useSessionStore = create<SessionState>()(
             clearSuggestedResponses: () => set({ suggestedResponses: [], suggestedTitle: undefined }),
             setIsNavigating: (isNavigating) => set({ isNavigating }), // <-- Action implementation
             setIsAwaitingAIResponse: (isAwaiting: boolean) => set({ isAwaitingAIResponse: isAwaiting }),
+            setUserRole: (role) => set({ userRole: role }),
+            setCurrentRoomName: (roomName) => set({ currentRoomName: roomName }),
 
             // --- Browser tab actions ---
             addTab: (tab) => set((state) => {

@@ -4,6 +4,7 @@ import { MusicButton } from '@/components/MusicButton';
 import { UploadButton } from '@/components/UploadButton';
 import { MessageButton } from '@/components/MessageButton';
 import { Room } from 'livekit-client';
+import { useSessionStore } from '@/lib/store';
 
 interface FooterProps {
     room?: Room;
@@ -26,6 +27,9 @@ export default function Footer({
     // --- ADD THE PROP TO THE DESTRUCTURING WITH A DEFAULT VALUE ---
     showMusicButton = true,
 }: FooterProps) {
+    // Check if user is a viewer (viewers cannot publish)
+    const userRole = useSessionStore((s) => s.userRole);
+    const isViewer = userRole === 'viewer';
     return (
         <footer className="absolute bottom-[2%] w-full h-[60px] p-4 z-10">
             <div className="relative w-full h-full">
@@ -33,13 +37,23 @@ export default function Footer({
                   className="absolute top-1/2 right-1/2 flex items-center gap-6" 
                   style={{ marginRight: '150px', transform: 'translateY(-50%)' }}
                 >
-                    <UploadButton
-                        isVisible={showUploadButtonInFooter}
-                        onClick={onUploadClick}
-                    />
-                    {/* --- WRAP THE MUSIC BUTTON IN A CONDITIONAL RENDER --- */}
-                    {showMusicButton && <MusicButton />}
-                    <MicButton room={room} agentIdentity={agentIdentity} />
+                    {/* Hide interactive controls for viewers */}
+                    {!isViewer && (
+                        <>
+                            <UploadButton
+                                isVisible={showUploadButtonInFooter}
+                                onClick={onUploadClick}
+                            />
+                            {/* --- WRAP THE MUSIC BUTTON IN A CONDITIONAL RENDER --- */}
+                            {showMusicButton && <MusicButton />}
+                            <MicButton room={room} agentIdentity={agentIdentity} />
+                        </>
+                    )}
+                    {isViewer && (
+                        <div className="text-white/60 text-sm font-medium px-4 py-2 bg-white/10 rounded-full">
+                            Viewer Mode - Watch Only
+                        </div>
+                    )}
                 </div>
                 <div 
                   className="absolute top-1/2 left-1/2" 
