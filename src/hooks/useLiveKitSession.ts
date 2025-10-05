@@ -933,6 +933,137 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         } catch (e) {
           console.error('[B2F RPC] Failed to focus on block:', e);
         }
+      } else if (
+        // SCENE_METADATA - Critical for autoplay engine
+        (ClientUIActionType as any).SCENE_METADATA ?
+          request.actionType === (ClientUIActionType as any).SCENE_METADATA :
+          (request.actionType as number) === 84
+      ) {
+        console.log('[B2F RPC] Handling SCENE_METADATA - Autoplay Engine');
+        const params = request.parameters || {};
+        const metadata = params.metadata || {};
+        
+        // --- THE AUTOPLAY ENGINE ---
+        if (metadata.continue_mode === "AUTO") {
+          console.log('[AUTOPLAY] Signal received. Triggering next scene automatically.');
+          
+          try {
+            const { sessionId, curriculumId, studentId } = useSessionStore.getState();
+            
+            if (!sessionId) {
+              console.error('[AUTOPLAY] Cannot trigger next scene: sessionId not available');
+            } else {
+              const kamikazeUrl = process.env.NEXT_PUBLIC_KAMIKAZE_URL || 'http://localhost:8001';
+              
+              console.log('[AUTOPLAY] Calling kamikaze API for next scene...');
+              
+              fetch(`${kamikazeUrl}/handle_response`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  session_id: sessionId,
+                  student_id: studentId || sessionId,
+                  curriculum_id: curriculumId || 'default',
+                  student_input: null,
+                  student_screenshot_b64: null,
+                }),
+              })
+              .then(response => response.json())
+              .then(data => {
+                console.log('[AUTOPLAY] Next scene triggered successfully:', data);
+              })
+              .catch(error => {
+                console.error('[AUTOPLAY] Failed to trigger next scene:', error);
+              });
+            }
+          } catch (error) {
+            console.error('[AUTOPLAY] Error in autoplay engine:', error);
+          }
+        } else {
+          console.log('[AUTOPLAY] Performance paused. Waiting for user input.');
+        }
+      } else if (
+        // SHOW_MEDIA_ON_FEED - Display images/GIFs in feed
+        (ClientUIActionType as any).SHOW_MEDIA_ON_FEED ?
+          request.actionType === (ClientUIActionType as any).SHOW_MEDIA_ON_FEED :
+          (request.actionType as number) === 80
+      ) {
+        console.log('[B2F RPC] Handling SHOW_MEDIA_ON_FEED');
+        const params = request.parameters || {};
+        
+        try {
+          const mediaBlock = {
+            id: `media_${Date.now()}`,
+            type: 'media',
+            mediaType: params.media_type || 'image',
+            url: params.url || '',
+            caption: params.caption || '',
+            timestamp: new Date().toISOString(),
+          };
+          
+          useSessionStore.getState().addBlock(mediaBlock);
+          console.log('[B2F RPC] Media block added to feed:', mediaBlock);
+        } catch (error) {
+          console.error('[B2F RPC] Failed to add media block:', error);
+        }
+      } else if (
+        // PLAY_AUDIO_SNIPPET - Play expert voice recordings
+        (ClientUIActionType as any).PLAY_AUDIO_SNIPPET ?
+          request.actionType === (ClientUIActionType as any).PLAY_AUDIO_SNIPPET :
+          (request.actionType as number) === 82
+      ) {
+        console.log('[B2F RPC] Handling PLAY_AUDIO_SNIPPET');
+        const params = request.parameters || {};
+        
+        try {
+          const backendUrl = process.env.NEXT_PUBLIC_ONE_BACKEND_URL || 'http://localhost:3001';
+          const audioUrl = `${backendUrl}/api/assets/audio/${params.asset_id}`;
+          
+          const audio = new Audio(audioUrl);
+          
+          if (params.start_time_ms) {
+            audio.currentTime = params.start_time_ms / 1000;
+          }
+          
+          audio.play().catch(err => {
+            console.error('[B2F RPC] Failed to play audio:', err);
+          });
+          
+          if (params.duration_ms) {
+            setTimeout(() => {
+              audio.pause();
+              audio.currentTime = 0;
+            }, params.duration_ms);
+          }
+          
+          console.log('[B2F RPC] Audio snippet playing:', params.asset_id);
+        } catch (error) {
+          console.error('[B2F RPC] Failed to play audio snippet:', error);
+        }
+      } else if (
+        // END_SESSION - Graceful session termination
+        (ClientUIActionType as any).END_SESSION ?
+          request.actionType === (ClientUIActionType as any).END_SESSION :
+          (request.actionType as number) === 83
+      ) {
+        console.log('[B2F RPC] Handling END_SESSION');
+        const params = request.parameters || {};
+        
+        try {
+          const store = useSessionStore.getState();
+          
+          if (store.setSessionEnded) {
+            store.setSessionEnded(true);
+          }
+          
+          if (store.setFinalMessage && params.final_message) {
+            store.setFinalMessage(params.final_message);
+          }
+          
+          console.log('[B2F RPC] Session ended:', params.final_message);
+        } catch (error) {
+          console.error('[B2F RPC] Failed to handle end session:', error);
+        }
       } else {
         if (LIVEKIT_DEBUG) console.log('[B2F RPC] Unknown action type:', request.actionType);
       }

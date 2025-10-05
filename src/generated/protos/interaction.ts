@@ -131,6 +131,16 @@ export enum ClientUIActionType {
   UPDATE_EXCALIDRAW_BLOCK = 202,
   /** FOCUS_ON_BLOCK - Scroll/focus the UI on a particular block */
   FOCUS_ON_BLOCK = 203,
+  /** SHOW_MEDIA_ON_FEED - Cinematic Demo Actions */
+  SHOW_MEDIA_ON_FEED = 80,
+  /** HIGHLIGHT_UI_ELEMENT - Highlight a UI element with glowing border and tooltip */
+  HIGHLIGHT_UI_ELEMENT = 81,
+  /** PLAY_AUDIO_SNIPPET - Play a segment of an audio file (expert voice) */
+  PLAY_AUDIO_SNIPPET = 82,
+  /** END_SESSION - End demo session with final message */
+  END_SESSION = 83,
+  /** SCENE_METADATA - Send scene completion metadata for autoplay engine */
+  SCENE_METADATA = 84,
   UNRECOGNIZED = -1,
 }
 
@@ -328,6 +338,21 @@ export function clientUIActionTypeFromJSON(object: any): ClientUIActionType {
     case 203:
     case "FOCUS_ON_BLOCK":
       return ClientUIActionType.FOCUS_ON_BLOCK;
+    case 80:
+    case "SHOW_MEDIA_ON_FEED":
+      return ClientUIActionType.SHOW_MEDIA_ON_FEED;
+    case 81:
+    case "HIGHLIGHT_UI_ELEMENT":
+      return ClientUIActionType.HIGHLIGHT_UI_ELEMENT;
+    case 82:
+    case "PLAY_AUDIO_SNIPPET":
+      return ClientUIActionType.PLAY_AUDIO_SNIPPET;
+    case 83:
+    case "END_SESSION":
+      return ClientUIActionType.END_SESSION;
+    case 84:
+    case "SCENE_METADATA":
+      return ClientUIActionType.SCENE_METADATA;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -465,6 +490,16 @@ export function clientUIActionTypeToJSON(object: ClientUIActionType): string {
       return "UPDATE_EXCALIDRAW_BLOCK";
     case ClientUIActionType.FOCUS_ON_BLOCK:
       return "FOCUS_ON_BLOCK";
+    case ClientUIActionType.SHOW_MEDIA_ON_FEED:
+      return "SHOW_MEDIA_ON_FEED";
+    case ClientUIActionType.HIGHLIGHT_UI_ELEMENT:
+      return "HIGHLIGHT_UI_ELEMENT";
+    case ClientUIActionType.PLAY_AUDIO_SNIPPET:
+      return "PLAY_AUDIO_SNIPPET";
+    case ClientUIActionType.END_SESSION:
+      return "END_SESSION";
+    case ClientUIActionType.SCENE_METADATA:
+      return "SCENE_METADATA";
     case ClientUIActionType.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
