@@ -1204,6 +1204,24 @@ function TeacherSession() {
                 setStatusMessage('Episode submitted. AI is analyzing...');
                 // eslint-disable-next-line no-console
                 console.log('[TeacherPage] handleSubmitEpisode ✓ submitted via pod');
+                
+                // NEW: Explicitly save setup script if we have setup actions and a current LO
+                if (setupActions.length > 0 && currentLO) {
+                    try {
+                        // eslint-disable-next-line no-console
+                        console.log('[TeacherPage] Saving setup script for LO:', currentLO, 'with', setupActions.length, 'actions');
+                        await saveSetupScript({
+                            curriculum_id: String(curriculumId),
+                            lo_name: currentLO,
+                            actions: setupActions,
+                        });
+                        // eslint-disable-next-line no-console
+                        console.log('[TeacherPage] Setup script saved successfully');
+                    } catch (setupErr: any) {
+                        // eslint-disable-next-line no-console
+                        console.warn('[TeacherPage] Failed to save setup script (non-fatal):', setupErr);
+                    }
+                }
             } catch (postErr: any) {
                 setSubmitError(postErr?.message || 'Failed to submit via pod');
                 setStatusMessage('Submit failed.');
@@ -1232,6 +1250,21 @@ function TeacherSession() {
                         setSubmitMessage('Submitted directly. Processing on server...');
                         setStatusMessage('Episode submitted (direct). AI is analyzing...');
                         console.log('[TeacherPage] Direct submit ✓', { keys: Object.keys(resp || {}) });
+                        
+                        // NEW: Also save setup script in direct fallback path
+                        if (setupActions.length > 0 && currentLO) {
+                            try {
+                                console.log('[TeacherPage] Saving setup script (direct fallback) for LO:', currentLO);
+                                await saveSetupScript({
+                                    curriculum_id: String(curriculumId),
+                                    lo_name: currentLO,
+                                    actions: setupActions,
+                                });
+                                console.log('[TeacherPage] Setup script saved successfully (direct fallback)');
+                            } catch (setupErr: any) {
+                                console.warn('[TeacherPage] Failed to save setup script in direct fallback (non-fatal):', setupErr);
+                            }
+                        }
                     } catch (directErr: any) {
                         console.error('[TeacherPage] Direct submit ✗', directErr);
                     }

@@ -116,13 +116,15 @@ class LiveKitRpcAdapter implements Rpc {
 }
 
 // A single room instance to survive React Strict Mode re-mounts.
-// CRITICAL: Disable adaptive streaming and request maximum quality immediately
+// CRITICAL: Disable ALL adaptive features and force maximum quality
 const roomInstance = new Room({
     adaptiveStream: false,  // No gradual quality ramp-up
     dynacast: false,        // No dynamic casting
     videoCaptureDefaults: {
-        resolution: VideoPresets.h720.resolution,  // Request 720p
+        resolution: VideoPresets.h1080.resolution,  // Request 1080p to match backend
     },
+    // CRITICAL: Disable bandwidth estimation to prevent downscaling
+    e2eeEnabled: false,
 });
 
 // Main hook
@@ -172,6 +174,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const addTab = useSessionStore((s) => s.addTab);
   const removeTab = useSessionStore((s) => s.removeTab);
   const setActiveTabIdInStore = useSessionStore((s) => s.setActiveTabId);
+  // Demo mode actions
+  const setUserRole = useSessionStore((s) => s.setUserRole);
+  const setCurrentRoomName = useSessionStore((s) => s.setCurrentRoomName);
 
   // --- HOOK'S INTERNAL STATE ---
   const [isConnected, setIsConnected] = useState(false);
@@ -252,19 +257,35 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 throw new Error('Missing NEXT_PUBLIC_WEBRTC_TOKEN_URL');
             }
 
+            // *** KEY CHANGE: Check URL for a room to join ***
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomToJoin = urlParams.get('joinRoom');
+
+            if (roomToJoin) {
+                console.log(`[FLOW] Detected joinRoom parameter: ${roomToJoin} - joining as viewer`);
+            }
+
             console.log(`[FLOW] Requesting token+room from ${tokenServiceUrl}/api/generate-room (courseId=${courseId})`);
+            
+            // Build the request body
+            const requestBody: any = {
+                curriculum_id: courseId,
+                spawn_agent: options?.spawnAgent !== false,
+                spawn_browser: options?.spawnBrowser !== false,
+            };
+            
+            // If we have a room to join, include it in the request
+            if (roomToJoin) {
+                requestBody.room_name = roomToJoin;
+            }
+
             const response = await fetch(`${tokenServiceUrl}/api/generate-room`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${clerkToken}`,
                 },
-                body: JSON.stringify({
-                    curriculum_id: courseId,
-                    // Default behavior: spawn both unless explicitly disabled by caller
-                    spawn_agent: options?.spawnAgent !== false,
-                    spawn_browser: options?.spawnBrowser !== false,
-                }),
+                body: JSON.stringify(requestBody),
             });
             
             console.log('[FLOW] Token service response status:', response.status);
@@ -281,6 +302,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             }
 
             const { studentToken: token, livekitUrl: wsUrl, roomName: actualRoomName } = data;
+            
+            // Set user role and room name in store
+            setUserRole(roomToJoin ? 'viewer' : 'presenter');
+            setCurrentRoomName(actualRoomName);
+            console.log(`[FLOW] User role: ${roomToJoin ? 'viewer' : 'presenter'}, Room: ${actualRoomName}`);
+            
             // NEW: capture sessionId immediately if provided by token service
             try {
                 const sid = (data.sessionId as string | null) || null;
@@ -492,6 +519,17 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           });
         }
       } else if (request.actionType === ClientUIActionType.START_LISTENING_VISUAL) {
+        // Check if user is a viewer - viewers cannot publish audio
+        const currentUserRole = useSessionStore.getState().userRole;
+        if (currentUserRole === 'viewer') {
+          console.log('[useLiveKitSession] Viewer mode: ignoring START_LISTENING_VISUAL');
+          return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ 
+            requestId: rpcData.requestId, 
+            success: false,
+            message: 'Viewer cannot publish audio'
+          })).finish());
+        }
+        
         setIsMicEnabled(true);
         // Safety net: ensure pending flag is cleared when backend enables mic
         try { setIsMicActivatingPending(false); } catch {}
@@ -503,6 +541,17 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           setStatusMessages(prev => [...prev.slice(-9), statusMsg]); // Keep last 10 status messages
         }
       } else if (request.actionType === ClientUIActionType.STOP_LISTENING_VISUAL) {
+        // Check if user is a viewer - viewers don't have mic to disable
+        const currentUserRole = useSessionStore.getState().userRole;
+        if (currentUserRole === 'viewer') {
+          console.log('[useLiveKitSession] Viewer mode: ignoring STOP_LISTENING_VISUAL');
+          return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ 
+            requestId: rpcData.requestId, 
+            success: false,
+            message: 'Viewer does not have microphone'
+          })).finish());
+        }
+        
         setIsMicEnabled(false);
         // Disable microphone so user cannot be heard
         if (roomInstance.localParticipant) {
@@ -962,42 +1011,48 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             }
         }
         // Set up microphone but keep it disabled by default
-        try {
-            if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Setting up microphone...');
-            
-            if (roomInstance.localParticipant) {
-                // Enable microphone to set up the track
-                if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Enabling microphone to create track...');
-                await roomInstance.localParticipant.setMicrophoneEnabled(true);
+        // ⭐ CRITICAL: Skip microphone setup for viewers - they cannot publish
+        const currentUserRole = useSessionStore.getState().userRole;
+        if (currentUserRole === 'viewer') {
+            console.log('[useLiveKitSession] Viewer mode: skipping microphone setup');
+        } else {
+            try {
+                if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Setting up microphone...');
                 
-                // Wait a moment for the track to be properly created
-                await new Promise(resolve => setTimeout(resolve, 100));
+                if (roomInstance.localParticipant) {
+                    // Enable microphone to set up the track
+                    if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Enabling microphone to create track...');
+                    await roomInstance.localParticipant.setMicrophoneEnabled(true);
+                    
+                    // Wait a moment for the track to be properly created
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // Now disable it so user can't be heard by default
+                    if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Disabling microphone - user should not be heard by default');
+                    await roomInstance.localParticipant.setMicrophoneEnabled(false);
+                    
+                    // Verify the actual state after disabling
+                    const micTrack = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
+                    const actualMicEnabled = micTrack ? !micTrack.isMuted : false;
+                    if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Microphone setup complete - LiveKit mic state:', {
+                        hasTrack: !!micTrack,
+                        isMuted: micTrack?.isMuted,
+                        actualMicEnabled: actualMicEnabled
+                    });
+                }
+            } catch (error: any) {
+                console.error('[useLiveKitSession] Failed to setup microphone:', error);
                 
-                // Now disable it so user can't be heard by default
-                if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Disabling microphone - user should not be heard by default');
-                await roomInstance.localParticipant.setMicrophoneEnabled(false);
-                
-                // Verify the actual state after disabling
-                const micTrack = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
-                const actualMicEnabled = micTrack ? !micTrack.isMuted : false;
-                if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Microphone setup complete - LiveKit mic state:', {
-                    hasTrack: !!micTrack,
-                    isMuted: micTrack?.isMuted,
-                    actualMicEnabled: actualMicEnabled
-                });
-            }
-        } catch (error: any) {
-            console.error('[useLiveKitSession] Failed to setup microphone:', error);
-            
-            // Provide specific error messages based on the error type
-            if (error.name === 'NotAllowedError' || error.message?.includes('Permission dismissed')) {
-                setConnectionError('Microphone access denied. Please click the microphone icon in your browser\'s address bar and allow microphone permissions, then refresh the page.');
-            } else if (error.name === 'NotFoundError') {
-                setConnectionError('No microphone found. Please connect a microphone and refresh the page.');
-            } else if (error.name === 'NotReadableError') {
-                setConnectionError('Microphone is being used by another application. Please close other apps using the microphone and refresh.');
-            } else {
-                setConnectionError(`Failed to access microphone: ${error.message || 'Unknown error'}. Please check your microphone settings and refresh the page.`);
+                // Provide specific error messages based on the error type
+                if (error.name === 'NotAllowedError' || error.message?.includes('Permission dismissed')) {
+                    setConnectionError('Microphone access denied. Please click the microphone icon in your browser\'s address bar and allow microphone permissions, then refresh the page.');
+                } else if (error.name === 'NotFoundError') {
+                    setConnectionError('No microphone found. Please connect a microphone and refresh the page.');
+                } else if (error.name === 'NotReadableError') {
+                    setConnectionError('Microphone is being used by another application. Please close other apps using the microphone and refresh.');
+                } else {
+                    setConnectionError(`Failed to access microphone: ${error.message || 'Unknown error'}. Please check your microphone settings and refresh the page.`);
+                }
             }
         }
         // We wait for the agent_ready signal before setting isConnected to true

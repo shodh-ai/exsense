@@ -1,6 +1,7 @@
 "use client";
-import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { Track, RemoteTrack, RemoteVideoTrack, RemoteTrackPublication, VideoQuality, RoomEvent, ConnectionState, Room, RemoteParticipant } from 'livekit-client';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Room, RemoteVideoTrack, RemoteTrackPublication, ConnectionState, RemoteParticipant, Track, RemoteTrack, VideoQuality, RoomEvent } from 'livekit-client';
+import { useSessionStore } from '@/lib/store';
 
 declare global {
   interface Window {
@@ -218,6 +219,10 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef<object[]>([]);
+  
+  // Check if user is a viewer (viewers cannot send interactions)
+  const userRole = useSessionStore((s) => s.userRole);
+  const isViewer = userRole === 'viewer';
   const flushingRef = useRef<boolean>(false);
   // Debounce timer for resize events so we don't flood the backend while dragging
   const resizeDebounceTimer = useRef<NodeJS.Timeout | null>(null);
@@ -341,6 +346,13 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    
+    // Viewers cannot send interactions
+    if (isViewer) {
+      console.log("[LiveKitViewer] Viewer mode: click interaction blocked");
+      return;
+    }
+    
     try { containerRef.current?.focus(); } catch {}
     const coords = calculateCoords(event);
     try {
@@ -363,6 +375,13 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
 
   const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
+    
+    // Viewers cannot send interactions
+    if (isViewer) {
+      console.log("[LiveKitViewer] Viewer mode: right-click interaction blocked");
+      return;
+    }
+    
     const coords = calculateCoords(event);
     if (coords) {
       publishOrQueue({ action: 'click', ...coords, button: 'right' });
@@ -371,6 +390,13 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
 
   const handleKeyDown = async (event: React.KeyboardEvent<HTMLDivElement>) => {
     event.preventDefault();
+    
+    // Viewers cannot send interactions
+    if (isViewer) {
+      console.log("[LiveKitViewer] Viewer mode: keyboard interaction blocked");
+      return;
+    }
+    
     const key = event.key;
 
     // Handle Copy & Paste first
