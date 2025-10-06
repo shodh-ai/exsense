@@ -2,20 +2,20 @@
 
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 // Import the specific buttons we need for the new footer
-import { MicButton } from '@/components/MicButton';
+
 import { UploadButton } from '@/components/UploadButton';
-import { MessageButton } from '@/components/MessageButton';
+
 // MODIFICATION: Added Send and RefreshCcw icons
 import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic, ExternalLink, RefreshCcw } from 'lucide-react';
 // Keep other existing imports
 import dynamic from 'next/dynamic';
-import Image from 'next/image';
+
 import { useSessionStore } from '@/lib/store';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { Room } from 'livekit-client';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Sphere from '@/components/Sphere';
+
 import { submitImprintingEpisode, stageAsset, conversationalTurn, conversationalTurnAudio, submitSeed, processSeedDocument, fetchCurriculumDraft, saveSetupScript, finalizeLO } from '@/lib/imprinterService';
 import SeedInput from '@/components/imprinting/SeedInput';
 import CurriculumEditor from '@/components/imprinting/CurriculumEditor';
@@ -164,29 +164,67 @@ function SessionContent({
     onCloseTab,
 }: SessionContentProps) {
     const isAwaitingAIResponse = useSessionStore((s: ReturnType<typeof useSessionStore.getState>) => s.isAwaitingAIResponse);
+    
+    // --- HOVER LOGIC START ---
+    const [isBarVisible, setIsBarVisible] = useState(false);
+    const hideTimer = useRef<NodeJS.Timeout | null>(null);
+
+    const contentShiftDistance = '76px';
+
+    const handleMouseEnter = () => {
+        if (hideTimer.current) {
+            clearTimeout(hideTimer.current);
+            hideTimer.current = null;
+        }
+        setIsBarVisible(true);
+    };
+
+    const handleMouseLeave = () => {
+        hideTimer.current = setTimeout(() => {
+            setIsBarVisible(false);
+        }, 300);
+    };
+
+    useEffect(() => {
+        return () => {
+            if (hideTimer.current) {
+                clearTimeout(hideTimer.current);
+            }
+        };
+    }, []);
+    // --- HOVER LOGIC END ---
+
     return (
-        <div className='w-full h-[90%] flex flex-col items-center justify-between'>
-            <div className="w-full flex justify-center pt-[20px]">
-                <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center">
-                    {componentButtons.map((button) => (
-                        <button
-                            key={button.key}
-                            onClick={button.onClick}
-                            className={`w-[49%] h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${imprintingMode === button.key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
-                        >
-
-                            <img
-                                src={imprintingMode === button.key ? button.activeImagePath : button.inactiveImagePath}
-                                alt={button.label}
-                                className="w-[20px] h-[20px]"
-
-                            />
-                            {button.label}
-                        </button>
-                    ))}
+        // Changed height to h-full to occupy the full container space
+        <div className='w-full h-full flex flex-col items-center relative'>
+            {/* --- HOVER BAR START --- */}
+            <div
+                className="absolute top-0 left-0 right-0 z-20 h-28 flex justify-center items-start group pointer-events-none"
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+            >
+                <div className={`absolute top-0 w-12 h-1.5 bg-gray-400/70 rounded-b-full transition-opacity duration-300 ease-in-out ${isBarVisible ? 'opacity-0' : 'opacity-50 group-hover:opacity-100'}`} />
+                <div className={`absolute top-0 w-full flex justify-center pointer-events-auto transition-all duration-300 ease-in-out ${isBarVisible ? 'translate-y-5 opacity-100' : '-translate-y-full opacity-0'}`}>
+                    <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center backdrop-blur-sm border border-white/10">
+                        {componentButtons.map((button) => (
+                            <button
+                                key={button.key}
+                                onClick={button.onClick}
+                                className={`w-[49%] h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${imprintingMode === button.key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
+                            >
+                                <img
+                                    src={imprintingMode === button.key ? button.activeImagePath : button.inactiveImagePath}
+                                    alt={button.label}
+                                    className="w-[20px] h-[20px]"
+                                />
+                                {button.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
-            
+            {/* --- HOVER BAR END --- */}
+
             <div className="flex-grow relative w-full h-full">
                 {isAwaitingAIResponse && (
                     <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center z-50 animate-fade-in">
@@ -207,7 +245,14 @@ function SessionContent({
                         recordingDuration={conceptualRecordingDuration}
                     />
                 </div>
-                <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full`}>
+
+                {/* --- CONTENT SHIFT LOGIC APPLIED HERE --- */}
+                <div
+                    className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full transition-transform duration-300 ease-in-out`}
+                    style={{
+                        transform: isBarVisible ? `translateY(${contentShiftDistance})` : 'translateY(0px)',
+                    }}
+                >
                     <div className="w-full h-full flex flex-col md:flex-row gap-4">
                         <div className="flex-1 flex flex-col min-h-0">
                             {room ? (
