@@ -1,26 +1,23 @@
 "use client";
 
-import { LinkedinIcon, Copy, Check, Play, Users } from "lucide-react";
+import { LinkedinIcon } from "lucide-react"; // Unused icons removed
 import React, { JSX, useRef, useLayoutEffect, useCallback, useState } from "react";
 
 import { Button } from "@/components/button";
 import { Separator } from "@/components/separator";
-import { useSessionStore } from "@/lib/store";
+// useSessionStore is no longer needed on this page
+import ConfirmationModal from "@/components/ConfirmationModal";
 
 export default function ShodhAiWebsite(): JSX.Element {
   // Refs for DOM elements
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLHeadingElement>(null);
 
-  // State to manage text visibility - start with true to prevent hydration mismatch
+  // State to manage text visibility
   const [isTextVisible, setIsTextVisible] = useState(true);
   
-  // Demo session state
-  const [showDemoModal, setShowDemoModal] = useState(false);
-  const [demoRoomName, setDemoRoomName] = useState<string | null>(null);
-  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
-  const currentRoomName = useSessionStore((s) => s.currentRoomName);
-  const userRole = useSessionStore((s) => s.userRole);
+  // State for the confirmation modal
+  const [isDemoModalOpen, setIsDemoModalOpen] = useState(false);
 
   // Logic for resizing the font
   const fitText = useCallback(() => {
@@ -59,35 +56,21 @@ export default function ShodhAiWebsite(): JSX.Element {
     return () => observer.disconnect();
   }, [fitText]);
 
-  // Generate invite link
-  const generateInviteLink = useCallback(() => {
-    if (!currentRoomName) return '';
-    const baseUrl = window.location.origin;
-    // Use a default demo course ID for the invite
-    const demoCourseId = 'demo_course_01';
-    return `${baseUrl}/session?courseId=${demoCourseId}&joinRoom=${encodeURIComponent(currentRoomName)}`;
-  }, [currentRoomName]);
-
-  // Copy invite link to clipboard
-  const copyInviteLink = useCallback(async () => {
-    const link = generateInviteLink();
-    if (!link) return;
-    
-    try {
-      await navigator.clipboard.writeText(link);
-      setInviteLinkCopied(true);
-      setTimeout(() => setInviteLinkCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy link:', err);
-    }
-  }, [generateInviteLink]);
-
-  // Start demo session
+  // Start demo session - still needed for the modal's confirm action
   const startDemoSession = useCallback(() => {
-    // Navigate to session page with demo course
     const demoCourseId = 'demo_course_01';
     window.location.href = `/session?courseId=${demoCourseId}`;
   }, []);
+
+  // Handlers for the modal
+  const handleDemoClick = () => {
+    setIsDemoModalOpen(true);
+  };
+
+  const handleConfirmDemo = () => {
+    setIsDemoModalOpen(false);
+    startDemoSession();
+  };
 
   // Data for footer and social media
   const footerLinks = [
@@ -110,11 +93,11 @@ export default function ShodhAiWebsite(): JSX.Element {
           <div className="flex justify-between items-center">
             <img className="w-[100px] h-auto sm:w-[150px] sm:h-[36px] lg:w-[190px] lg:h-[45px]" alt="Shodh AI Logo" src="/Frame1.svg" />
             <div className="flex items-center gap-x-2 sm:gap-x-3">
-              {/* <Button className="bg-transparent text-[#000042] rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px] border-[#566FE9] border-[1px] text-[#566FE9]" asChild>
-                <a href="/register">Register</a>
-              </Button> */}
-              <Button className="bg-transparent text-[#566FE9] rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px] border-[#566FE9] border-[1px]" asChild>
-                <a href="/login">Demo</a>
+              <Button 
+                onClick={handleDemoClick}
+                className="bg-transparent text-[#566FE9] rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px] border-[#566FE9] border-[1px]"
+              >
+                Demo
               </Button>
               <Button className="bg-[#566FE9] text-white rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px]" asChild>
                 <a href="/login">Login</a>
@@ -136,74 +119,8 @@ export default function ShodhAiWebsite(): JSX.Element {
               <span className="block tracking-wider">EDUCATION</span>
             </h1>
             
-            {/* Demo Session Card */}
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-6 border border-[#E9EBFD]">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="bg-[#566fe91a] rounded-full p-2">
-                  <Users className="w-5 h-5 text-[#566FE9]" />
-                </div>
-                <h3 className="text-lg font-bold text-[#000042]">Live Demo Session</h3>
-              </div>
-              
-              {!currentRoomName ? (
-                <>
-                  <p className="text-sm text-[#00004280] mb-4">
-                    Start a live demo session and invite viewers to watch your presentation in real-time.
-                  </p>
-                  <Button 
-                    onClick={startDemoSession}
-                    className="w-full bg-[#566FE9] hover:bg-[#4556d8] text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2"
-                  >
-                    <Play className="w-4 h-4" />
-                    Start Demo Session
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <div className="bg-[#f7f9ff] rounded-lg p-3 mb-3">
-                    <p className="text-xs text-[#00004280] mb-1">Your Role</p>
-                    <p className="text-sm font-semibold text-[#000042] capitalize">
-                      {userRole || 'Presenter'}
-                    </p>
-                  </div>
-                  
-                  {userRole === 'presenter' && (
-                    <>
-                      <p className="text-sm text-[#00004280] mb-3">
-                        Share this link with viewers to let them join your session:
-                      </p>
-                      <div className="bg-[#f7f9ff] rounded-lg p-3 mb-3 break-all text-xs text-[#000042] font-mono">
-                        {generateInviteLink()}
-                      </div>
-                      <Button 
-                        onClick={copyInviteLink}
-                        className="w-full bg-[#566FE9] hover:bg-[#4556d8] text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2"
-                      >
-                        {inviteLinkCopied ? (
-                          <>
-                            <Check className="w-4 h-4" />
-                            Link Copied!
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-4 h-4" />
-                            Copy Invite Link
-                          </>
-                        )}
-                      </Button>
-                    </>
-                  )}
-                  
-                  {userRole === 'viewer' && (
-                    <div className="bg-[#f7f9ff] rounded-lg p-4 text-center">
-                      <p className="text-sm text-[#00004280]">
-                        You are viewing this session. Only the presenter can control the demo.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            {/* The entire demo session card has been removed from here */}
+
           </div>
           
           <div className="order-2 lg:order-1 w-full lg:w-4/10 h-full flex justify-center items-center">
@@ -242,6 +159,18 @@ export default function ShodhAiWebsite(): JSX.Element {
             </div>
           </div>
         </footer>
+
+        {/* RENDER the modal conditionally */}
+        <ConfirmationModal
+          isOpen={isDemoModalOpen}
+          onClose={() => setIsDemoModalOpen(false)}
+          onConfirm={handleConfirmDemo}
+          title="Start Demo Session?"
+          message="You are about to be redirected to a live demonstration page. Do you wish to continue?"
+          confirmLabel="Yes, Start Demo"
+          confirmButtonVariant="primary"
+        />
+
       </div>
     </main>
   );
