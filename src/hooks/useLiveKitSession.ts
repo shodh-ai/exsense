@@ -1434,8 +1434,11 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     if (DELETE_ON_UNLOAD) {
       const onUnload = () => { try { isUnloadingRef.current = true; void sendDelete(); } catch {} };
       window.addEventListener('beforeunload', onUnload);
+      // Also handle pagehide (fires on bfcache and mobile Safari backgrounding)
+      window.addEventListener('pagehide', onUnload, { capture: true });
       return () => {
         window.removeEventListener('beforeunload', onUnload);
+        window.removeEventListener('pagehide', onUnload, { capture: true } as any);
         // Do NOT send delete on React unmount/HMR
         if (isUnloadingRef.current) {
           // In the narrow case cleanup runs during a real unload, deletion was already fired above

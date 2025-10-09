@@ -108,6 +108,32 @@ export interface StudentProfile {
   createdAt: number;
 }
 
+// --- Whiteboard Persistence Types ---
+export type WhiteboardBlockType = 'EXCALIDRAW' | 'RRWEB' | 'VIDEO';
+
+export interface WhiteboardBlockDTO {
+  id: string;
+  createdAt: string;
+  order: number;
+  summary: string;
+  type: WhiteboardBlockType;
+  data?: any;
+  eventsUrl?: string | null;
+  videoUrl?: string | null;
+}
+
+export interface WhiteboardSessionDTO {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  isActive: boolean;
+  enrollmentId?: string | null;
+  courseId?: string | null;
+  roomName?: string | null;
+  title?: string | null;
+  blocks?: WhiteboardBlockDTO[];
+}
+
 
 // --- API CLIENT CREATION LOGIC ---
 // (This is your existing apiclient.ts logic, merged here)
@@ -222,6 +248,17 @@ export class ApiService {
   async disableUser(userId: string): Promise<{ id: string; isDisabled: boolean }> { return this.client.patch(`/api/admin/users/${userId}/disable`, {} as any); }
   async getAdminCourses(): Promise<any[]> { return this.client.get('/api/admin/courses'); }
   async getAdminAnalyticsOverview(): Promise<{ users: number; courses: number; enrollments: number; lessons: number }> { return this.client.get('/api/admin/analytics/overview'); }
+
+  // --- Whiteboard persistence API ---
+  async createOrGetWhiteboardSession(payload: { enrollmentId?: string | null; courseId?: string | null; roomName?: string | null; title?: string | null }): Promise<WhiteboardSessionDTO> {
+    return this.client.post('/api/whiteboard/session', payload);
+  }
+  async getWhiteboardSession(sessionId: string): Promise<WhiteboardSessionDTO> {
+    return this.client.get(`/api/whiteboard/session/${sessionId}`);
+  }
+  async addWhiteboardBlock(sessionId: string, block: { type: WhiteboardBlockType; summary: string; order?: number; data?: any; eventsUrl?: string | null; videoUrl?: string | null }): Promise<WhiteboardBlockDTO> {
+    return this.client.post(`/api/whiteboard/session/${sessionId}/blocks`, block as any);
+  }
 }
 
 // --- THE CUSTOM HOOK ---

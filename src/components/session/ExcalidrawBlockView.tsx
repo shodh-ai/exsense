@@ -15,6 +15,8 @@ export interface ExcalidrawBlockViewProps {
 
 const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElements }) => {
   const apiRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const handleAPI = useCallback((api: any) => {
     apiRef.current = api;
   }, []);
@@ -130,9 +132,16 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
     const h = Math.max(0, maxY - minY);
     // Add padding so content has breathing room
     const padded = h + 160;
-    // Clamp for aesthetics (tighter bounds)
-    return Math.max(240, Math.min(600, Math.round(padded)));
+    // Clamp for aesthetics in normal mode; fullscreen uses viewport height
+    const maxNormal = 720;
+    return Math.max(300, Math.min(maxNormal, Math.round(padded)));
   }, [normalized]);
+
+  // Ensure selection tool is active when entering fullscreen (edit mode without toolbar)
+  useEffect(() => {
+    const api = apiRef.current;
+    try { api?.setActiveTool?.({ type: 'selection' }); } catch {}
+  }, [isFullscreen]);
 
   const initialData = useMemo(() => ({
     elements: normalized,
@@ -141,29 +150,83 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
       scrollX: 0,
       scrollY: 0,
       zoom: { value: 1 },
+      activeTool: { type: 'selection' },
     },
   }), [normalized]);
 
-  // Update scene when elements change after mount
+  // Fit content when elements change or when toggling fullscreen
   useEffect(() => {
+    const api = apiRef.current;
+    if (!api) return;
+    const els = normalized;
+    api.updateScene?.({ elements: els });
     try {
-      const api = apiRef.current;
-      if (api && Array.isArray(initialElements)) {
-        const els = normalized;
-        api.updateScene?.({ elements: els });
-        // center content without changing zoom
-        try {
-          if (els?.length && api.scrollToContent) {
-            api.updateScene?.({ appState: { zoom: { value: 1 } } });
-            api.scrollToContent(els, { fitToContent: false, animate: false });
-          }
-        } catch {}
+      if (els?.length && api.scrollToContent) {
+        // In fullscreen, fit to content; in normal mode, center without overscaling
+        const fit = isFullscreen ? true : true;
+        api.updateScene?.({ appState: { zoom: { value: 1 } } });
+        api.scrollToContent(els, { fitToContent: fit, animate: false, padding: 40 });
       }
     } catch {}
-  }, [initialElements, normalized]);
+  }, [initialElements, normalized, isFullscreen]);
+
+  // Re-fit on window resize for better responsiveness
+  useEffect(() => {
+    const onResize = () => {
+      const api = apiRef.current;
+      if (!api) return;
+      try {
+        const els = normalized;
+        if (els?.length && api.scrollToContent) {
+          api.scrollToContent(els, { fitToContent: true, animate: false, padding: 40 });
+        }
+      } catch {}
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [normalized]);
+
+  // Re-fit when container dimensions change
+  useEffect(() => {
+    const api = apiRef.current;
+    const el = containerRef.current;
+    if (!api || !el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      try {
+        const els = normalized;
+        if (els?.length && api.scrollToContent) {
+          api.scrollToContent(els, { fitToContent: true, animate: false, padding: 40 });
+        }
+      } catch {}
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [normalized]);
 
   return (
-    <div style={{ height: computedHeight, width: "100%", background: "transparent", pointerEvents: 'none' }}>
+    <div ref={containerRef} style={{ position: 'relative', height: isFullscreen ? 'calc(100vh - 32px)' : computedHeight, width: '100%', background: 'transparent' }}>
+      {/* Maximize / Restore button */}
+      <button
+        type="button"
+        onClick={() => setIsFullscreen((v) => !v)}
+        title={isFullscreen ? 'Exit full screen' : 'Maximize'}
+        style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          zIndex: 10,
+          padding: '6px 10px',
+          borderRadius: 8,
+          border: '1px solid rgba(255,255,255,0.2)',
+          background: 'rgba(17,25,40,0.75)',
+          color: '#fff',
+          fontSize: 12,
+          cursor: 'pointer'
+        }}
+      >
+        {isFullscreen ? 'Exit Fullscreen' : 'Maximize'}
+      </button>
+
       <Excalidraw
         excalidrawAPI={handleAPI}
         theme="light"
@@ -182,7 +245,7 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
             image: false,
           },
         }}
-        viewModeEnabled={true}
+        viewModeEnabled={!isFullscreen}
         zenModeEnabled={false}
         gridModeEnabled={false}
         initialData={initialData as any}
