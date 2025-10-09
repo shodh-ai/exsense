@@ -13,8 +13,8 @@ type ApiClientOptions = {
 export class ApiError extends Error {
   status: number;
   retryAfter?: number; // seconds, if provided by server
-  data?: any;
-  constructor(message: string, status: number, retryAfter?: number, data?: any) {
+  data?: unknown;
+  constructor(message: string, status: number, retryAfter?: number, data?: unknown) {
       super(message);
       this.name = 'ApiError';
       this.status = status;

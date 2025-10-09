@@ -11,14 +11,13 @@ export async function submitImprintingEpisode(payload: {
   curriculum_id?: string;
   narration: string;
   audio_b64: string;
-  expert_actions: any[];
+  expert_actions: unknown[];
   current_lo?: string;
-  modified_files?: any[];
-  staged_assets?: any[];
+  modified_files?: unknown[];
+  staged_assets?: unknown[];
   in_response_to_question?: string;
 }) {
   const url = `${IMPRINTER_URL}/session/imprint_episode`;
-  // eslint-disable-next-line no-console
   console.log('[imprinterService] submitImprintingEpisode →', {
     url,
     payloadKeys: Object.keys(payload || {}),
@@ -38,12 +37,10 @@ export async function submitImprintingEpisode(payload: {
   if (!response.ok) {
     let errorText = '';
     try { errorText = await response.text(); } catch {}
-    // eslint-disable-next-line no-console
     console.error('[imprinterService] submitImprintingEpisode ✗', { status: response.status, errorText });
     throw new Error(`Failed to submit episode (${response.status})`);
   }
   const json = await response.json();
-  // eslint-disable-next-line no-console
   console.log('[imprinterService] submitImprintingEpisode ✓', { status: response.status, keys: Object.keys(json || {}) });
   return json;
 }
@@ -153,7 +150,7 @@ export async function updateNode(payload: {
   curriculum_id: string;
   node_type: 'LO' | 'Concept';
   old_name: string;
-  new_data: any;
+  new_data: Record<string, unknown>;
 }) {
   const response = await fetch(`${IMPRINTER_URL}/curriculum/update_node`, {
     method: 'POST',
@@ -167,7 +164,7 @@ export async function updateNode(payload: {
 export async function createNode(payload: {
   curriculum_id: string;
   node_type: 'LO' | 'Concept' | 'WorkflowStep';
-  new_data: any;
+  new_data: Record<string, unknown>;
 }) {
   const response = await fetch(`${IMPRINTER_URL}/curriculum/create_node`, {
     method: 'POST',
@@ -207,7 +204,7 @@ export async function finalizeLO(payload: { curriculum_id: string; lo_name: stri
 export async function saveSetupScript(payload: {
   curriculum_id: string;
   lo_name: string;
-  actions: any[];
+  actions: unknown[];
 }) {
   const response = await fetch(`${IMPRINTER_URL}/curriculum/lo/setup_script`, {
     method: 'POST',

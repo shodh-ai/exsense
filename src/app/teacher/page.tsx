@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 // Import the specific buttons we need for the new footer
 
 import { UploadButton } from '@/components/UploadButton';
@@ -15,6 +15,7 @@ import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { Room } from 'livekit-client';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
+import type { ReadonlyURLSearchParams } from 'next/navigation';
 
 import { submitImprintingEpisode, stageAsset, conversationalTurn, conversationalTurnAudio, submitSeed, processSeedDocument, fetchCurriculumDraft, saveSetupScript, finalizeLO } from '@/lib/imprinterService';
 import SeedInput from '@/components/imprinting/SeedInput';
@@ -516,8 +517,8 @@ const TeacherFooter = ({
     );
 };
 
-// Renamed TeacherSession to TeacherPage and made it the default export
-export default function TeacherPage() {
+// Component that uses useSearchParams - must be wrapped in Suspense
+function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchParams }) {
     // --- MOCK BACKEND FLAG ---
     const MOCK_BACKEND = (process.env.NEXT_PUBLIC_MOCK_BACKEND ?? 'false') === 'true';
     // eslint-disable-next-line no-console
@@ -529,7 +530,6 @@ export default function TeacherPage() {
     const handleIntroComplete = () => setIsIntroActive(false);
     const { user, isSignedIn, isLoaded } = useUser();
     const router = useRouter();
-    const searchParams = useSearchParams();
     // --- NEW: Track active environment for recording/imprinting ---
     const [imprintingEnvironment, setImprintingEnvironment] = useState<'browser' | 'vscode'>('browser');
     const SESSION_DEBUG = false;
@@ -1513,5 +1513,27 @@ export default function TeacherPage() {
                 </div>
             )}
         </>
+    );
+}
+
+// Wrapper component that handles useSearchParams
+function TeacherPageWithParams() {
+    const searchParams = useSearchParams();
+    return <TeacherPageContent searchParams={searchParams} />;
+}
+
+// Main export with Suspense boundary
+export default function TeacherPage() {
+    return (
+        <Suspense fallback={
+            <div className="w-full h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading teacher session...</p>
+                </div>
+            </div>
+        }>
+            <TeacherPageWithParams />
+        </Suspense>
     );
 }

@@ -46,7 +46,7 @@ async function uploadToCloudStorage(fileBuffer: Buffer, fileName: string): Promi
 // The main handler for the POST request
 export async function POST(
   req: NextRequest,
-  { params }: { params: { courseId: string } }
+  { params }: { params: Promise<{ courseId: string }> }
 ) {
   try {
     // 1. Authenticate the request using Clerk
@@ -55,7 +55,8 @@ export async function POST(
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    const courseId = params.courseId;
+    // Await params in Next.js 15+
+    const { courseId } = await params;
     if (!courseId) {
         return NextResponse.json({ message: 'Course ID is required' }, { status: 400 });
     }
