@@ -1217,6 +1217,8 @@ export default function TeacherPage() {
                 setStatusMessage('Episode submitted. AI is analyzing...');
                 console.log('[TeacherPage] handleSubmitEpisode ✓ submitted via pod');
                 
+            
+                // NEW: Explicitly save setup script if we have setup actions and a current LO
                 if (setupActions.length > 0 && currentLO) {
                     try {
                         console.log('[TeacherPage] Saving setup script for LO:', currentLO, 'with', setupActions.length, 'actions');
