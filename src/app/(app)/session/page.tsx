@@ -57,6 +57,19 @@ interface SessionContentProps {
 
 function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab }: SessionContentProps) {
     const whiteboardBlocks = useSessionStore((s) => s.whiteboardBlocks);
+    // Auto-focus newest whiteboard block when list changes
+    useEffect(() => {
+        if (!whiteboardBlocks?.length) return;
+        const lastId = whiteboardBlocks[whiteboardBlocks.length - 1]?.id;
+        if (!lastId) return;
+        const scroll = () => {
+            const el = document.getElementById(lastId);
+            if (el) {
+                try { el.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' }); } catch {}
+            }
+        };
+        if (typeof window !== 'undefined') requestAnimationFrame(scroll);
+    }, [whiteboardBlocks?.length]);
     return (
         <div className='w-full h-full flex flex-col'>
             <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
@@ -392,6 +405,8 @@ export default function Session() {
     }, [shouldInitializeLiveKit, roomName, currentRoomName, courseId, apiService, wbSessionId, setBlocks]);
 
     
+    
+
     // LiveKit-only: no per-session URLs or legacy VNC state required
     if (SESSION_DEBUG) console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 

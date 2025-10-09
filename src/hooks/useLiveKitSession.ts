@@ -115,17 +115,15 @@ class LiveKitRpcAdapter implements Rpc {
   }
 }
 
-// A single room instance to survive React Strict Mode re-mounts.
-// CRITICAL: Disable ALL adaptive features and force maximum quality
-const roomInstance = new Room({
-    adaptiveStream: false,  // No gradual quality ramp-up
-    dynacast: false,        // No dynamic casting
-    videoCaptureDefaults: {
-        resolution: VideoPresets.h1080.resolution,  // Request 1080p to match backend
-    },
-    // CRITICAL: Disable bandwidth estimation to prevent downscaling
-    e2eeEnabled: false,
-});
+ // A single room instance to survive React Strict Mode re-mounts.
+ // CRITICAL: Disable ALL adaptive features and force maximum quality
+ const roomInstance = new Room({
+     adaptiveStream: false,  // No gradual quality ramp-up
+     dynacast: false,        // No dynamic casting
+     videoCaptureDefaults: {
+         resolution: VideoPresets.h1080.resolution,  // Request 1080p to match backend
+     },
+ });
 
 // Main hook
 export interface UseLiveKitSessionReturn {

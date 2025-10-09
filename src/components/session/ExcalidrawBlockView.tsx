@@ -17,9 +17,6 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
   const apiRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const handleAPI = useCallback((api: any) => {
-    apiRef.current = api;
-  }, []);
 
   // Normalize incoming elements so Excalidraw doesn't crash on missing fields
   const normalizeElements = useCallback((els: any[]): any[] => {
@@ -154,54 +151,57 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
     },
   }), [normalized]);
 
+  // Helper: fit content into current container
+  const fitNow = useCallback(() => {
+    const api = apiRef.current;
+    const els = normalized;
+    if (!api || !els?.length) return;
+    try {
+      api.updateScene?.({ appState: { zoom: { value: 1 } } });
+      api.scrollToContent(els, { fitToContent: true, animate: false, padding: 40 });
+    } catch {}
+  }, [normalized]);
+
+  // When API becomes available, immediately fit
+  const handleAPI = useCallback((api: any) => {
+    apiRef.current = api;
+    if (typeof window !== 'undefined') {
+      requestAnimationFrame(() => fitNow());
+    }
+  }, [fitNow]);
+
   // Fit content when elements change or when toggling fullscreen
   useEffect(() => {
     const api = apiRef.current;
     if (!api) return;
-    const els = normalized;
-    api.updateScene?.({ elements: els });
-    try {
-      if (els?.length && api.scrollToContent) {
-        // In fullscreen, fit to content; in normal mode, center without overscaling
-        const fit = isFullscreen ? true : true;
-        api.updateScene?.({ appState: { zoom: { value: 1 } } });
-        api.scrollToContent(els, { fitToContent: fit, animate: false, padding: 40 });
-      }
-    } catch {}
-  }, [initialElements, normalized, isFullscreen]);
+    api.updateScene?.({ elements: normalized });
+    fitNow();
+  }, [initialElements, normalized, isFullscreen, fitNow]);
 
   // Re-fit on window resize for better responsiveness
   useEffect(() => {
     const onResize = () => {
-      const api = apiRef.current;
-      if (!api) return;
-      try {
-        const els = normalized;
-        if (els?.length && api.scrollToContent) {
-          api.scrollToContent(els, { fitToContent: true, animate: false, padding: 40 });
-        }
-      } catch {}
+      fitNow();
     };
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [normalized]);
+  }, [fitNow]);
 
   // Re-fit when container dimensions change
   useEffect(() => {
-    const api = apiRef.current;
     const el = containerRef.current;
-    if (!api || !el || typeof ResizeObserver === 'undefined') return;
+    if (!el || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(() => {
-      try {
-        const els = normalized;
-        if (els?.length && api.scrollToContent) {
-          api.scrollToContent(els, { fitToContent: true, animate: false, padding: 40 });
-        }
-      } catch {}
+      fitNow();
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [normalized]);
+  }, [fitNow]);
+
+  // Re-fit when computed height changes (e.g., container grows due to content)
+  useEffect(() => {
+    fitNow();
+  }, [computedHeight, fitNow]);
 
   return (
     <div ref={containerRef} style={{ position: 'relative', height: isFullscreen ? 'calc(100vh - 32px)' : computedHeight, width: '100%', background: 'transparent' }}>
