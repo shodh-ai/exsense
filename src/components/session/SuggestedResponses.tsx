@@ -13,41 +13,48 @@ interface SuggestedResponsesProps {
   onSelect: (suggestion: SuggestedResponseItem) => void | Promise<void>;
 }
 
-export default function SuggestedResponses({ onSelect }: SuggestedResponsesProps) {
+// The component is renamed to better reflect its new design, but you can keep the original name.
+export default function InteractivePrompt({ onSelect }: SuggestedResponsesProps) {
   const suggestedResponses = useSessionStore((s) => s.suggestedResponses);
-  const suggestedTitle = useSessionStore((s) => s.suggestedTitle);
-  const clearSuggestedResponses = useSessionStore((s) => s.clearSuggestedResponses);
+  // This is now used for the main question text.
+  const promptText = useSessionStore((s) => s.suggestedTitle); 
 
-  // Debugging: log when suggestions change
+  // Debugging logic remains the same.
   useEffect(() => {
     if (suggestedResponses && suggestedResponses.length > 0) {
       console.log("[UI] SuggestedResponses visible:", {
         count: suggestedResponses.length,
-        title: suggestedTitle,
+        title: promptText,
         items: suggestedResponses,
       });
     } else {
       console.log("[UI] SuggestedResponses hidden (no items)");
     }
-  }, [suggestedResponses, suggestedTitle]);
+  }, [suggestedResponses, promptText]);
 
   if (!suggestedResponses || suggestedResponses.length === 0) return null;
 
   return (
-    <div className="pointer-events-auto fixed bottom-36 md:bottom-28 left-1/2 -translate-x-1/2 z-20 w-[92%] md:w-[720px]">
-      <div className="rounded-2xl border border-white/10 bg-[#0B1021]/80 backdrop-blur-md shadow-xl p-3 md:p-4">
-        {suggestedTitle && (
-          <div className="flex items-start justify-between mb-2 md:mb-3">
-            <h3 className="text-sm md:text-base font-semibold text-white/90">{suggestedTitle}</h3>
-            <button
-              className="text-xs text-white/60 hover:text-white/90 transition"
-              onClick={clearSuggestedResponses}
-            >
-              Dismiss
-            </button>
+    // --- STYLING CHANGES FOR THE MAIN CONTAINER ---
+    // Removed fixed positioning classes.
+    // Changed background to white, added a larger shadow and padding.
+    <div className="w-full max-w-2xl mx-auto">
+      <div className="rounded-2xl bg-white shadow-lg p-5 md:p-6">
+        
+        {/* --- STYLING CHANGES FOR THE PROMPT TEXT --- */}
+        {/* The title is now styled as the main question. */}
+        {/* The "Dismiss" button has been removed. */}
+        {promptText && (
+          <div className="mb-4">
+            <h3 className="text-base md:text-lg font-semibold text-slate-800 text-center">
+              {promptText}
+            </h3>
           </div>
         )}
-        <div className="flex flex-wrap gap-2 md:gap-3">
+
+        {/* --- STYLING CHANGES FOR THE BUTTONS --- */}
+        {/* Buttons now have a light background and dark blue text to match the image. */}
+        <div className="flex flex-wrap justify-center gap-2 md:gap-3">
           {suggestedResponses.map((s, idx) => {
             const safeId = (s.id && s.id.trim().length > 0) ? s.id : `ui_${Date.now()}_${idx}`;
             return (
@@ -58,7 +65,8 @@ export default function SuggestedResponses({ onSelect }: SuggestedResponsesProps
                   console.log("[UI] SuggestedResponse clicked:", payload);
                   onSelect(payload);
                 }}
-                className="px-3 md:px-4 py-2 rounded-full bg-[#566FE9]/20 hover:bg-[#566FE9]/30 text-[#E7EAFF] text-xs md:text-sm font-medium border border-[#566FE9]/30 transition"
+                // Updated classes for the new button style
+                className="px-4 py-2 rounded-full bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-sm font-medium transition-colors"
                 title={s.reason || s.text}
               >
                 {s.text}
