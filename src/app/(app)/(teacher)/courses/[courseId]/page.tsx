@@ -32,7 +32,7 @@ const StarRating = ({ rating }: { rating: number }) => (
 const CourseHeader = ({ courseId, status, onStatusChange }: { courseId: string, status?: 'DRAFT' | 'PUBLISHED', onStatusChange: (newStatus: 'DRAFT' | 'PUBLISHED') => void }) => {
     const isPublished = status === 'PUBLISHED';
     return (
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <div className="flex items-center gap-3">
                 <h2 className="text-base font-semibold text-[#394169]">Course Overview</h2>
                 {status && (
@@ -45,7 +45,7 @@ const CourseHeader = ({ courseId, status, onStatusChange }: { courseId: string, 
                 <Button asChild>
                     <Link href={`/courses/${courseId}/edit`}>Edit Curriculum</Link>
                 </Button>
-                <Button 
+                <Button
                     variant={isPublished ? "destructive" : "default"}
                     onClick={() => onStatusChange(isPublished ? 'DRAFT' : 'PUBLISHED')}
                 >
@@ -60,7 +60,7 @@ const CourseBanner = ({ imageUrl }: { imageUrl?: string }) => (<div className="f
 const CourseIntroduction = ({ tags, title, description }: { tags: string[], title: string, description: string }) => (
   <section className="flex flex-col gap-3">
     <div className="flex flex-wrap gap-2">{tags.map((tag) => (<Badge key={tag} variant="outline" className="rounded-[30px] h-[32px] bg-[#566fe91a] px-4 py-2font-medium text-[#566fe9] border-0">{tag}</Badge>))}</div>
-    <div className="flex flex-col gap-4"><h1 className="text-2xl font-bold leading-tight text-[#394169] md:text-[28px] md:leading-[33.6px]">{title}</h1><p className="text-base text-[16px] font-semibold leading-6 text-[#394169]">{description}</p></div>
+    <div className="flex flex-col gap-2"><h1 className="text-2xl font-bold leading-tight text-[#394169] md:text-[28px] md:leading-[33.6px]">{title}</h1><p className="text-base text-[16px] font-semibold leading-6 text-[#394169]">{description}</p></div>
   </section>
 );
 const CourseAnalyticsSection = ({ details, courseId, unresolvedDoubts }: { details: CourseDetail[], courseId: string, unresolvedDoubts: number }) => (
@@ -98,7 +98,7 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
   </section>
 );
 const Breadcrumb = ({ courseTitle }: { courseTitle?: string }) => (
-  <div className="flex items-center text-sm text-gray-500"><a href="/teacher-dash" className="flex items-center hover:underline"><svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>Dashboard</a><span className="mx-2">·</span><span className="text-gray-800">{courseTitle || 'Course Overview'}</span></div>
+  <div className="flex items-center text-sm text-gray-500"><a href="/teacher-dash" className="flex items-center hover:underline"><svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>Dashboard</a><span className="mx-1">·</span><span className="text-gray-800">{courseTitle || 'Course Overview'}</span></div>
 );
 
 // --- MAIN PAGE COMPONENT ---
@@ -155,10 +155,24 @@ export default function TeacherCoursePage(): JSX.Element {
       { icon: "/assignment.svg", label: "Assignments", value: `${course.lessonCount || 0}` },
     ];
   }, [course]);
+  
+  // --- MODIFIED LOADING AND ERROR HANDLING ---
 
-  if (isLoading) return <div className="p-8 text-center text-lg">Loading Course Data...</div>;
-  if (error) return <div className="p-8 text-center text-red-500">Error: Failed to load course data.</div>;
-  if (!course) return <div className="p-8 text-center">Course not found.</div>;
+  // If data is still loading, render nothing.
+  // This allows the global loader to be the only thing visible.
+  if (isLoading) {
+    return <></>; // or return null;
+  }
+
+  // If an error occurred, show an error message.
+  if (error) {
+    return <div className="p-8 text-center text-red-500">Error: Failed to load course data.</div>;
+  }
+
+  // If loading is finished and there is still no course, then show "Course not found".
+  if (!course) {
+    return <div className="p-8 text-center">Course not found.</div>;
+  }
   
   return (
     <>
@@ -166,9 +180,9 @@ export default function TeacherCoursePage(): JSX.Element {
       <div className="flex h-full w-full flex-col font-sans text-gray-900">
         <main className="flex-grow overflow-y-auto">
           <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
-            <div className="mx-auto flex w-full max-w-[80%] flex-col gap-10 md:gap-12">
-              <Breadcrumb courseTitle={course.title} />
+            <div className="mx-auto flex w-full max-w-[80%] flex-col gap-24 md:gap-12">
               <div className="flex flex-col gap-6">
+                <Breadcrumb courseTitle={course.title} />
                 <CourseHeader courseId={course.id} status={course.status} onStatusChange={handleStatusChange} />
                 <CourseBanner imageUrl={course.imageUrl} />
               </div>

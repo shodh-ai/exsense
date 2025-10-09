@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useSessionStore } from '@/lib/store';
-import { Plus as PlusIcon, X as XIcon } from 'lucide-react';
+import { Plus as PlusIcon, X as XIcon, ChevronLeft, ChevronRight, RefreshCw as RotateCwIcon } from 'lucide-react';
 
 // A simple dialog for getting the new tab info
 const NewTabDialog = ({ onClose, onSubmit }: { onClose: () => void, onSubmit: (name: string, url: string) => void }) => {
@@ -48,42 +48,76 @@ const NewTabDialog = ({ onClose, onSubmit }: { onClose: () => void, onSubmit: (n
   );
 };
 
-// The main TabManager component
+
+// The main TabManager component updated with the new UI
 export const TabManager = ({ onSwitchTab, onOpenNewTab, onCloseTab }: { onSwitchTab: (id: string) => void, onOpenNewTab: (name: string, url: string) => void, onCloseTab: (id: string) => void }) => {
   const tabs = useSessionStore((s) => s.tabs);
   const activeTabId = useSessionStore((s) => s.activeTabId);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
+  const handleOpenNewTab = (name: string, url: string) => {
+    onOpenNewTab(name, url);
+    setIsDialogOpen(false); // Close dialog after submitting
+  };
+  
   return (
     <>
-      <div className="flex items-center bg-gray-200/80 px-2 py-1 flex-shrink-0 border-b border-gray-300">
-        {tabs.map(tab => (
-          <div
-            key={tab.id}
-            onClick={() => onSwitchTab(tab.id)}
-            className={`flex items-center gap-2 cursor-pointer px-4 py-1.5 text-sm rounded-t-md border-b-2 ${
-              activeTabId === tab.id
-                ? 'bg-white font-semibold border-[#566FE9]'
-                : 'bg-gray-100/50 hover:bg-gray-100 border-transparent'
-            }`}
-          >
-            <span>{tab.name}</span>
-            {/* Add a close button if needed */}
-            {tabs.length > 1 && (
-              <button onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }} className="p-0.5 rounded-full hover:bg-red-100 text-red-500">
-                <XIcon size={14} />
-              </button>
-            )}
-          </div>
-        ))}
-        <button onClick={() => setIsDialogOpen(true)} className="ml-2 flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-md hover:bg-gray-300" aria-label="Open new tab">
-          <PlusIcon size={18} />
+      <nav className="flex w-full max-w-full items-center gap-3 pl-2 pr-1 py-1 bg-[#e9ebfd] rounded-lg">
+        {/* Navigation Buttons */}
+        <div className="relative flex-[0_0_auto] inline-flex items-center">
+          <button className="h-auto gap-2.5 p-2 flex-[0_0_auto] bg-[#e9ebfd] hover:bg-[#d9dbf0] rounded-[100px]">
+            <ChevronLeft className="w-4 h-4 text-[#566fe9]" />
+          </button>
+          <button className="h-auto gap-2.5 p-2 flex-[0_0_auto] bg-[#e9ebfd] hover:bg-[#d9dbf0] rounded-[100px]">
+            <ChevronRight className="w-4 h-4 text-[#566fe9]" />
+          </button>
+          <button className="h-auto gap-2.5 p-2 flex-[0_0_auto] bg-[#e9ebfd] hover:bg-[#d9dbf0] rounded-[100px]">
+            <RotateCwIcon className="w-4 h-4 text-[#566fe9]" />
+          </button>
+        </div>
+
+        {/* Tabs Container */}
+        <div className="gap-1 relative flex items-center overflow-x-auto">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => onSwitchTab(tab.id)}
+              className={`h-auto flex w-[210px] pl-3 pr-2 py-2 items-center gap-2 rounded-[100px] transition-colors flex-shrink-0 ${
+                activeTabId === tab.id
+                  ? "bg-[#566fe9] hover:bg-[#4a5fd0] text-white"
+                  : "bg-white hover:bg-[#f5f6ff] text-[#566fe9]"
+              }`}
+            >
+              <span className="flex-1 text-left text-sm truncate">
+                {tab.name}
+              </span>
+              {/* Show close icon only if it's the active tab and there's more than one tab */}
+              {tabs.length > 1 && (
+                <button
+                    onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
+                    className="p-0.5 rounded-full"
+                >
+                    <XIcon className="w-4 h-4" />
+                </button>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Add New Tab Button */}
+        <button
+          onClick={() => setIsDialogOpen(true)}
+          className="h-auto inline-flex p-2 flex-[0_0_auto] bg-white hover:bg-[#f5f6ff] items-center gap-2 rounded-[100px]"
+        >
+          <PlusIcon className="w-4 h-4 text-[#566fe9]" />
         </button>
-      </div>
+      </nav>
+
+      {/* Dialog for new tab */}
       {isDialogOpen && (
         <NewTabDialog
           onClose={() => setIsDialogOpen(false)}
-          onSubmit={onOpenNewTab}
+          onSubmit={handleOpenNewTab}
         />
       )}
     </>

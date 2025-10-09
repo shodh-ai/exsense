@@ -57,6 +57,40 @@ interface SessionContentProps {
 
 function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab }: SessionContentProps) {
     const whiteboardBlocks = useSessionStore((s) => s.whiteboardBlocks);
+    const [isBarVisible, setIsBarVisible] = useState(false);
+    const hideTimer = useRef<NodeJS.Timeout | null>(null); // Ref to hold the timer
+
+    // The vertical distance the content needs to shift down.
+    const contentShiftDistance = '76px';
+
+    // --- NEW HOVER LOGIC ---
+    const handleMouseEnter = () => {
+        // If there's a timer to hide the bar, cancel it
+        if (hideTimer.current) {
+            clearTimeout(hideTimer.current);
+            hideTimer.current = null;
+        }
+        setIsBarVisible(true);
+    };
+
+    const handleMouseLeave = () => {
+        // Set a timer to hide the bar after a short delay (300ms)
+        hideTimer.current = setTimeout(() => {
+            setIsBarVisible(false);
+        }, 300);
+    };
+
+    // Clean up the timer if the component unmounts
+    useEffect(() => {
+        return () => {
+            if (hideTimer.current) {
+                clearTimeout(hideTimer.current);
+            }
+        };
+    }, []);
+    // --- END NEW HOVER LOGIC ---
+
+
     // Auto-focus newest whiteboard block when list changes
     useEffect(() => {
         if (!whiteboardBlocks?.length) return;
@@ -71,28 +105,53 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
         if (typeof window !== 'undefined') requestAnimationFrame(scroll);
     }, [whiteboardBlocks?.length]);
     return (
-        <div className='w-full h-full flex flex-col'>
-            <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
-                <div className="p-0 w-full md:w-1/2 lg/w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center gap-2 px-1">
-                    {componentButtons.map(({ key, label, inactiveImagePath, activeImagePath }) => (
-                        <button
-                            key={key}
-                            onClick={() => setActiveView(key)}
-                            className={`flex-1 h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
-                        >
-                            <img src={activeView === key ? activeImagePath : inactiveImagePath} alt={label} className="w-[20px] h-[20px]" />
-                            {label}
-                        </button>
-                    ))}
+        <div className='w-full h-full flex flex-col relative'>
+            {/* Hover-activated navigation bar container */}
+            <div
+                className="absolute top-0 left-0 right-0 z-20 h-28 flex justify-center items-start group pointer-events-none"
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+            >
+                {/* Visual Cue "Handle" - indicates where to hover */}
+                <div
+                    className={`
+                        absolute top-0 w-12 h-1.5 bg-gray-400/70 rounded-b-full
+                        transition-opacity duration-300 ease-in-out
+                        ${isBarVisible ? 'opacity-0' : 'opacity-50 group-hover:opacity-100'}
+                    `}
+                />
+
+                {/* Animated container for the bar */}
+                <div
+                    className={`
+                        absolute top-0 w-full flex justify-center pointer-events-auto
+                        transition-all duration-300 ease-in-out
+                        ${isBarVisible ? 'translate-y-5 opacity-100' : '-translate-y-full opacity-0'}
+                    `}
+                >
+                    {/* The actual bar with original sizing and styling */}
+                    <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center gap-2 px-1 backdrop-blur-sm border border-white/10">
+                        {componentButtons.map(({ key, label, inactiveImagePath, activeImagePath }) => (
+                            <button
+                                key={key}
+                                onClick={() => setActiveView(key)}
+                                className={`flex-1 h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
+                            >
+                                <img src={activeView === key ? activeImagePath : inactiveImagePath} alt={label} className="w-[20px] h-[20px]" />
+                                {label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
             {/* Whiteboard feed view and other views */}
             <div className="flex-1 w-full overflow-hidden" style={{ minHeight: 0, paddingBottom: '8.5rem' }}>
                 <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full relative overflow-y-auto`}>
+                    {/* Whiteboard content remains unchanged, it doesn't need to shift */}
                     <div className="max-w-5xl mx-auto w-full px-4 py-4 space-y-8">
                         {whiteboardBlocks.length === 0 && (
-                            <div className="text-center text-gray-400">Whiteboard feed is empty.</div>
+                            <div className="text-center text-gray-400 pt-10">Whiteboard feed is empty.</div>
                         )}
                         {whiteboardBlocks.map((block) => (
                             <div key={block.id} id={block.id} className="rounded-xl overflow-hidden border border-white/10 bg-transparent shadow-sm">
@@ -110,16 +169,16 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                                 <div className="px-3 pb-3 pt-1 select-none flex items-center justify-center gap-2 text-gray-600">
                                   <img
                                     src={
-                                      block.type === 'excalidraw' ? '/whiteboard-inactive.svg' : 
-                                      block.type === 'video' ? '/video-inactive.svg' : 
+                                      block.type === 'excalidraw' ? '/whiteboard-inactive.svg' :
+                                      block.type === 'video' ? '/video-inactive.svg' :
                                       '/video-inactive.svg'
                                     }
                                     alt="block icon"
                                     className="w-4 h-4 opacity-90"
                                   />
                                   <span className="text-xs leading-5">
-                                    {(block as any).summary || 
-                                      (block.type === 'excalidraw' ? 'Whiteboard' : 
+                                    {(block as any).summary ||
+                                      (block.type === 'excalidraw' ? 'Whiteboard' :
                                        block.type === 'video' ? 'Video' : 'Replay')}
                                   </span>
                                 </div>
@@ -132,7 +191,16 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                         </div>
                     )}
                 </div>
-                <div className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full flex flex-col`}>
+
+                {/* This container will now shift down when the bar is visible */}
+                <div className={`
+                    ${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full flex flex-col
+                    transition-transform duration-300 ease-in-out
+                `}
+                style={{
+                    transform: isBarVisible ? `translateY(${contentShiftDistance})` : 'translateY(0px)',
+                }}
+                >
                     {room ? (
                         <>
                             <TabManager
@@ -178,8 +246,6 @@ export default function Session() {
     const currentRoomName = useSessionStore((s) => s.currentRoomName);
 
     const courseId = searchParams.get('courseId');
-
-    // (Removed duplicate useLiveKitSession destructuring; see below for the canonical instance)
 
     useEffect(() => {
         // Lightweight helpers for block summaries and coloring
@@ -359,7 +425,7 @@ export default function Session() {
         shouldInitializeLiveKit ? userName : '',
         courseId || undefined
     );
-    
+
     // Only mount SuggestedResponses when there are suggestions
     const hasSuggestions = useSessionStore((s) => s.suggestedResponses.length > 0);
 
@@ -429,7 +495,7 @@ export default function Session() {
                 if (DELETE_ON_VIS_HIDDEN && document.visibilityState === 'hidden') {
                     void deleteSessionNow();
                 }
-            } catch {}
+            } catch { }
         };
         document.addEventListener('visibilitychange', onVis);
         return () => {
@@ -460,10 +526,10 @@ export default function Session() {
                 <Sphere />
 
                 <div className='flex flex-col w-full h-full items-center justify-between'>
-                    <SessionContent 
-                        activeView={activeView} 
-                        setActiveView={setActiveView} 
-                        componentButtons={componentButtons} 
+                    <SessionContent
+                        activeView={activeView}
+                        setActiveView={setActiveView}
+                        componentButtons={componentButtons}
                         room={room}
                         livekitUrl={livekitUrl}
                         livekitToken={livekitToken}
@@ -482,18 +548,18 @@ export default function Session() {
                     {/* Re-introduced Footer to restore mic and session controls */}
                     <Footer room={room} agentIdentity={agentIdentity || undefined} />
                 </div>
-                
+
                 {isConnected && (
-                    <MessageDisplay 
+                    <MessageDisplay
                         transcriptionMessages={transcriptionMessages || []}
                         statusMessages={statusMessages || []}
                     />
                 )}
-                
+
                 {/* Demo role indicator for multi-viewer sessions */}
                 <DemoRoleIndicator />
             </SignedIn>
-            
+
             <SignedOut>
                 <div className="w-full h-full flex items-center justify-center text-white">
                     <p>Redirecting to login...</p>
