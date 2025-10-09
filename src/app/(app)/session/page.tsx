@@ -6,6 +6,7 @@ import type { Room } from 'livekit-client';
 
 import NextDynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
+import { useApiService, WhiteboardBlockType } from '@/lib/api';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { TabManager } from '@/components/session/TabManager';
 
@@ -56,6 +57,19 @@ interface SessionContentProps {
 
 function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab }: SessionContentProps) {
     const whiteboardBlocks = useSessionStore((s) => s.whiteboardBlocks);
+    // Auto-focus newest whiteboard block when list changes
+    useEffect(() => {
+        if (!whiteboardBlocks?.length) return;
+        const lastId = whiteboardBlocks[whiteboardBlocks.length - 1]?.id;
+        if (!lastId) return;
+        const scroll = () => {
+            const el = document.getElementById(lastId);
+            if (el) {
+                try { el.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' }); } catch {}
+            }
+        };
+        if (typeof window !== 'undefined') requestAnimationFrame(scroll);
+    }, [whiteboardBlocks?.length]);
     return (
         <div className='w-full h-full flex flex-col'>
             <div className="w-full flex justify-center pt-[20px] pb-[20px] flex-shrink-0">
@@ -144,37 +158,154 @@ export default function Session() {
     const setActiveView = useSessionStore((s) => s.setActiveView);
     const setVisualizationData = useSessionStore((s) => s.setVisualizationData);
     const setBlocks = useSessionStore((s) => s.setBlocks);
+    const addBlock = useSessionStore((s) => s.addBlock);
+    const updateBlock = useSessionStore((s) => s.updateBlock);
 
     const [isIntroActive, setIsIntroActive] = useState(true);
+    const [wbSessionId, setWbSessionId] = useState<string | null>(null);
     // Centralized diagramDefinition and generation state from store
     const diagramDefinition = useSessionStore((s) => s.diagramDefinition);
     const isGenerating = useSessionStore((s) => s.isDiagramGenerating);
     const SESSION_DEBUG = false;
 
     const handleIntroComplete = () => setIsIntroActive(false);
+    // Guard to prevent re-applying same diagram
+    const lastAppliedDiagramRef = useRef<string | null>(null);
+    const apiService = useApiService();
     const { user, isSignedIn, isLoaded } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
+    const currentRoomName = useSessionStore((s) => s.currentRoomName);
 
     const courseId = searchParams.get('courseId');
 
     // (Removed duplicate useLiveKitSession destructuring; see below for the canonical instance)
 
     useEffect(() => {
+        // Lightweight helpers for block summaries and coloring
+        const getMermaidType = (src: string): string => {
+            const first = src.split(/\n|\r/).find((l) => l.trim().length > 0)?.trim() || '';
+            const token = first.split(/\s+/)[0];
+            // Normalize known diagram types
+            switch ((token || '').toLowerCase()) {
+                case 'flowchart':
+                case 'graph':
+                    return 'Flowchart';
+                case 'sequencediagram':
+                    return 'Sequence Diagram';
+                case 'classdiagram':
+                    return 'Class Diagram';
+                case 'erdiagram':
+                    return 'ER Diagram';
+                case 'mindmap':
+                    return 'Mindmap';
+                case 'gantt':
+                    return 'Gantt';
+                case 'timeline':
+                    return 'Timeline';
+                case 'pie':
+                    return 'Pie Chart';
+                case 'journey':
+                    return 'User Journey';
+                default:
+                    return token ? token : 'Diagram';
+            }
+        };
+
+        const colorizeElements = (elements: any[]): any[] => {
+            // Apply pleasant readable colors to nodes while keeping arrows dark
+            const palette = ['#FDE68A','#A7F3D0','#BFDBFE','#FBCFE8','#DDD6FE','#C7D2FE'];
+            const dark = '#1f2937';
+            let idx = 0;
+            const getContrast = (hex: string) => {
+                const h = hex.replace('#','');
+                const r = parseInt(h.substring(0,2),16);
+                const g = parseInt(h.substring(2,4),16);
+                const b = parseInt(h.substring(4,6),16);
+                const lum = (0.299*r+0.587*g+0.114*b)/255;
+                return lum > 0.5 ? '#111827' : '#ffffff';
+            };
+            return (elements || []).map((e) => {
+                if (!e || e.isDeleted) return e;
+                if (e.type === 'arrow' || e.type === 'line') {
+                    return { ...e, strokeColor: e.strokeColor || dark };
+                }
+                if (e.type === 'text') {
+                    // leave text color as-is; if background present, ensure readable
+                    return { ...e };
+                }
+                const fill = palette[idx % palette.length];
+                idx++;
+                const textColor = getContrast(fill);
+                return {
+                    ...e,
+                    backgroundColor: e.backgroundColor && e.backgroundColor !== 'transparent' ? e.backgroundColor : fill,
+                    strokeColor: e.strokeColor || dark,
+                    // text elements rendered separately; shapes won't have text
+                };
+            });
+        };
         const convertAndRender = async () => {
             if (diagramDefinition && diagramDefinition.trim()) {
+                // Skip if same diagram already applied
+                if (lastAppliedDiagramRef.current === diagramDefinition.trim()) {
+                    return;
+                }
                 try {
+                    const trimmed = diagramDefinition.trim();
                     console.log("Step 1: Parsing Mermaid to skeleton elements...");
-                    const { parseMermaidToExcalidraw } = await import('@excalidraw/mermaid-to-excalidraw');
-                    const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw');
-                    const { elements: skeletonElements } = await parseMermaidToExcalidraw(diagramDefinition);
-                    console.log(`Step 1 successful. Found ${skeletonElements.length} skeleton elements.`);
-
-                    console.log("Step 2: Converting skeleton to final Excalidraw elements...");
-                    const excalidrawElements = convertToExcalidrawElements(skeletonElements);
+                    let excalidrawElements: any[] = [];
+                    if (/^erDiagram\b/i.test(trimmed) || /^mindmap\b/i.test(trimmed)) {
+                        const { tryParseErDiagramToSkeleton, tryParseMindmapToSkeleton } = await import('@/hooks/mermaidFallbackParsers');
+                        const { convertSkeletonToExcalidrawElements } = await import('@/hooks/convertSkeletonToExcalidrawElements');
+                        let skeleton: any[] | null = null;
+                        if (/^erDiagram\b/i.test(trimmed)) {
+                            skeleton = tryParseErDiagramToSkeleton(trimmed);
+                        } else {
+                            skeleton = tryParseMindmapToSkeleton(trimmed);
+                        }
+                        const s = Array.isArray(skeleton) ? skeleton : [];
+                        console.log(`Step 1 (fallback) successful. Found ${s.length} skeleton elements.`);
+                        console.log("Step 2: Converting skeleton to final Excalidraw elements (fallback)...");
+                        excalidrawElements = convertSkeletonToExcalidrawElements(s);
+                    } else {
+                        const { parseMermaidToExcalidraw } = await import('@excalidraw/mermaid-to-excalidraw');
+                        const { convertToExcalidrawElements } = await import('@excalidraw/excalidraw');
+                        const { elements: skeletonElements } = await parseMermaidToExcalidraw(trimmed);
+                        console.log(`Step 1 successful. Found ${skeletonElements.length} skeleton elements.`);
+                        console.log("Step 2: Converting skeleton to final Excalidraw elements...");
+                        excalidrawElements = convertToExcalidrawElements(skeletonElements);
+                    }
+                    // Add basic coloring so diagrams aren't monochrome
+                    excalidrawElements = colorizeElements(excalidrawElements);
                     console.log("Step 2 successful. Final elements created.");
 
                     setVisualizationData(excalidrawElements);
+
+                    // Also reflect in the whiteboard feed (append a new block per diagram)
+                    try {
+                        const blockId = `ai_visualization_${Date.now()}`;
+                        const kind = getMermaidType(diagramDefinition);
+                        const ts = new Date();
+                        const time = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        const summary = `${kind} • ${time}`;
+                        addBlock({ id: blockId, type: 'excalidraw', summary, elements: excalidrawElements as any });
+                        // Persist to backend if session exists
+                        try {
+                          const sid = wbSessionId;
+                          if (sid) {
+                            await apiService.addWhiteboardBlock(sid, { type: 'EXCALIDRAW' as WhiteboardBlockType, summary, data: excalidrawElements });
+                          }
+                        } catch (persistErr) {
+                          console.warn('[Session] Failed to persist whiteboard block:', persistErr);
+                        }
+                        // Ensure the user is on the whiteboard view
+                        try { setActiveView('excalidraw'); } catch {}
+                        // Mark as applied for this diagram text
+                        lastAppliedDiagramRef.current = diagramDefinition.trim();
+                    } catch (feedErr) {
+                        console.warn('[Session] Failed to update whiteboard feed with diagram:', feedErr);
+                    }
 
                 } catch (error) {
                     console.error("Failed to parse or convert Mermaid to Excalidraw:", error);
@@ -187,11 +318,12 @@ export default function Session() {
                 }
             } else {
                 setVisualizationData([]);
+                lastAppliedDiagramRef.current = null;
             }
         };
 
         convertAndRender();
-    }, [diagramDefinition, setVisualizationData]);
+    }, [diagramDefinition, setVisualizationData, addBlock, updateBlock, setActiveView, apiService, wbSessionId]);
 
     useEffect(() => {
         if (isLoaded && !isSignedIn) {
@@ -239,23 +371,42 @@ export default function Session() {
 
     // Session restoration on initial load
     const restoredRef = useRef<string | null>(null);
+    // Create or get whiteboard session (by courseId or roomName from LiveKit)
     useEffect(() => {
-        const sid = sessionManagerSessionId || null;
-        if (!sid || restoredRef.current === sid) return;
-        restoredRef.current = sid;
-        (async () => {
-            try {
-                const resp = await fetch(`/api/session-state/${sid}`, { cache: 'no-store' });
-                if (!resp.ok) return;
-                const data = await resp.json();
-                if (data && Array.isArray(data.blocks)) {
-                    setBlocks(data.blocks);
-                }
-            } catch {}
-        })();
-    }, [sessionManagerSessionId, setBlocks]);
+      const init = async () => {
+        if (!shouldInitializeLiveKit) return;
+        if (wbSessionId) return;
+        // Prefer the actual room name issued by token service (sess-...)
+        const roomForPersistence = currentRoomName || roomName;
+        if (!roomForPersistence) return;
+        try {
+          const payload: any = { roomName: roomForPersistence };
+          if (courseId) payload.courseId = courseId;
+          const session = await apiService.createOrGetWhiteboardSession(payload);
+          setWbSessionId(session.id);
+          // Restore blocks
+          try {
+            const full = await apiService.getWhiteboardSession(session.id);
+            const restored = (full.blocks || []).map((b: any) => {
+              if (b.type === 'EXCALIDRAW') return { id: b.id, type: 'excalidraw', summary: b.summary, elements: b.data || [] };
+              if (b.type === 'RRWEB') return { id: b.id, type: 'rrweb', summary: b.summary, eventsUrl: b.eventsUrl };
+              if (b.type === 'VIDEO') return { id: b.id, type: 'video', summary: b.summary, videoUrl: b.videoUrl };
+              return null;
+            }).filter(Boolean) as any[];
+            if (restored.length) setBlocks(restored);
+          } catch (restoreErr) {
+            console.warn('[Session] Failed to restore whiteboard blocks:', restoreErr);
+          }
+        } catch (err) {
+          console.warn('[Session] Failed to create/get whiteboard session:', err);
+        }
+      };
+      void init();
+    }, [shouldInitializeLiveKit, roomName, currentRoomName, courseId, apiService, wbSessionId, setBlocks]);
 
     
+    
+
     // LiveKit-only: no per-session URLs or legacy VNC state required
     if (SESSION_DEBUG) console.log(`Zustand Sanity Check: SessionPage re-rendered. Active view is now: '${activeView}'`);
 

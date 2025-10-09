@@ -115,17 +115,15 @@ class LiveKitRpcAdapter implements Rpc {
   }
 }
 
-// A single room instance to survive React Strict Mode re-mounts.
-// CRITICAL: Disable ALL adaptive features and force maximum quality
-const roomInstance = new Room({
-    adaptiveStream: false,  // No gradual quality ramp-up
-    dynacast: false,        // No dynamic casting
-    videoCaptureDefaults: {
-        resolution: VideoPresets.h1080.resolution,  // Request 1080p to match backend
-    },
-    // CRITICAL: Disable bandwidth estimation to prevent downscaling
-    e2eeEnabled: false,
-});
+ // A single room instance to survive React Strict Mode re-mounts.
+ // CRITICAL: Disable ALL adaptive features and force maximum quality
+ const roomInstance = new Room({
+     adaptiveStream: false,  // No gradual quality ramp-up
+     dynacast: false,        // No dynamic casting
+     videoCaptureDefaults: {
+         resolution: VideoPresets.h1080.resolution,  // Request 1080p to match backend
+     },
+ });
 
 // Main hook
 export interface UseLiveKitSessionReturn {
@@ -1434,8 +1432,11 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     if (DELETE_ON_UNLOAD) {
       const onUnload = () => { try { isUnloadingRef.current = true; void sendDelete(); } catch {} };
       window.addEventListener('beforeunload', onUnload);
+      // Also handle pagehide (fires on bfcache and mobile Safari backgrounding)
+      window.addEventListener('pagehide', onUnload, { capture: true });
       return () => {
         window.removeEventListener('beforeunload', onUnload);
+        window.removeEventListener('pagehide', onUnload, { capture: true } as any);
         // Do NOT send delete on React unmount/HMR
         if (isUnloadingRef.current) {
           // In the narrow case cleanup runs during a real unload, deletion was already fired above

@@ -1204,7 +1204,7 @@ function TeacherSession() {
                 setStatusMessage('Episode submitted. AI is analyzing...');
                 // eslint-disable-next-line no-console
                 console.log('[TeacherPage] handleSubmitEpisode ✓ submitted via pod');
-                
+            
                 // NEW: Explicitly save setup script if we have setup actions and a current LO
                 if (setupActions.length > 0 && currentLO) {
                     try {
