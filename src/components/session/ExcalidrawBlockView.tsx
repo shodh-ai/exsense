@@ -15,8 +15,23 @@ export interface ExcalidrawBlockViewProps {
 
 const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElements }) => {
   const apiRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const apiReadyRef = useRef(false);
+  const mountedRef = useRef(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const handleAPI = useCallback((api: any) => {
     apiRef.current = api;
+    apiReadyRef.current = true;
+    // Kick an initial fit after mount on next frames
+    if (typeof window !== 'undefined') {
+      requestAnimationFrame(() => requestAnimationFrame(() => { if (mountedRef.current) fitNow(); }));
+    }
+  }, []);
+
+  // Track mount lifecycle to prevent updates before/after mount
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
   }, []);
 
   // Normalize incoming elements so Excalidraw doesn't crash on missing fields
@@ -66,7 +81,10 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
         case 'text': {
           const fontSize = element.fontSize ?? 18;
           const fontFamily = element.fontFamily ?? 1;
-          const width = element.width ?? 260;
+          const textStr = (element.text ?? '').toString();
+          // Approximate a generous width to avoid clipping. Cap to reasonable range.
+          const approxWidth = Math.max(360, Math.min(1200, Math.round((textStr.length || 12) * (fontSize * 0.6))));
+          const width = element.width ?? approxWidth;
           const height = element.height ?? Math.round(fontSize * 1.25);
           return {
             ...base,
@@ -130,8 +148,9 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
     const h = Math.max(0, maxY - minY);
     // Add padding so content has breathing room
     const padded = h + 160;
-    // Clamp for aesthetics (tighter bounds)
-    return Math.max(240, Math.min(600, Math.round(padded)));
+    // Clamp in normal mode; fullscreen uses viewport height via container style
+    const maxNormal = 560;
+    return Math.max(300, Math.min(maxNormal, Math.round(padded)));
   }, [normalized]);
 
   const initialData = useMemo(() => ({
@@ -141,29 +160,74 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
       scrollX: 0,
       scrollY: 0,
       zoom: { value: 1 },
+      activeTool: { type: 'selection' },
     },
   }), [normalized]);
 
-  // Update scene when elements change after mount
-  useEffect(() => {
+  // Helper: fit content into current container
+  const fitNow = useCallback(() => {
+    if (!mountedRef.current || !apiReadyRef.current) return;
+    const api = apiRef.current;
+    const els = (api?.getSceneElements?.() || normalized) as any[];
+    if (!api || !els?.length) return;
     try {
-      const api = apiRef.current;
-      if (api && Array.isArray(initialElements)) {
-        const els = normalized;
-        api.updateScene?.({ elements: els });
-        // center content without changing zoom
-        try {
-          if (els?.length && api.scrollToContent) {
-            api.updateScene?.({ appState: { zoom: { value: 1 } } });
-            api.scrollToContent(els, { fitToContent: false, animate: false });
-          }
-        } catch {}
-      }
+      // Avoid updateScene here to prevent internal setState before mount
+      api.scrollToContent(els, { fitToContent: true, animate: false, padding: 120 });
     } catch {}
-  }, [initialElements, normalized]);
+  }, [normalized]);
+
+  // Fit content when elements change or when toggling fullscreen
+  useEffect(() => {
+    if (!mountedRef.current || !apiReadyRef.current) return;
+    // Defer to next two frames to ensure child is mounted
+    requestAnimationFrame(() => requestAnimationFrame(() => { fitNow(); }));
+  }, [initialElements, normalized, isFullscreen, fitNow]);
+
+  // Re-fit on window resize
+  useEffect(() => {
+    const onResize = () => { if (mountedRef.current) fitNow(); };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [fitNow]);
+
+  // Re-fit when container size changes
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => { if (mountedRef.current) fitNow(); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [fitNow]);
+
+  // Ensure selection tool is active when entering fullscreen (we hide toolbar)
+  useEffect(() => {
+    try { apiRef.current?.setActiveTool?.({ type: 'selection' }); } catch {}
+  }, [isFullscreen]);
 
   return (
-    <div style={{ height: computedHeight, width: "100%", background: "transparent", pointerEvents: 'none' }}>
+    <div ref={containerRef} style={{ position: 'relative', height: isFullscreen ? 'calc(100vh - 32px)' : computedHeight, width: '100%', background: 'transparent', overflow: 'hidden' }}>
+      {/* Maximize / Restore button */}
+      <button
+        type="button"
+        onClick={() => setIsFullscreen(v => !v)}
+        title={isFullscreen ? 'Exit full screen' : 'Maximize'}
+        style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          zIndex: 60,
+          padding: '6px 10px',
+          borderRadius: 8,
+          border: '1px solid rgba(255,255,255,0.2)',
+          background: 'rgba(17,25,40,0.85)',
+          color: '#fff',
+          fontSize: 12,
+          cursor: 'pointer'
+        }}
+      >
+        {isFullscreen ? 'Exit Fullscreen' : 'Maximize'}
+      </button>
+
       <Excalidraw
         excalidrawAPI={handleAPI}
         theme="light"
@@ -178,15 +242,14 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
             toggleTheme: false,
             saveAsImage: false,
           },
-          tools: {
-            image: false,
-          },
+          tools: { image: false },
         }}
-        viewModeEnabled={true}
+        viewModeEnabled={!isFullscreen}
         zenModeEnabled={false}
         gridModeEnabled={false}
         initialData={initialData as any}
       />
+
       <style jsx global>{`
         /* Hide Excalidraw UI overlays and keep canvas only */
         .excalidraw .layer-ui__wrapper__top-right { display: none !important; }
@@ -204,6 +267,7 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
       `}</style>
     </div>
   );
-};
+}
+;
 
 export default ExcalidrawBlockView;

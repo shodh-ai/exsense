@@ -57,6 +57,7 @@ interface SessionContentProps {
 
 function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab }: SessionContentProps) {
     const whiteboardBlocks = useSessionStore((s) => s.whiteboardBlocks);
+    const whiteboardScrollRef = useRef<HTMLDivElement | null>(null);
     const [isBarVisible, setIsBarVisible] = useState(false);
     const hideTimer = useRef<NodeJS.Timeout | null>(null); // Ref to hold the timer
 
@@ -96,22 +97,31 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
         if (!whiteboardBlocks?.length) return;
         const lastId = whiteboardBlocks[whiteboardBlocks.length - 1]?.id;
         if (!lastId) return;
-        const scroll = () => {
+        if (typeof window === 'undefined') return;
+        requestAnimationFrame(() => {
+            const container = whiteboardScrollRef.current;
             const el = document.getElementById(lastId);
-            if (el) {
-                try { el.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' }); } catch {}
-            }
-        };
-        if (typeof window !== 'undefined') requestAnimationFrame(scroll);
+            if (!container || !el) return;
+            try {
+                const elTop = el.offsetTop; // relative to container
+                const maxTop = container.scrollHeight - container.clientHeight;
+                const targetTop = Math.max(0, Math.min(elTop - 12, maxTop));
+                container.scrollTo({ top: targetTop, behavior: 'smooth' });
+            } catch {}
+        });
     }, [whiteboardBlocks?.length]);
     return (
         <div className='w-full h-full flex flex-col relative'>
-            {/* Hover-activated navigation bar container */}
+            {/* Hover-activated navigation bar container (non-blocking) */}
             <div
                 className="absolute top-0 left-0 right-0 z-20 h-28 flex justify-center items-start group pointer-events-none"
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
             >
+                {/* Thin hitbox to detect hover without blocking content */}
+                <div
+                    className="absolute top-0 left-0 right-0 h-6 pointer-events-auto"
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
+                />
                 {/* Visual Cue "Handle" - indicates where to hover */}
                 <div
                     className={`
@@ -142,12 +152,27 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                             </button>
                         ))}
                     </div>
+                {/* Whiteboard scrollbar theming */}
+                <style jsx global>{`
+                  .whiteboard-scroll { scrollbar-width: thin; scrollbar-color: #566FE9 transparent; }
+                  .whiteboard-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+                  .whiteboard-scroll::-webkit-scrollbar-track { background: transparent; }
+                  .whiteboard-scroll::-webkit-scrollbar-thumb { background-color: #566FE9; border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box; }
+                  .whiteboard-scroll::-webkit-scrollbar-corner { background: transparent; }
+                `}</style>
                 </div>
             </div>
 
             {/* Whiteboard feed view and other views */}
             <div className="flex-1 w-full overflow-hidden" style={{ minHeight: 0, paddingBottom: '8.5rem' }}>
-                <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full relative overflow-y-auto`}>
+                <div
+                    className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full relative overflow-y-auto overflow-x-hidden whiteboard-scroll`}
+                    style={{
+                        transition: 'padding-top 300ms ease-in-out',
+                        paddingTop: isBarVisible ? contentShiftDistance : '0px'
+                    }}
+                    ref={whiteboardScrollRef}
+                >
                     {/* Whiteboard content remains unchanged, it doesn't need to shift */}
                     <div className="max-w-5xl mx-auto w-full px-4 py-4 space-y-8">
                         {whiteboardBlocks.length === 0 && (
