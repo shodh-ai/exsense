@@ -24,7 +24,6 @@ const ExcalidrawBlockView = NextDynamic<{ initialElements: any[] }>(() => import
 const RrwebBlockView = NextDynamic<{ eventsUrl: string }>(() => import('@/components/session/RrwebBlockView'), { ssr: false });
 const VideoBlockView = NextDynamic<{ videoUrl: string }>(() => import('@/components/session/VideoBlockView'), { ssr: false });
 const LiveKitViewer = NextDynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
-const MessageDisplay = NextDynamic(() => import('@/components/session/MessageDisplay'), { ssr: false });
 
 // Prevent static prerendering of this page at build time
 export const dynamic = 'force-dynamic';
@@ -434,8 +433,7 @@ export default function Session() {
         connectionError,
         startTask,
         agentIdentity,
-        transcriptionMessages,
-        statusMessages,
+        
         selectSuggestedResponse,
         livekitUrl,
         livekitToken,
@@ -462,13 +460,13 @@ export default function Session() {
 
     // Session restoration on initial load
     const restoredRef = useRef<string | null>(null);
-    // Create or get whiteboard session (by courseId or roomName from LiveKit)
+    // Create or get whiteboard session (scoped strictly by LiveKit-issued roomName)
     useEffect(() => {
       const init = async () => {
         if (!shouldInitializeLiveKit) return;
         if (wbSessionId) return;
-        // Prefer the actual room name issued by token service (sess-...)
-        const roomForPersistence = currentRoomName || roomName;
+        // Require the actual room name issued by token service (sess-...)
+        const roomForPersistence = currentRoomName;
         if (!roomForPersistence) return;
         try {
           const payload: any = { roomName: roomForPersistence };
@@ -574,12 +572,7 @@ export default function Session() {
                     <Footer room={room} agentIdentity={agentIdentity || undefined} />
                 </div>
 
-                {isConnected && (
-                    <MessageDisplay
-                        transcriptionMessages={transcriptionMessages || []}
-                        statusMessages={statusMessages || []}
-                    />
-                )}
+                {/* Status overlay removed */}
 
                 {/* Demo role indicator for multi-viewer sessions */}
                 <DemoRoleIndicator />

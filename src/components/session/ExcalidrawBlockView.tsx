@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import "@excalidraw/excalidraw/index.css";
 
@@ -33,6 +34,18 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
+
+  // Lock background scroll when fullscreen overlay is open
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const original = document.body.style.overflow;
+    if (isFullscreen) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [isFullscreen]);
 
   // Normalize incoming elements so Excalidraw doesn't crash on missing fields
   const normalizeElements = useCallback((els: any[]): any[] => {
@@ -171,10 +184,24 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
     const els = (api?.getSceneElements?.() || normalized) as any[];
     if (!api || !els?.length) return;
     try {
-      // Avoid updateScene here to prevent internal setState before mount
-      api.scrollToContent(els, { fitToContent: true, animate: false, padding: 120 });
+      // Fullscreen: use tighter padding then zoom in slightly for larger appearance
+      const pad = isFullscreen ? 16 : 120;
+      api.scrollToContent(els, { fitToContent: true, animate: false, padding: pad });
+
+      if (isFullscreen) {
+        requestAnimationFrame(() => {
+          try {
+            const st = api.getAppState?.();
+            const currentZoom = st?.zoom?.value ?? 1;
+            const targetZoom = Math.min(currentZoom * 1.25, 2.5);
+            api.updateScene?.({ appState: { zoom: { value: targetZoom } } });
+            // Recentre on content without re-fitting (keep our larger zoom)
+            try { (api as any).scrollToContent?.(els, { fitToContent: false, animate: false, padding: 12 }); } catch {}
+          } catch {}
+        });
+      }
     } catch {}
-  }, [normalized]);
+  }, [normalized, isFullscreen]);
 
   // Fit content when elements change or when toggling fullscreen
   useEffect(() => {
@@ -204,8 +231,8 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
     try { apiRef.current?.setActiveTool?.({ type: 'selection' }); } catch {}
   }, [isFullscreen]);
 
-  return (
-    <div ref={containerRef} style={{ position: 'relative', height: isFullscreen ? 'calc(100vh - 32px)' : computedHeight, width: '100%', background: 'transparent', overflow: 'hidden' }}>
+  const board = (
+    <>
       {/* Maximize / Restore button */}
       <button
         type="button"
@@ -249,6 +276,45 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
         gridModeEnabled={false}
         initialData={initialData as any}
       />
+    </>
+  );
+
+  return (
+    <>
+      {/* Normal in-flow card */}
+      {!isFullscreen && (
+        <div ref={containerRef} style={{ position: 'relative', height: computedHeight, width: '100%', background: 'transparent', overflow: 'hidden' }}>
+          {board}
+        </div>
+      )}
+
+      {/* Fullscreen overlay via portal */}
+      {isFullscreen && typeof window !== 'undefined' && createPortal(
+        <div
+          onClick={() => setIsFullscreen(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(10, 13, 23, 0.75)',
+            backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            ref={containerRef}
+            style={{
+              position: 'absolute',
+              top: '4vh', bottom: '4vh', left: '3vw', right: '3vw',
+              borderRadius: 12,
+              overflow: 'hidden',
+              background: 'transparent',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.45)'
+            }}
+          >
+            {board}
+          </div>
+        </div>,
+        document.body
+      )}
 
       <style jsx global>{`
         /* Hide Excalidraw UI overlays and keep canvas only */
@@ -265,7 +331,7 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
         .excalidraw .scroll-back-to-content { display: none !important; }
         .excalidraw .button--scroll-back-to-content { display: none !important; }
       `}</style>
-    </div>
+    </>
   );
 }
 ;
