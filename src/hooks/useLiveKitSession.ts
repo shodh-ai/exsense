@@ -202,8 +202,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const [statusMessages, setStatusMessages] = useState<string[]>([]);
   
   const agentServiceClientRef = useRef<AgentInteractionClientImpl | null>(null);
-  // Ensure we only complete the handshake and send TestPing ONCE
-  const handshakeDoneRef = useRef<boolean>(false);
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
 
   // LOG 1: Is the hook even running?
@@ -1063,9 +1061,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             const MAX_ATTEMPTS = 6; // ~6s
             for (let i = 0; i < MAX_ATTEMPTS && !agentServiceClientRef.current; i++) {
               await new Promise(r => setTimeout(r, 1000));
-              if (agentServiceClientRef.current || handshakeDoneRef.current) return;
+              if (agentServiceClientRef.current) return;
               // If handshake already set identity, stop
-              if (agentServiceClientRef.current || handshakeDoneRef.current) return;
+              if (agentServiceClientRef.current) return;
               // Infer candidate: any non-browser remote participant
               const candidates = Array.from(roomInstance.remoteParticipants.keys()).filter(id => !String(id).startsWith('browser-bot-'));
               if (candidates.length > 0 && roomInstance.localParticipant) {
@@ -1075,8 +1073,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                   setAgentIdentity(pid);
                   const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, pid);
                   agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
-                  // Mark handshake as done BEFORE sending ping to avoid races with agent_ready
-                  handshakeDoneRef.current = true;
                   // Validate with a lightweight TestPing
                   const payload = uint8ArrayToBase64(new TextEncoder().encode(JSON.stringify({
                     message: 'Fallback handshake',
@@ -1097,7 +1093,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                   // Reset and retry next loop
                   try { setAgentIdentity(null); } catch {}
                   agentServiceClientRef.current = null;
-                  handshakeDoneRef.current = false;
                 }
               }
             }
@@ -1415,11 +1410,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         return { id: b?.id, type: b?.type };
       });
       const payload = { restored_feed_summary: { blocks } };
-      // Start is triggered via TestPing handshake on connect.
-      // Avoid sending a duplicate start from the frontend to prevent double-invocation.
-      // If Kamikaze needs this summary, we can attach it on a later task or fetch it server-side.
+      // Fire-and-forget: if this fails, normal flow continues
+      void startTask('start_tutoring_session', payload);
       sentSummaryRef.current = true;
-      console.log('[F2B RPC] Skipped start_tutoring_session; relying on TestPing-based start');
+      console.log('[F2B RPC] Sent start_tutoring_session with restored_feed_summary');
     } catch (e) {
       console.warn('[F2B RPC] Failed to send restored_feed_summary (non-fatal):', e);
     }
