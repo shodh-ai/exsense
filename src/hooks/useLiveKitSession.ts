@@ -1053,6 +1053,53 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 }
             }
         }
+        // Fallback: if 'agent_ready' data message was missed, try to infer agent identity
+        // and validate with a TestPing to establish RPC client.
+        (async () => {
+          try {
+            // Poll a few times in case remote participant arrives slightly after connect
+            const MAX_ATTEMPTS = 6; // ~6s
+            for (let i = 0; i < MAX_ATTEMPTS && !agentServiceClientRef.current; i++) {
+              await new Promise(r => setTimeout(r, 1000));
+              if (agentServiceClientRef.current) return;
+              // If handshake already set identity, stop
+              if (agentServiceClientRef.current) return;
+              // Infer candidate: any non-browser remote participant
+              const candidates = Array.from(roomInstance.remoteParticipants.keys()).filter(id => !String(id).startsWith('browser-bot-'));
+              if (candidates.length > 0 && roomInstance.localParticipant) {
+                const pid = String(candidates[0]);
+                try {
+                  console.log('[FLOW] Fallback attempting to bind agent identity to', pid);
+                  setAgentIdentity(pid);
+                  const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, pid);
+                  agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
+                  // Validate with a lightweight TestPing
+                  const payload = uint8ArrayToBase64(new TextEncoder().encode(JSON.stringify({
+                    message: 'Fallback handshake',
+                    timestamp: Date.now(),
+                    userId: userName,
+                    roomName: roomName
+                  })));
+                  await roomInstance.localParticipant.performRpc({
+                    destinationIdentity: pid,
+                    method: 'rox.interaction.AgentInteraction/TestPing',
+                    payload
+                  });
+                  setIsConnected(true);
+                  console.log('[FLOW] Fallback agent identity established and validated');
+                  return;
+                } catch (e) {
+                  console.warn('[FLOW] Fallback bind/validate failed; will retry if attempts remain', e);
+                  // Reset and retry next loop
+                  try { setAgentIdentity(null); } catch {}
+                  agentServiceClientRef.current = null;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('[FLOW] Fallback handshake watcher error (non-fatal):', e);
+          }
+        })();
         // We wait for the agent_ready signal before setting isConnected to true
     };
     
@@ -1333,14 +1380,18 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     if (initialNavSentRef.current) return;
     initialNavSentRef.current = true;
     try {
-      const startUrl = process.env.NEXT_PUBLIC_BROWSER_START_URL || 'https://example.com';
-      const payload = JSON.stringify({ action: 'navigate', url: startUrl });
-      const bytes = new TextEncoder().encode(payload);
-      try {
-        roomInstance?.localParticipant?.publishData(bytes);
-        if (SESSION_FLOW_DEBUG) console.log('[FLOW] Sent initial navigate to', startUrl);
-      } catch (e) {
-        console.warn('[FLOW] Failed to publish initial navigate:', e);
+      const startUrl = process.env.NEXT_PUBLIC_BROWSER_START_URL;
+      if (startUrl && startUrl.trim().length > 0) {
+        const payload = JSON.stringify({ action: 'navigate', url: startUrl });
+        const bytes = new TextEncoder().encode(payload);
+        try {
+          roomInstance?.localParticipant?.publishData(bytes);
+          if (SESSION_FLOW_DEBUG) console.log('[FLOW] Sent initial navigate to', startUrl);
+        } catch (e) {
+          console.warn('[FLOW] Failed to publish initial navigate:', e);
+        }
+      } else {
+        if (SESSION_FLOW_DEBUG) console.log('[FLOW] No NEXT_PUBLIC_BROWSER_START_URL set; skipping initial navigate');
       }
     } catch {}
   }, [isConnected]);
