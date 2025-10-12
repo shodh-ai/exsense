@@ -9,7 +9,6 @@ import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActio
 import { useSessionStore, SessionView } from '@/lib/store';
 import { useAuth } from '@clerk/nextjs';
 import { useBrowserActionExecutor } from './useBrowserActionExecutor';
-import { transcriptEventEmitter } from '@/lib/TranscriptEventEmitter';
 
 // File: exsense/src/hooks/useLiveKitSession.ts
 
@@ -1184,7 +1183,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             const text = segment.text?.trim();
             if (text) {
                 // Emit plain text for the avatar bubble UI
-                try { transcriptEventEmitter.emitTranscript(text); } catch {}
 
                 // Preserve speaker-tagged history for any consumers still using it
                 const speaker = participant?.identity || 'Unknown';
