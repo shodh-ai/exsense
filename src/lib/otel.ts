@@ -94,19 +94,31 @@ export function initTelemetry(): void {
       contextManager: new ZoneContextManager(),
     });
 
+    // Build safe allowlist for CORS trace propagation
+    const corsAllowlist: (string | RegExp)[] = [
+      /localhost:\d+/,
+      /.*\.run\.app/,
+    ];
+    if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+      corsAllowlist.push(new RegExp(process.env.NEXT_PUBLIC_BACKEND_URL));
+    }
+    if (process.env.NEXT_PUBLIC_WEBRTC_TOKEN_SERVICE_URL) {
+      corsAllowlist.push(new RegExp(process.env.NEXT_PUBLIC_WEBRTC_TOKEN_SERVICE_URL));
+    }
+
+    // Explicit ignore list (avoid touching Clerk endpoints)
+    const ignoreList: (string | RegExp)[] = [
+      /clerk\.accounts\.dev/,
+      /clerk\.com/,
+    ];
+
     // Register instrumentations
     registerInstrumentations({
       instrumentations: [
         new FetchInstrumentation({
-          // Propagate trace context to backend services
-          propagateTraceHeaderCorsUrls: [
-            /localhost:\d+/,
-            /.*\.run\.app/,
-            new RegExp(process.env.NEXT_PUBLIC_BACKEND_URL || ''),
-            new RegExp(process.env.NEXT_PUBLIC_WEBRTC_TOKEN_SERVICE_URL || ''),
-          ],
+          propagateTraceHeaderCorsUrls: corsAllowlist,
+          ignoreUrls: ignoreList,
           clearTimingResources: true,
-          // Add custom attributes to fetch spans
           applyCustomAttributesOnSpan: (span, request, result) => {
             if (request instanceof Request) {
               span.setAttribute('http.url', request.url);
@@ -118,12 +130,8 @@ export function initTelemetry(): void {
           },
         }),
         new XMLHttpRequestInstrumentation({
-          propagateTraceHeaderCorsUrls: [
-            /localhost:\d+/,
-            /.*\.run\.app/,
-            new RegExp(process.env.NEXT_PUBLIC_BACKEND_URL || ''),
-            new RegExp(process.env.NEXT_PUBLIC_WEBRTC_TOKEN_SERVICE_URL || ''),
-          ],
+          propagateTraceHeaderCorsUrls: corsAllowlist,
+          ignoreUrls: ignoreList,
         }),
       ],
     });
