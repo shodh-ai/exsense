@@ -13,7 +13,6 @@ import { TabManager } from '@/components/session/TabManager';
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Sphere from '@/components/Sphere';
-import SuggestedResponses from '@/components/session/SuggestedResponses';
 import { DemoRoleIndicator } from '@/components/session/DemoRoleIndicator';
 
 // Excalidraw and Mermaid conversion libs are imported dynamically in the effect below
@@ -449,8 +448,7 @@ export default function Session() {
         courseId || undefined
     );
 
-    // Only mount SuggestedResponses when there are suggestions
-    const hasSuggestions = useSessionStore((s) => s.suggestedResponses.length > 0);
+    // Suggested responses are now rendered inside the Sphere transcript bubble
 
     // Extract the latest transcript for the avatar bubble
     const [latestTranscript, setLatestTranscript] = useState("");
@@ -567,7 +565,7 @@ export default function Session() {
     return (
         <>
             <SignedIn>
-                <Sphere transcript={latestTranscript} />
+                <Sphere transcript={latestTranscript} onSelectSuggestion={selectSuggestedResponse} />
 
                 <div className='flex flex-col w-full h-full items-center justify-between'>
                     <SessionContent
@@ -585,9 +583,7 @@ export default function Session() {
                         closeTab={closeTab}
                     />
 
-                    {hasSuggestions && (
-                        <SuggestedResponses onSelect={selectSuggestedResponse} />
-                    )}
+                    {/* Suggested responses are shown inline with the transcript bubble */}
 
                     {/* Re-introduced Footer to restore mic and session controls */}
                     <Footer room={room} agentIdentity={agentIdentity || undefined} />

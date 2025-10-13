@@ -66,9 +66,10 @@ const emotionMusicMap: Record<Emotion, string | null> = { default: null, happy: 
 
 interface SphereProps {
     transcript?: string;
+    onSelectSuggestion?: (suggestion: { id: string; text: string; reason?: string }) => void | Promise<void>;
 }
 
-const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "" }) => {
+const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSelectSuggestion }) => {
     // --- STATE & REFS ---
     const mountRef = useRef<HTMLDivElement>(null);
     const bubbleRef = useRef<HTMLDivElement>(null);
@@ -90,13 +91,19 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "" }) => {
     const currentScaleRef = useRef(1);
     const isAudioActiveRef = useRef(isAudioActive);
     const transcriptRef = useRef(transcript);
+    const suggestedResponsesRef = useRef<{ id: string; text: string; reason?: string }[]>([]);
+    const promptRef = useRef<string | undefined>(undefined);
 
     // --- ZUSTAND STORE ---
     const { isMusicButtonPlaying, setIsMusicButtonPlaying, isMicEnabled } = useSessionStore();
+    const suggestedResponses = useSessionStore((s) => s.suggestedResponses);
+    const promptText = useSessionStore((s) => s.suggestedTitle);
 
     // --- Sync state to refs to avoid stale closures in callbacks ---
     useEffect(() => { isAudioActiveRef.current = isAudioActive; }, [isAudioActive]);
     useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+    useEffect(() => { suggestedResponsesRef.current = suggestedResponses || []; }, [suggestedResponses]);
+    useEffect(() => { promptRef.current = promptText; }, [promptText]);
 
     // --- DEVELOPMENT HELPERS ---
     useEffect(() => {
@@ -341,7 +348,7 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "" }) => {
         const initialProfile = emotionProfileMap[currentEmotion];
         const activeProfile = { ...initialProfile, coreColorTop: initialProfile.coreColorTop.clone(), coreColorBottom: initialProfile.coreColorBottom.clone(), coreColorAccent: initialProfile.coreColorAccent.clone(), shellRimColor: initialProfile.shellRimColor.clone(), };
 
-        const animate = () => {
+        function animate() {
             animationFrameId = requestAnimationFrame(animate);
             const elapsedTime = clock.getElapsedTime();
             const targetProfile = emotionProfileMap[currentEmotion];
@@ -388,9 +395,8 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "" }) => {
             currentScaleRef.current = THREE.MathUtils.lerp(currentScaleRef.current, targetScale, smoothingFactor);
             blobGroup.scale.set(currentScaleRef.current, currentScaleRef.current, currentScaleRef.current);
 
-            // Position transcript bubble
+            // Position transcript/suggestions bubble
             if (bubbleRef.current) {
-                if (transcriptRef.current) {
                     const blobTopOffset = shellGeometry.parameters.radius * currentScaleRef.current;
                     const blobTopPosition = new THREE.Vector3(blobGroup.position.x, blobGroup.position.y + blobTopOffset, blobGroup.position.z);
                     blobTopPosition.project(camera);
@@ -415,11 +421,9 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "" }) => {
                     style.left = `${left}px`;
                     style.top = `${top}px`;
                     style.transform = 'none';
-                    style.opacity = '1';
-                } else {
-                    bubbleRef.current.style.opacity = '0';
+                    const shouldShow = !!transcriptRef.current || (suggestedResponsesRef.current?.length ?? 0) > 0 || !!promptRef.current;
+                    style.opacity = shouldShow ? '1' : '0';
                 }
-            }
 
             // Render passes for refraction effect
             shell.visible = false;
@@ -432,7 +436,7 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "" }) => {
             shell.visible = true;
             renderer.render(scene, camera);
             controls.update();
-        };
+        }
 
         animate();
 
@@ -486,11 +490,11 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "" }) => {
     // --- JSX RENDERING ---
     // =================================================================
     return (
-        <div className="absolute top-0 left-0 w-full h-full z-10 pointer-events-none">
-            {transcript && (
+        <div className="absolute top-0 left-0 w-full h-full z-50 pointer-events-none">
+            {(transcript || (suggestedResponses && suggestedResponses.length > 0) || !!promptText) && (
                 <div
                     ref={bubbleRef}
-                    className="absolute w-auto px-6 py-3 rounded-full pointer-events-auto text-center"
+                    className="absolute w-auto px-6 py-3 rounded-2xl pointer-events-auto text-center"
                     style={{
                         opacity: 0,
                         top: 0,
@@ -512,7 +516,35 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "" }) => {
                         whiteSpace: 'pre-wrap',
                     }}
                 >
-                    <p>{transcript}</p>
+                    {suggestedResponses && suggestedResponses.length > 0 ? (
+                        <div className="flex flex-col items-center gap-3">
+                            {(promptText || transcript) && (
+                                <h3 className="text-base md:text-lg font-semibold text-slate-800 text-center">
+                                    {promptText || transcript}
+                                </h3>
+                            )}
+                            <div className="flex flex-wrap justify-center gap-2 md:gap-3">
+                                {suggestedResponses.map((s, idx) => {
+                                    const safeId = s.id && s.id.trim().length > 0 ? s.id : `ui_${Date.now()}_${idx}`;
+                                    return (
+                                        <button
+                                            key={safeId}
+                                            onClick={() => {
+                                                const payload = { ...s, id: safeId };
+                                                if (onSelectSuggestion) onSelectSuggestion(payload);
+                                            }}
+                                            className="px-4 py-2 rounded-full bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-sm font-medium transition-colors"
+                                            title={s.reason || s.text}
+                                        >
+                                            {s.text}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ) : (
+                        <p>{transcript}</p>
+                    )}
                 </div>
             )}
             <div ref={mountRef} className="w-full h-full" />
