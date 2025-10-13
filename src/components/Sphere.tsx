@@ -6,7 +6,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { micEventEmitter } from '@/lib/MicEventEmitter';
 import { musicEventEmitter } from '@/lib/MusicEventEmitter';
 import { useSessionStore } from '@/lib/store';
-import { transcriptEventEmitter } from '@/lib/TranscriptEventEmitter';
 
 // =================================================================
 // --- GLSL & SHADERS
@@ -65,14 +64,19 @@ const emotionMusicMap: Record<Emotion, string | null> = { default: null, happy: 
 // --- COMPONENT
 // =================================================================
 
-const Sphere: React.FC = () => {
+interface SphereProps {
+    transcript?: string;
+}
+
+const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "" }) => {
     // --- STATE & REFS ---
     const mountRef = useRef<HTMLDivElement>(null);
     const bubbleRef = useRef<HTMLDivElement>(null);
     const [isAudioActive, setIsAudioActive] = useState(false);
     const [currentEmotion, setCurrentEmotion] = useState<Emotion>('default');
     const [isMusicExplicitlyPaused, setIsMusicExplicitlyPaused] = useState(false);
-    const [transcript, setTranscript] = useState<string>("");
+    // Use transcript from props instead of local state
+    const transcript = transcriptProp;
 
     // --- Refs for values that don't trigger re-renders ---
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -97,8 +101,7 @@ const Sphere: React.FC = () => {
     // --- DEVELOPMENT HELPERS ---
     useEffect(() => {
         if (process.env.NODE_ENV !== 'production') {
-            console.log("Sphere is mounted. 'transcriptEmitter' is now available in the console for testing.");
-            (window as any).transcriptEmitter = transcriptEventEmitter;
+            console.log("Sphere is mounted. Transcript is now received via props from useLiveKitSession hook.");
         }
     }, []);
 
@@ -150,11 +153,7 @@ const Sphere: React.FC = () => {
     }, [isAudioActive, initializeAudio]);
 
     // --- EVENT EMITTER SUBSCRIPTIONS ---
-    useEffect(() => {
-        const handleTranscript = (newTranscript: string) => setTranscript(newTranscript);
-        transcriptEventEmitter.subscribe(handleTranscript);
-        return () => transcriptEventEmitter.unsubscribe(handleTranscript);
-    }, []);
+    // Transcript now comes from props, no need to subscribe to emitter
 
     useEffect(() => {
         micEventEmitter.subscribe(handleStartListen);

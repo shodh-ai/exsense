@@ -433,7 +433,7 @@ export default function Session() {
         connectionError,
         startTask,
         agentIdentity,
-        
+        transcriptionMessages,
         selectSuggestedResponse,
         livekitUrl,
         livekitToken,
@@ -451,6 +451,27 @@ export default function Session() {
 
     // Only mount SuggestedResponses when there are suggestions
     const hasSuggestions = useSessionStore((s) => s.suggestedResponses.length > 0);
+
+    // Extract the latest transcript for the avatar bubble
+    const [latestTranscript, setLatestTranscript] = useState("");
+
+    useEffect(() => {
+        // When the array of messages changes, get the last one.
+        if (transcriptionMessages.length > 0) {
+            // The message is formatted as "speaker: text". We just want the text.
+            const lastMessage = transcriptionMessages[transcriptionMessages.length - 1];
+            const colonIndex = lastMessage.indexOf(':');
+            const transcriptText = colonIndex >= 0 ? lastMessage.substring(colonIndex + 1).trim() : lastMessage.trim();
+            setLatestTranscript(transcriptText);
+            
+            // Clear the bubble after 5 seconds of no new transcripts
+            const timer = setTimeout(() => {
+                setLatestTranscript("");
+            }, 5000);
+            
+            return () => clearTimeout(timer);
+        }
+    }, [transcriptionMessages]);
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -546,7 +567,7 @@ export default function Session() {
     return (
         <>
             <SignedIn>
-                <Sphere />
+                <Sphere transcript={latestTranscript} />
 
                 <div className='flex flex-col w-full h-full items-center justify-between'>
                     <SessionContent

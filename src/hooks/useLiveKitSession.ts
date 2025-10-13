@@ -685,12 +685,21 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             const text = typeof textRaw === 'string' ? textRaw : String(textRaw ?? '');
             return { id, text, reason: s?.reason } as { id: string; text: string; reason?: string };
           });
-          try {
-            setSuggestedResponses(suggestions, payload.title);
-            console.log(`[B2F RPC] Set ${suggestions.length} suggested responses${payload.title ? ` with title: ${payload.title}` : ''}`);
-          } catch (e) {
-            console.error('[B2F RPC] Failed to set suggested responses in store:', e);
+          
+          // *** VERIFICATION LOGGING BLOCK ***
+          if (suggestions.length > 0) {
+            console.log(`[UI-VERIFY] Data is available. Setting ${suggestions.length} suggestions in Zustand store.`);
+            try {
+              setSuggestedResponses(suggestions, payload.title);
+              console.log("[UI-VERIFY] Zustand store updated successfully.");
+              console.log(`[B2F RPC] Set ${suggestions.length} suggested responses${payload.title ? ` with title: ${payload.title}` : ''}`);
+            } catch (e) {
+              console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses in store:', e);
+            }
+          } else {
+            console.warn('[UI-VERIFY] No suggestions were parsed from the payload.');
           }
+          // *** END OF VERIFICATION LOGGING BLOCK ***
         } else {
           // --- Fallback: some agents send suggestions via request.parameters ---
           const params = (request as any).parameters || {};
@@ -715,14 +724,16 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
               suggestions = [{ id: `s_${Date.now()}_0`, text: candidate }];
             }
             if (suggestions.length > 0) {
+              console.log(`[UI-VERIFY] Data is available (from parameters). Setting ${suggestions.length} suggestions in Zustand store.`);
               try {
                 setSuggestedResponses(suggestions, titleParam);
+                console.log("[UI-VERIFY] Zustand store updated successfully (from parameters).");
                 console.log(`[B2F RPC] Set ${suggestions.length} suggested responses from parameters${titleParam ? ` with title: ${titleParam}` : ''}`);
               } catch (e) {
-                console.error('[B2F RPC] Failed to set suggested responses (parameters) in store:', e);
+                console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses (parameters) in store:', e);
               }
             } else {
-              console.warn('[B2F RPC] Parameters present but could not derive suggestions:', candidate);
+              console.warn('[UI-VERIFY] Parameters present but could not derive suggestions:', candidate);
             }
           } else {
             console.warn('[B2F RPC] SUGGESTED_RESPONSES payload missing or invalid, and no parsable parameters found:', { payload, params });
