@@ -433,10 +433,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                                         console.warn('[FLOW] Could not check for remote video presence:', chkErr);
                                     }
                                     // Request a token for the session room
-                                    const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string;
-                                    const bearer = await getToken();
-                                    const devResp = await fetch(`${tokenServiceUrl}/api/dev/token-for-room`, {
-                                        method: 'POST',
+                                const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string;
+                                const bearer = await getToken();
+                                const devResp = await fetch(`${tokenServiceUrl}/api/dev/token-for-room`, {                                        method: 'POST',
                                         headers: {
                                             'Content-Type': 'application/json',
                                             ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {}),
@@ -1517,15 +1516,26 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // Convenience method for Suggested Responses selection
   const selectSuggestedResponse = useCallback(async (suggestion: { id: string; text: string; reason?: string }) => {
     try {
+      // Optimistically stop current agent audio playback locally for responsiveness
+      if (agentIdentity) {
+        const agentParticipant = roomInstance.remoteParticipants.get(agentIdentity);
+        if (agentParticipant && (agentParticipant as any).audioTrackPublications) {
+          (agentParticipant as any).audioTrackPublications.forEach((pub: any) => {
+            try { pub.track?.detach(); } catch {}
+          });
+        }
+      }
+
       await startTask('select_suggested_response', {
         id: suggestion.id,
         text: suggestion.text,
         reason: suggestion.reason ?? null,
+        interaction_type: 'suggested_response',
       });
     } finally {
       try { clearSuggestedResponses(); } catch {}
     }
-  }, [startTask, clearSuggestedResponses]);
+  }, [startTask, clearSuggestedResponses, agentIdentity]);
 
   // Expose an imperative deletion helper so pages can terminate the pod when leaving route
   const deleteSessionNow = useCallback(async () => {
