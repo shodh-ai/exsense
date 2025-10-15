@@ -76,12 +76,30 @@ class LiveKitRpcAdapter implements Rpc {
     const payloadString = uint8ArrayToBase64(data);
     try {
       if (LIVEKIT_DEBUG) console.log(`F2B RPC Request: To=${this.agentIdentity}, Method=${fullMethodName}`);
-      const responseString = await this.localParticipant.performRpc({
-        destinationIdentity: this.agentIdentity,
-        method: fullMethodName,
-        payload: payloadString,
-        responseTimeout: 30000,
-      });
+      const doCall = async () => {
+        return await this.localParticipant.performRpc({
+          destinationIdentity: this.agentIdentity,
+          method: fullMethodName,
+          payload: payloadString,
+          responseTimeout: 30000,
+        });
+      };
+      let responseString: string = '';
+      let lastErr: any = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          responseString = await doCall();
+          lastErr = null;
+          break;
+        } catch (e) {
+          lastErr = e;
+          if (attempt < 2) {
+            await new Promise(r => setTimeout(r, 500));
+            continue;
+          }
+        }
+      }
+      if (lastErr) throw lastErr;
       return base64ToUint8Array(responseString);
     } catch (error) {
       console.error(`F2B RPC request to ${fullMethodName} failed:`, error);
@@ -1073,10 +1091,24 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           setShowWaitingPill(false);
           if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; }
           thinkingTimeoutRef.current = window.setTimeout(() => {
-            try { setIsAwaitingAIResponse(false); } catch {}
-            try { setShowWaitingPill(true); } catch {}
-            thinkingTimeoutRef.current = null;
+            // On connect: if idle (not awaiting, not speaking, not PTT), show Waiting pill
+            try {
+              const st = useSessionStore.getState();
+              if (!st.isAwaitingAIResponse && !st.isAgentSpeaking && !st.isPushToTalkActive) {
+                setShowWaitingPill(true);
+              }
+            } catch {}
           }, thinkingTimeoutMsRef.current);
+        } catch {}
+
+        // Proactively announce frontend readiness over data channel
+        try {
+          const pid = roomInstance?.localParticipant?.identity;
+          if (pid) {
+            const payload = JSON.stringify({ type: 'frontend_ready', identity: pid, ts: Date.now(), userId: userName, roomName });
+            const bytes = new TextEncoder().encode(payload);
+            await roomInstance.localParticipant.publishData(bytes);
+          }
         } catch {}
 
         // Fallback: if 'agent_ready' data message was missed, try to infer agent identity
@@ -1087,8 +1119,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             const MAX_ATTEMPTS = 6; // ~6s
             for (let i = 0; i < MAX_ATTEMPTS && !agentServiceClientRef.current; i++) {
               await new Promise(r => setTimeout(r, 1000));
-              if (agentServiceClientRef.current) return;
-              // If handshake already set identity, stop
               if (agentServiceClientRef.current) return;
               // Infer candidate: any non-browser remote participant
               const candidates = Array.from(roomInstance.remoteParticipants.keys()).filter(id => !String(id).startsWith('browser-bot-'));
@@ -1115,7 +1145,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                   setIsConnected(true);
                   console.log('[FLOW] Fallback agent identity established and validated');
                   return;
-                } catch (e) {
+                } catch (e: any) {
+                  const msg = (e?.message || String(e) || '').toLowerCase();
+                  if (msg.includes('method not supported')) {
+                    console.debug('[FLOW] Fallback bind/validate failed: method not supported at destination (likely not the agent). Aborting fallback attempts.');
+                    try { setAgentIdentity(null); } catch {}
+                    agentServiceClientRef.current = null;
+                    break; // stop fallback loop; wait for agent_ready handshake
+                  }
                   console.warn('[FLOW] Fallback bind/validate failed; will retry if attempts remain', e);
                   // Reset and retry next loop
                   try { setAgentIdentity(null); } catch {}
@@ -1373,6 +1410,13 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     roomInstance.on(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
     roomInstance.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakersChanged);
 
+    // If the effect runs after connect completed, fire onConnected immediately (idempotent)
+    try {
+      if (roomInstance.state === ConnectionState.Connected) {
+        onConnected();
+      }
+    } catch {}
+
     // RPC handler is registered inside onConnected to ensure localParticipant exists.
 
     return () => {
@@ -1392,9 +1436,50 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // This is the clean interface your UI components will use to talk to the agent.
   const startTask = useCallback(async (taskName: string, payload: object) => {
     if (!agentServiceClientRef.current) {
-      setConnectionError("Cannot start task: Agent is not ready.");
-      console.error("Agent is not ready, cannot start task.");
-      return;
+      const deadline = Date.now() + 8000;
+      while (!agentServiceClientRef.current && Date.now() < deadline) {
+        try {
+          const candidates = Array.from(roomInstance.remoteParticipants.keys()).filter(id => !String(id).startsWith('browser-bot-'));
+          if (candidates.length > 0 && roomInstance.localParticipant) {
+            const pid = String(candidates[0]);
+            try {
+              setAgentIdentity(pid);
+              const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, pid);
+              agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
+              const payloadPing = uint8ArrayToBase64(new TextEncoder().encode(JSON.stringify({
+                message: 'Pre-task handshake',
+                timestamp: Date.now(),
+                userId: userName,
+                roomName: roomName
+              })));
+              await roomInstance.localParticipant.performRpc({
+                destinationIdentity: pid,
+                method: 'rox.interaction.AgentInteraction/TestPing',
+                payload: payloadPing,
+                responseTimeout: 10000,
+              });
+              setIsConnected(true);
+              break;
+            } catch (e: any) {
+              const msg = (e?.message || String(e) || '').toLowerCase();
+              if (msg.includes('method not supported')) {
+                console.debug('[FLOW] Pre-task bind/validate failed: method not supported at destination (likely not the agent). Aborting binder.');
+                try { setAgentIdentity(null); } catch {}
+                agentServiceClientRef.current = null;
+                break; // abort binder; rely on agent_ready handshake
+              }
+              try { setAgentIdentity(null); } catch {}
+              agentServiceClientRef.current = null;
+            }
+          }
+        } catch {}
+        await new Promise(r => setTimeout(r, 300));
+      }
+      if (!agentServiceClientRef.current) {
+        setConnectionError("Cannot start task: Agent is not ready.");
+        console.error("Agent is not ready, cannot start task.");
+        return;
+      }
     }
     try {
       console.log(`[F2B RPC] Starting task: ${taskName}`);
@@ -1409,7 +1494,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       };
       // InvokeAgentTask returns an Observable<AgentResponse> (server-streaming).
       // Our transport currently yields a single response; await the first emission.
-      await firstValueFrom(agentServiceClientRef.current.InvokeAgentTask(request));
+      try {
+        await firstValueFrom(agentServiceClientRef.current.InvokeAgentTask(request));
+      } catch (e) {
+        await new Promise(r => setTimeout(r, 500));
+        await firstValueFrom(agentServiceClientRef.current.InvokeAgentTask(request));
+      }
     } catch (e) {
       console.error("Failed to start agent task:", e);
       setConnectionError(`Failed to start task: ${e instanceof Error ? e.message : String(e)}`);
