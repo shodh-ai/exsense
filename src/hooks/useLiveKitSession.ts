@@ -755,6 +755,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             console.warn('[B2F RPC] SUGGESTED_RESPONSES payload missing or invalid, and no parsable parameters found:', { payload, params });
           }
         }
+        // CRITICAL: Return acknowledgment response
+        const response = ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true });
+        return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
       } else if (
         // Prefer enum when available, but also handle numeric value for backward compatibility
         (ClientUIActionType as any).RRWEB_REPLAY ?
