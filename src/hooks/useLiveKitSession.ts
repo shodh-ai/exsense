@@ -1067,12 +1067,16 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 }
             }
         }
-        // On connect: if idle (not awaiting, not speaking, not PTT), show Waiting pill
+        // On first connect: start in 'AI is Thinking...' until first TTS or timeout
         try {
-          const st = useSessionStore.getState();
-          if (!st.isAwaitingAIResponse && !st.isAgentSpeaking && !st.isPushToTalkActive) {
-            setShowWaitingPill(true);
-          }
+          setIsAwaitingAIResponse(true);
+          setShowWaitingPill(false);
+          if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; }
+          thinkingTimeoutRef.current = window.setTimeout(() => {
+            try { setIsAwaitingAIResponse(false); } catch {}
+            try { setShowWaitingPill(true); } catch {}
+            thinkingTimeoutRef.current = null;
+          }, thinkingTimeoutMsRef.current);
         } catch {}
 
         // Fallback: if 'agent_ready' data message was missed, try to infer agent identity
@@ -1292,11 +1296,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                         responseTimeout: 20000,
                     });
                     console.log(`[FLOW] Agent confirmation response:`, confirmationResponse);
-                    try {
-                      // Agent is ready -> not awaiting anymore
-                      setIsAwaitingAIResponse(false);
-                      if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; }
-                    } catch {}
                     setIsConnected(true); // NOW we are fully connected and ready to interact
                     console.log('[FLOW] Frontend ready (agent connected)');
                     
