@@ -690,71 +690,74 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         }
         console.log('[SET_UI_STATE] ===== END SET_UI_STATE PROCESSING =====');
       } else if (request.actionType === ClientUIActionType.SUGGESTED_RESPONSES) {
-        console.log('[B2F RPC] Handling SUGGESTED_RESPONSES');
+        console.log('[B2F RPC] Handling SUGGESTED_RESPONSES (recreated handler)');
         const payload = request.suggestedResponsesPayload;
-        if (payload && Array.isArray(payload.suggestions)) {
-          const now = Date.now();
-          const suggestions = payload.suggestions.map((s: any, idx: number) => {
-            const idRaw = s?.id;
-            const id = typeof idRaw === 'string' && idRaw.trim().length > 0 ? idRaw : `s_${now}_${idx}`;
-            const textRaw = s?.text;
-            const text = typeof textRaw === 'string' ? textRaw : String(textRaw ?? '');
-            return { id, text, reason: s?.reason } as { id: string; text: string; reason?: string };
+        const suggestions: { id: string; text: string; reason?: string }[] = [];
+        const now = Date.now();
+
+        if (payload && Array.isArray(payload.suggestions) && payload.suggestions.length > 0) {
+          payload.suggestions.forEach((entry: any, idx: number) => {
+            const idCandidate = typeof entry?.id === 'string' ? entry.id.trim() : '';
+            const textCandidate = typeof entry?.text === 'string' ? entry.text : String(entry?.text ?? '');
+            if (textCandidate.length > 0) {
+              suggestions.push({
+                id: idCandidate.length > 0 ? idCandidate : `s_${now}_${idx}`,
+                text: textCandidate,
+                reason: typeof entry?.reason === 'string' ? entry.reason : undefined,
+              });
+            }
           });
-          
-          // *** VERIFICATION LOGGING BLOCK ***
-          if (suggestions.length > 0) {
-            console.log(`[UI-VERIFY] Data is available. Setting ${suggestions.length} suggestions in Zustand store.`);
-            try {
-              setSuggestedResponses(suggestions, payload.title);
-              console.log("[UI-VERIFY] Zustand store updated successfully.");
-              console.log(`[B2F RPC] Set ${suggestions.length} suggested responses${payload.title ? ` with title: ${payload.title}` : ''}`);
-            } catch (e) {
-              console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses in store:', e);
-            }
-          } else {
-            console.warn('[UI-VERIFY] No suggestions were parsed from the payload.');
+        }
+
+        // *** VERIFICATION LOGGING BLOCK ***
+        if (suggestions.length > 0) {
+          console.log(`[UI-VERIFY] Data is available. Setting ${suggestions.length} suggestions in Zustand store.`);
+          try {
+            setSuggestedResponses(suggestions, payload?.title ?? undefined);
+            console.log('[UI-VERIFY] Zustand store updated successfully.');
+            console.log(`[B2F RPC] Set ${suggestions.length} suggested responses${payload?.title ? ` with title: ${payload.title}` : ''}`);
+          } catch (e) {
+            console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses in store:', e);
           }
-          // *** END OF VERIFICATION LOGGING BLOCK ***
         } else {
-          // --- Fallback: some agents send suggestions via request.parameters ---
+          console.warn('[UI-VERIFY] No suggestions were parsed from the payload.');
+        }
+        // *** END OF VERIFICATION LOGGING BLOCK ***
+
+        // --- Fallback: some agents send suggestions via request.parameters ---
+        if (suggestions.length === 0) {
           const params = (request as any).parameters || {};
-          const parseMaybeJson = (v: unknown) => {
-            if (typeof v === 'string') {
-              try { return JSON.parse(v); } catch { return v; }
-            }
-            return v;
-          };
-          const candidate = parseMaybeJson(params.suggestions ?? params.suggested_responses);
-          const titleParam = (params.title ?? params.suggested_title) as string | undefined;
-          if (candidate) {
-            let suggestions: { id: string; text: string; reason?: string }[] = [];
-            if (Array.isArray(candidate)) {
-              if (candidate.length > 0 && typeof candidate[0] === 'string') {
-                suggestions = (candidate as string[]).map((t, idx) => ({ id: `s_${Date.now()}_${idx}`, text: t }));
-              } else {
-                suggestions = (candidate as any[]).map((s: any, idx: number) => ({ id: s.id || `s_${Date.now()}_${idx}` , text: s.text || String(s), reason: s.reason }));
+          const candidate = typeof params.suggestions === 'string' ? params.suggestions : params.suggested_responses;
+          if (Array.isArray(candidate)) {
+            candidate.forEach((entry: any, idx: number) => {
+              const textCandidate = typeof entry === 'string' ? entry : String(entry?.text ?? '');
+              const idCandidate = typeof entry === 'object' && entry?.id ? String(entry.id) : `s_${now}_${idx}`;
+              if (textCandidate.length > 0) {
+                suggestions.push({
+                  id: idCandidate,
+                  text: textCandidate,
+                  reason: typeof entry?.reason === 'string' ? entry.reason : undefined,
+                });
               }
-            } else if (typeof candidate === 'string') {
-              // Single string -> one suggestion
-              suggestions = [{ id: `s_${Date.now()}_0`, text: candidate }];
-            }
-            if (suggestions.length > 0) {
-              console.log(`[UI-VERIFY] Data is available (from parameters). Setting ${suggestions.length} suggestions in Zustand store.`);
-              try {
-                setSuggestedResponses(suggestions, titleParam);
-                console.log("[UI-VERIFY] Zustand store updated successfully (from parameters).");
-                console.log(`[B2F RPC] Set ${suggestions.length} suggested responses from parameters${titleParam ? ` with title: ${titleParam}` : ''}`);
-              } catch (e) {
-                console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses (parameters) in store:', e);
-              }
-            } else {
-              console.warn('[UI-VERIFY] Parameters present but could not derive suggestions:', candidate);
+            });
+          } else if (typeof candidate === 'string' && candidate.trim().length > 0) {
+            suggestions.push({ id: `s_${now}_0`, text: candidate.trim() });
+          }
+
+          if (suggestions.length > 0) {
+            console.log(`[UI-VERIFY] Data is available (from parameters). Setting ${suggestions.length} suggestions in Zustand store.`);
+            try {
+              setSuggestedResponses(suggestions, (params.title ?? params.suggested_title) as string | undefined);
+              console.log('[UI-VERIFY] Zustand store updated successfully (from parameters).');
+              console.log(`[B2F RPC] Set ${suggestions.length} suggested responses from parameters${params.title ? ` with title: ${params.title}` : ''}`);
+            } catch (e) {
+              console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses (parameters) in store:', e);
             }
           } else {
-            console.warn('[B2F RPC] SUGGESTED_RESPONSES payload missing or invalid, and no parsable parameters found:', { payload, params });
+            console.warn('[UI-VERIFY] Parameters present but could not derive suggestions:', candidate);
           }
         }
+
         // CRITICAL: Return acknowledgment response
         const response = ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true });
         return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
