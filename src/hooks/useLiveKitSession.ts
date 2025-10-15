@@ -1025,9 +1025,21 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         try {
           if (!rpcHandlerRegisteredRef.current) {
             console.log("!!!!!!!!!! ATTEMPTING TO REGISTER RPC HANDLER NOW !!!!!!!!!!");
-            roomInstance.registerRpcMethod("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
+            // Room-level registration (preferred)
+            try {
+              roomInstance.registerRpcMethod("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
+              console.log('[useLiveKitSession] Registered (Room) RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
+            } catch (er) {
+              console.warn('[useLiveKitSession] Room.registerRpcMethod failed (non-fatal):', er);
+            }
+            // Participant-level registration (compatibility with SDKs)
+            try {
+              (roomInstance as any)?.localParticipant?.registerRpcMethod?.("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
+              console.log('[useLiveKitSession] Registered (LocalParticipant) RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
+            } catch (er2) {
+              if (LIVEKIT_DEBUG) console.warn('[useLiveKitSession] LocalParticipant.registerRpcMethod unavailable or failed (non-fatal):', er2);
+            }
             rpcHandlerRegisteredRef.current = true;
-            console.log('[useLiveKitSession] Registered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
           } else if (LIVEKIT_DEBUG) {
             console.log('[useLiveKitSession] RPC handler already registered, skipping');
           }
@@ -1181,7 +1193,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         }
         // Unregister RPC handler on disconnect
         try {
-          roomInstance.unregisterRpcMethod("rox.interaction.ClientSideUI/PerformUIAction");
+          try { roomInstance.unregisterRpcMethod("rox.interaction.ClientSideUI/PerformUIAction"); } catch {}
+          try { (roomInstance as any)?.localParticipant?.unregisterRpcMethod?.("rox.interaction.ClientSideUI/PerformUIAction"); } catch {}
           rpcHandlerRegisteredRef.current = false;
           console.log('[useLiveKitSession] Unregistered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
         } catch (e) {
