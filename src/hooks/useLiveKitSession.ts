@@ -80,6 +80,7 @@ class LiveKitRpcAdapter implements Rpc {
         destinationIdentity: this.agentIdentity,
         method: fullMethodName,
         payload: payloadString,
+        responseTimeout: 30000,
       });
       return base64ToUint8Array(responseString);
     } catch (error) {
@@ -214,6 +215,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const agentAudioElsRef = useRef<HTMLAudioElement[]>([]);
   const thinkingTimeoutRef = useRef<number | null>(null);
   const thinkingTimeoutMsRef = useRef<number>(Number(process.env.NEXT_PUBLIC_AI_THINKING_TIMEOUT_MS) || 8000);
+  // Track whether we've registered the RPC handler to avoid duplicate registrations under StrictMode/HMR
+  const rpcHandlerRegisteredRef = useRef<boolean>(false);
 
   useEffect(() => {
     isPushToTalkActiveRef.current = isPushToTalkActive;
@@ -558,6 +561,13 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             tool_name: 'jupyter_type_in_cell',
             parameters: params
           });
+          // If we are connected and not awaiting a response and not speaking/PTT, show the Waiting pill by default
+          try {
+            const st = useSessionStore.getState();
+            if (!st.isAwaitingAIResponse && !st.isPushToTalkActive && !st.isAgentSpeaking) {
+              setShowWaitingPill(true);
+            }
+          } catch {}
         } catch (err) {
           console.error('[JUPYTER_TYPE_IN_CELL] Failed:', err);
         }
@@ -993,18 +1003,24 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         console.log('[FLOW] LiveKit Connected');
         setIsLoading(false);
         
-        if (roomInstance.localParticipant) {
-            try {
-                console.log("!!!!!!!!!! ATTEMPTING TO REGISTER RPC HANDLER NOW !!!!!!!!!!");
-                roomInstance.localParticipant.registerRpcMethod("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
-                console.log('[useLiveKitSession] Registered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
-            } catch (e) {
-                if (e instanceof RpcError && (e as any).message?.includes("already registered")) {
-                    console.warn("RPC method already registered. This is expected with React Strict Mode / HMR.");
-                } else {
-                    console.error("Failed to register client-side RPC handler:", e);
-                }
-            }
+        // Register RPC handler on the Room (preferred API) once per connection
+        try {
+          if (!rpcHandlerRegisteredRef.current) {
+            console.log("!!!!!!!!!! ATTEMPTING TO REGISTER RPC HANDLER NOW !!!!!!!!!!");
+            roomInstance.registerRpcMethod("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
+            rpcHandlerRegisteredRef.current = true;
+            console.log('[useLiveKitSession] Registered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
+          } else if (LIVEKIT_DEBUG) {
+            console.log('[useLiveKitSession] RPC handler already registered, skipping');
+          }
+        } catch (e: any) {
+          // Room.registerRpcMethod throws if already registered; that's fine across HMR
+          if (typeof e?.message === 'string' && e.message.includes('already registered')) {
+            console.warn('[useLiveKitSession] RPC method already registered; continuing');
+            rpcHandlerRegisteredRef.current = true;
+          } else {
+            console.error('Failed to register client-side RPC handler:', e);
+          }
         }
         // Set up microphone but keep it disabled by default
         // ⭐ CRITICAL: Skip microphone setup for viewers - they cannot publish
@@ -1051,6 +1067,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 }
             }
         }
+        // On connect: if idle (not awaiting, not speaking, not PTT), show Waiting pill
+        try {
+          const st = useSessionStore.getState();
+          if (!st.isAwaitingAIResponse && !st.isAgentSpeaking && !st.isPushToTalkActive) {
+            setShowWaitingPill(true);
+          }
+        } catch {}
+
         // Fallback: if 'agent_ready' data message was missed, try to infer agent identity
         // and validate with a TestPing to establish RPC client.
         (async () => {
@@ -1081,7 +1105,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                   await roomInstance.localParticipant.performRpc({
                     destinationIdentity: pid,
                     method: 'rox.interaction.AgentInteraction/TestPing',
-                    payload
+                    payload,
+                    responseTimeout: 20000,
                   });
                   setIsConnected(true);
                   console.log('[FLOW] Fallback agent identity established and validated');
@@ -1112,6 +1137,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         if (microphoneTrackRef.current) {
             microphoneTrackRef.current.stop();
             microphoneTrackRef.current = null;
+        }
+        // Unregister RPC handler on disconnect
+        try {
+          roomInstance.unregisterRpcMethod("rox.interaction.ClientSideUI/PerformUIAction");
+          rpcHandlerRegisteredRef.current = false;
+          console.log('[useLiveKitSession] Unregistered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
+        } catch (e) {
+          console.error('[useLiveKitSession] Failed to unregister RPC handler:', e);
         }
     };
 
@@ -1156,6 +1189,13 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           // Agent started speaking: stop thinking and clear timeout
           try { setIsAwaitingAIResponse(false); } catch {}
           try { if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; } } catch {}
+          try { setShowWaitingPill(false); } catch {}
+        } else {
+          // Agent stopped speaking: if not awaiting, show waiting pill
+          const awaiting = useSessionStore.getState().isAwaitingAIResponse;
+          if (!awaiting) {
+            try { setShowWaitingPill(true); } catch {}
+          }
         }
       } catch {}
     };
@@ -1248,7 +1288,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                             timestamp: Date.now(),
                             userId: userName,
                             roomName: roomName
-                        })))
+                        }))),
+                        responseTimeout: 20000,
                     });
                     console.log(`[FLOW] Agent confirmation response:`, confirmationResponse);
                     try {
@@ -1411,24 +1452,23 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       pttBufferRef.current = [];
       if (text && text.length > 0) {
         await startTask('student_spoke_or_acted', { transcript: text });
-        // Only enter awaiting state if we know who the agent is
-        if (agentIdentity) {
-          try {
-            setIsAwaitingAIResponse(true);
-            // Clear any previous timers
-            if (thinkingTimeoutRef.current) {
-              clearTimeout(thinkingTimeoutRef.current);
-              thinkingTimeoutRef.current = null;
-            }
-            // Auto-clear after timeout to avoid getting stuck in thinking mode
-            thinkingTimeoutRef.current = window.setTimeout(() => {
-              try { setIsAwaitingAIResponse(false); } catch {}
-              thinkingTimeoutRef.current = null;
-            }, thinkingTimeoutMsRef.current);
-          } catch {}
-        }
-        try { setShowWaitingPill(false); } catch {}
       }
+      // Enter awaiting state immediately after user releases PTT (even if no transcript)
+      try {
+        setIsAwaitingAIResponse(true);
+        // Clear any previous timers
+        if (thinkingTimeoutRef.current) {
+          clearTimeout(thinkingTimeoutRef.current);
+          thinkingTimeoutRef.current = null;
+        }
+        // Auto-clear after timeout to avoid getting stuck in thinking mode
+        thinkingTimeoutRef.current = window.setTimeout(() => {
+          try { setIsAwaitingAIResponse(false); } catch {}
+          try { setShowWaitingPill(true); } catch {}
+          thinkingTimeoutRef.current = null;
+        }, thinkingTimeoutMsRef.current);
+      } catch {}
+      try { setShowWaitingPill(false); } catch {}
     } catch (e) {
       console.error('[PTT] stopPushToTalk failed:', e);
     }

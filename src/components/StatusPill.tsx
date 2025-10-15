@@ -51,7 +51,7 @@ export const StatusPill: React.FC<StatusPillProps> = ({ message, type }) => {
 
     // Positioning logic remains the same for precise placement above the sphere.
     const pillPositionStyle: React.CSSProperties = {
-        bottom: 'calc(43px + 18vh)', // 40px padding + 17vh sphere height + 3px gap
+        bottom: 'calc(72px + 22vh)', // raised to sit above suggested responses
         left: '50%',
         transform: 'translateX(-50%)'
     };
@@ -59,7 +59,7 @@ export const StatusPill: React.FC<StatusPillProps> = ({ message, type }) => {
 
     return (
         <div 
-            className="absolute z-20 transition-opacity duration-300 animate-fade-in"
+            className="fixed z-50 pointer-events-none transition-opacity duration-300 animate-fade-in"
             style={pillPositionStyle}
         >
              {/* 
