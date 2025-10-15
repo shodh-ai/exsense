@@ -93,6 +93,8 @@ interface SessionState {
     isMicEnabled: boolean;
     isMusicButtonPlaying: boolean;
     isMicActivatingPending: boolean;
+    isPushToTalkActive: boolean;
+    showWaitingPill: boolean;
     visualizationData: unknown[] | null;
     // New dynamic whiteboard feed blocks (supersedes visualizationData)
     whiteboardBlocks: WhiteboardBlock[];
@@ -134,6 +136,8 @@ interface SessionState {
     setIsMicEnabled: (isEnabled: boolean) => void;
     setIsMusicButtonPlaying: (isPlaying: boolean) => void;
     setIsMicActivatingPending: (isPending: boolean) => void;
+    setIsPushToTalkActive: (active: boolean) => void;
+    setShowWaitingPill: (show: boolean) => void;
     setVisualizationData: (data: unknown[] | null) => void;
     // Whiteboard feed actions
     addBlock: (block: WhiteboardBlock) => void;
@@ -180,6 +184,8 @@ export const useSessionStore = create<SessionState>()(
             isMicEnabled: false,
             isMusicButtonPlaying: false,
             isMicActivatingPending: false,
+            isPushToTalkActive: false,
+            showWaitingPill: false,
             visualizationData: null,
             whiteboardBlocks: [],
             diagramDefinition: '',
@@ -216,6 +222,8 @@ export const useSessionStore = create<SessionState>()(
             setIsMicEnabled: (isEnabled) => set({ isMicEnabled: isEnabled }),
             setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
             setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }),
+            setIsPushToTalkActive: (active) => set({ isPushToTalkActive: active }),
+            setShowWaitingPill: (show) => set({ showWaitingPill: show }),
             setVisualizationData: (data) => set({ visualizationData: data }),
             addBlock: (block) => set((state) => ({ whiteboardBlocks: [...state.whiteboardBlocks, block] })),
             updateBlock: (blockId, newContent) => set((state) => ({

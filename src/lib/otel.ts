@@ -96,11 +96,14 @@ export function initTelemetry(): void {
 
     // Build safe allowlist for CORS trace propagation
     const corsAllowlist: (string | RegExp)[] = [
-      /localhost:\d+/,
+      /localhost:\d+/, 
       /.*\.run\.app/,
     ];
     if (process.env.NEXT_PUBLIC_BACKEND_URL) {
       corsAllowlist.push(new RegExp(process.env.NEXT_PUBLIC_BACKEND_URL));
+    }
+    if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+      corsAllowlist.push(new RegExp(process.env.NEXT_PUBLIC_API_BASE_URL));
     }
     if (process.env.NEXT_PUBLIC_WEBRTC_TOKEN_SERVICE_URL) {
       corsAllowlist.push(new RegExp(process.env.NEXT_PUBLIC_WEBRTC_TOKEN_SERVICE_URL));

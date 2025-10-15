@@ -39,7 +39,7 @@ const getIconForState = (message: string, type: 'ai' | 'notification') => {
     return (
         <img 
             src="/general.svg" 
-            alt="AI is working" 
+            alt="AI is Thinking" 
             className={`${iconClasses} animate-pulse`} 
         />
     );

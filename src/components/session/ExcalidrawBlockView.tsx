@@ -9,6 +9,7 @@ const Excalidraw = dynamic(async () => (await import("@excalidraw/excalidraw")).
   ssr: false,
   loading: () => <div style={{ height: 320, width: "100%" }}>Loading whiteboard…</div>,
 });
+const NORMAL_HEIGHT = 480;
 
 export interface ExcalidrawBlockViewProps {
   initialElements: any[];
@@ -177,33 +178,60 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
     },
   }), [normalized]);
 
-  // Helper: fit content into current container
+  const computeBounds = useCallback((els: any[]) => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of els) {
+      if (el?.isDeleted) continue;
+      if (el.type === 'line' || el.type === 'arrow') {
+        const pts = Array.isArray(el.points) ? el.points : [];
+        const xs = pts.map((p: any) => (Array.isArray(p) ? p[0] : 0));
+        const ys = pts.map((p: any) => (Array.isArray(p) ? p[1] : 0));
+        const pMinX = Math.min(0, ...xs);
+        const pMaxX = Math.max(0, ...xs);
+        const pMinY = Math.min(0, ...ys);
+        const pMaxY = Math.max(0, ...ys);
+        minX = Math.min(minX, el.x + pMinX);
+        maxX = Math.max(maxX, el.x + pMaxX);
+        minY = Math.min(minY, el.y + pMinY);
+        maxY = Math.max(maxY, el.y + pMaxY);
+      } else {
+        minX = Math.min(minX, el.x);
+        minY = Math.min(minY, el.y);
+        maxX = Math.max(maxX, el.x + (el.width ?? 0));
+        maxY = Math.max(maxY, el.y + (el.height ?? 0));
+      }
+    }
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+      return { minX: 0, minY: 0, maxX: 0, maxY: 0, w: 0, h: 0 };
+    }
+    return { minX, minY, maxX, maxY, w: Math.max(0, maxX - minX), h: Math.max(0, maxY - minY) };
+  }, []);
+
   const fitNow = useCallback(() => {
     if (!mountedRef.current || !apiReadyRef.current) return;
     const api = apiRef.current;
     const els = (api?.getSceneElements?.() || normalized) as any[];
     if (!api || !els?.length) return;
+    const container = containerRef.current;
+    if (!container) return;
     try {
-      // Fullscreen: use tighter padding then zoom in slightly for larger appearance
-      const pad = isFullscreen ? 16 : 120;
-      api.scrollToContent(els, { fitToContent: true, animate: false, padding: pad });
-
-      if (isFullscreen) {
-        requestAnimationFrame(() => {
-          try {
-            const st = api.getAppState?.();
-            const currentZoom = st?.zoom?.value ?? 1;
-            const targetZoom = Math.min(currentZoom * 1.25, 2.5);
-            api.updateScene?.({ appState: { zoom: { value: targetZoom } } });
-            // Recentre on content without re-fitting (keep our larger zoom)
-            try { (api as any).scrollToContent?.(els, { fitToContent: false, animate: false, padding: 12 }); } catch {}
-          } catch {}
-        });
-      }
+      const bounds = computeBounds(els);
+      const rect = container.getBoundingClientRect();
+      const pad = isFullscreen ? 16 : 48;
+      const availW = Math.max(1, rect.width - pad * 2);
+      const availH = Math.max(1, rect.height - pad * 2);
+      const scaleW = bounds.w > 0 ? availW / bounds.w : 1;
+      const scaleH = bounds.h > 0 ? availH / bounds.h : 1;
+      let z = Math.min(scaleW, scaleH);
+      z = Math.max(0.4, Math.min(z, isFullscreen ? 2.0 : 1.2));
+      const cx = bounds.minX + bounds.w / 2;
+      const cy = bounds.minY + bounds.h / 2;
+      const scrollX = rect.width / 2 - cx * z;
+      const scrollY = rect.height / 2 - cy * z;
+      api.updateScene?.({ appState: { zoom: { value: z }, scrollX, scrollY } });
     } catch {}
-  }, [normalized, isFullscreen]);
+  }, [normalized, isFullscreen, computeBounds]);
 
-  // Fit content when elements change or when toggling fullscreen
   useEffect(() => {
     if (!mountedRef.current || !apiReadyRef.current) return;
     // Defer to next two frames to ensure child is mounted
@@ -225,6 +253,21 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
     ro.observe(el);
     return () => ro.disconnect();
   }, [fitNow]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!isFullscreen) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel as any);
+    };
+  }, [isFullscreen]);
 
   // Ensure selection tool is active when entering fullscreen (we hide toolbar)
   useEffect(() => {
@@ -283,7 +326,7 @@ const ExcalidrawBlockView: React.FC<ExcalidrawBlockViewProps> = ({ initialElemen
     <>
       {/* Normal in-flow card */}
       {!isFullscreen && (
-        <div ref={containerRef} style={{ position: 'relative', height: computedHeight, width: '100%', background: 'transparent', overflow: 'hidden' }}>
+        <div ref={containerRef} style={{ position: 'relative', height: NORMAL_HEIGHT, width: '100%', background: 'transparent', overflow: 'hidden' }}>
           {board}
         </div>
       )}

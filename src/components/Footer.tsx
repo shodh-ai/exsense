@@ -15,6 +15,9 @@ interface FooterProps {
     hasNotifications?: boolean;
     // --- ADD THIS NEW PROP ---
     showMusicButton?: boolean; // Add this prop to control music button visibility
+    // Push-to-talk callbacks
+    onMicPress?: () => void | Promise<void>;
+    onMicRelease?: () => void | Promise<void>;
 }
 
 export default function Footer({ 
@@ -26,6 +29,8 @@ export default function Footer({
     hasNotifications,
     // --- ADD THE PROP TO THE DESTRUCTURING WITH A DEFAULT VALUE ---
     showMusicButton = true,
+    onMicPress,
+    onMicRelease,
 }: FooterProps) {
     // Check if user is a viewer (viewers cannot publish)
     const userRole = useSessionStore((s) => s.userRole);
@@ -46,7 +51,7 @@ export default function Footer({
                             />
                             {/* --- WRAP THE MUSIC BUTTON IN A CONDITIONAL RENDER --- */}
                             {showMusicButton && <MusicButton />}
-                            <MicButton room={room} agentIdentity={agentIdentity} />
+                            <MicButton onPress={onMicPress} onRelease={onMicRelease} />
                         </>
                     )}
                     {isViewer && (

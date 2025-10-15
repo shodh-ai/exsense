@@ -527,17 +527,14 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
                                 {suggestedResponses.map((s, idx) => {
                                     const safeId = s.id && s.id.trim().length > 0 ? s.id : `ui_${Date.now()}_${idx}`;
                                     return (
-                                        <button
+                                        <span
                                             key={safeId}
-                                            onClick={() => {
-                                                const payload = { ...s, id: safeId };
-                                                if (onSelectSuggestion) onSelectSuggestion(payload);
-                                            }}
-                                            className="px-4 py-2 rounded-full bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-sm font-medium transition-colors"
+                                            className="px-4 py-2 rounded-full bg-indigo-100 text-indigo-700 text-sm font-medium opacity-70 cursor-not-allowed select-none"
                                             title={s.reason || s.text}
+                                            aria-disabled="true"
                                         >
                                             {s.text}
-                                        </button>
+                                        </span>
                                     );
                                 })}
                             </div>

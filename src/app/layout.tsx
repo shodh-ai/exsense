@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import "./(app)/globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { TelemetryProvider } from "@/components/TelemetryProvider";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta-sans",
@@ -37,6 +38,7 @@ export default function RootLayout({
           <TelemetryProvider>
             {children}
           </TelemetryProvider>
+          <SpeedInsights />
         </body>
       </html>
     </ClerkProvider>

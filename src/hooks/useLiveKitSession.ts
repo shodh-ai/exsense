@@ -145,6 +145,9 @@ export interface UseLiveKitSessionReturn {
   openNewTab: (name: string, url: string) => Promise<void>;
   switchTab: (tabId: string) => Promise<void>;
   closeTab: (tabId: string) => Promise<void>;
+  // --- Push To Talk helpers ---
+  startPushToTalk: () => Promise<void>;
+  stopPushToTalk: () => Promise<void>;
 }
 
 export interface LiveKitSpawnOptions {
@@ -167,6 +170,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const setIsMicActivatingPending = useSessionStore((s) => s.setIsMicActivatingPending);
   const setSuggestedResponses = useSessionStore((s) => s.setSuggestedResponses);
   const clearSuggestedResponses = useSessionStore((s) => s.clearSuggestedResponses);
+  const isPushToTalkActive = useSessionStore((s) => s.isPushToTalkActive);
+  const setIsPushToTalkActive = useSessionStore((s) => s.setIsPushToTalkActive);
+  const setIsAwaitingAIResponse = useSessionStore((s) => s.setIsAwaitingAIResponse);
+  const setShowWaitingPill = useSessionStore((s) => s.setShowWaitingPill);
   // Browser tab actions from store
   const addTab = useSessionStore((s) => s.addTab);
   const removeTab = useSessionStore((s) => s.removeTab);
@@ -202,6 +209,15 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   
   const agentServiceClientRef = useRef<AgentInteractionClientImpl | null>(null);
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
+  const isPushToTalkActiveRef = useRef<boolean>(false);
+  const pttBufferRef = useRef<string[]>([]);
+  const agentAudioElsRef = useRef<HTMLAudioElement[]>([]);
+  const thinkingTimeoutRef = useRef<number | null>(null);
+  const thinkingTimeoutMsRef = useRef<number>(Number(process.env.NEXT_PUBLIC_AI_THINKING_TIMEOUT_MS) || 8000);
+
+  useEffect(() => {
+    isPushToTalkActiveRef.current = isPushToTalkActive;
+  }, [isPushToTalkActive]);
 
   // LOG 1: Is the hook even running?
   console.log('[DIAGNOSTIC] 1. useLiveKitSession hook has started.');
@@ -509,69 +525,42 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       if (request.actionType === ClientUIActionType.BROWSER_NAVIGATE) {
         const url = request.parameters?.url;
         if (url) {
-          executeBrowserAction({
-            tool_name: 'browser_navigate',
-            parameters: { url },
-          });
+          try {
+            await executeBrowserAction({
+              tool_name: 'browser_navigate',
+              parameters: { url },
+            });
+          } catch (err) {
+            console.error('[BROWSER_NAVIGATE] Failed to perform browser action:', err);
+          }
         }
       } else if (request.actionType === ClientUIActionType.START_LISTENING_VISUAL) {
-        // Check if user is a viewer - viewers cannot publish audio
-        const currentUserRole = useSessionStore.getState().userRole;
-        if (currentUserRole === 'viewer') {
-          console.log('[useLiveKitSession] Viewer mode: ignoring START_LISTENING_VISUAL');
-          return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ 
-            requestId: rpcData.requestId, 
-            success: false,
-            message: 'Viewer cannot publish audio'
-          })).finish());
-        }
-        
-        setIsMicEnabled(true);
-        // Safety net: ensure pending flag is cleared when backend enables mic
-        try { setIsMicActivatingPending(false); } catch {}
-        // Enable microphone so user can be heard
-        if (roomInstance.localParticipant) {
-          await roomInstance.localParticipant.setMicrophoneEnabled(true);
-          const statusMsg = 'Microphone enabled - user can now speak';
-          console.log(`[useLiveKitSession] ${statusMsg}`);
-          setStatusMessages(prev => [...prev.slice(-9), statusMsg]); // Keep last 10 status messages
-        }
+        // Ignored in PTT client flow
+        return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true })).finish());
       } else if (request.actionType === ClientUIActionType.STOP_LISTENING_VISUAL) {
-        // Check if user is a viewer - viewers don't have mic to disable
-        const currentUserRole = useSessionStore.getState().userRole;
-        if (currentUserRole === 'viewer') {
-          console.log('[useLiveKitSession] Viewer mode: ignoring STOP_LISTENING_VISUAL');
-          return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ 
-            requestId: rpcData.requestId, 
-            success: false,
-            message: 'Viewer does not have microphone'
-          })).finish());
-        }
-        
-        setIsMicEnabled(false);
-        // Disable microphone so user cannot be heard
-        if (roomInstance.localParticipant) {
-          await roomInstance.localParticipant.setMicrophoneEnabled(false);
-          const statusMsg = 'Microphone disabled - user cannot be heard';
-          console.log(`[useLiveKitSession] ${statusMsg}`);
-          setStatusMessages(prev => [...prev.slice(-9), statusMsg]); // Keep last 10 status messages
-        }
+        // Ignored in PTT client flow
+        return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true })).finish());
       } else if (request.actionType === ClientUIActionType.JUPYTER_CLICK_PYODIDE) {
         console.log('[JUPYTER_CLICK_PYODIDE] Received jupyter_click_pyodide action');
-        executeBrowserAction({
-          tool_name: 'jupyter_click_pyodide',
-          parameters: {}
-        });
+        try {
+          await executeBrowserAction({
+            tool_name: 'jupyter_click_pyodide',
+            parameters: {}
+          });
+        } catch (err) {
+          console.error('[JUPYTER_CLICK_PYODIDE] Failed:', err);
+        }
       } else if (request.actionType === ClientUIActionType.JUPYTER_TYPE_IN_CELL) {
         console.log('[JUPYTER_TYPE_IN_CELL] Received jupyter_type_in_cell action');
         const params = request.parameters || {};
-        executeBrowserAction({
-          tool_name: 'jupyter_type_in_cell',
-          parameters: {
-            cell_index: params.cell_index || 0,
-            code: params.code || ''
-          }
-        });
+        try {
+          await executeBrowserAction({
+            tool_name: 'jupyter_type_in_cell',
+            parameters: params
+          });
+        } catch (err) {
+          console.error('[JUPYTER_TYPE_IN_CELL] Failed:', err);
+        }
       } else if (request.actionType === ClientUIActionType.JUPYTER_RUN_CELL) {
         console.log('[JUPYTER_RUN_CELL] Received jupyter_run_cell action');
         const params = request.parameters || {};
@@ -1126,80 +1115,79 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         }
     };
 
-    // The handler for the agent's "I'm ready" signal
     // Handler for audio tracks (agent voice output)
     const handleTrackSubscribed = (track: Track, publication: TrackPublication, participant: RemoteParticipant) => {
-        if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Track subscribed:`, {
-            kind: track.kind,
-            source: publication.source,
-            participant: participant.identity
-        });
-        
-        if (track.kind === Track.Kind.Audio) {
-            if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Audio track received from agent ${participant.identity}`);
-            const audioTrack = track as AudioTrack;
-            
-            // Attach the audio track to play agent voice
-            const audioElement = audioTrack.attach();
-            audioElement.autoplay = true;
-            audioElement.volume = 1.0;
-            audioElement.muted = false;
-            
-            // Add to DOM temporarily to ensure playback
-            document.body.appendChild(audioElement);
-            
-            // Try to proactively start audio playback (best-effort; may be blocked until user gesture)
-            try { (roomInstance as any)?.startAudio?.(); } catch {}
-            try {
-                const p = audioElement.play();
-                if (p && typeof p.catch === 'function') {
-                    p.catch((e: any) => {
-                        console.warn('[FLOW] Agent audio autoplay may be blocked. Interact with the page to enable sound.', e);
-                    });
-                }
-            } catch (e) {
-                console.warn('[FLOW] Agent audio autoplay call failed (non-fatal):', e);
-            }
-            
-            // Clean up when track ends
-            track.on('ended', () => {
-                if (audioElement.parentNode) {
-                    audioElement.parentNode.removeChild(audioElement);
-                }
-            });
-            
-            setIsAgentSpeaking(true);
-        }
+      if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Track subscribed:', { kind: track.kind, source: publication.source, participant: participant.identity });
+      if (track.kind !== Track.Kind.Audio) return;
+      const audioTrack = track as AudioTrack;
+      const audioElement = audioTrack.attach();
+      audioElement.autoplay = true;
+      audioElement.volume = 1.0;
+      audioElement.muted = false;
+      document.body.appendChild(audioElement);
+      try { agentAudioElsRef.current.push(audioElement); } catch {}
+      try { (roomInstance as any)?.startAudio?.(); } catch {}
+      setIsAgentSpeaking(true);
+      try { setIsAwaitingAIResponse(false); } catch {}
+      // Clear any pending thinking timeout
+      try { if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; } } catch {}
+      try { setShowWaitingPill(false); } catch {}
+      track.on('ended', () => {
+        try {
+          const idx = agentAudioElsRef.current.indexOf(audioElement);
+          if (idx >= 0) agentAudioElsRef.current.splice(idx, 1);
+          if (audioElement.parentNode) audioElement.parentNode.removeChild(audioElement);
+        } catch {}
+        // When TTS finishes, mark agent not speaking and not awaiting
+        try { setIsAgentSpeaking(false); } catch {}
+        try { setIsAwaitingAIResponse(false); } catch {}
+        try { setShowWaitingPill(true); } catch {}
+      });
     };
-    
-    const handleTrackUnsubscribed = (track: Track, publication: TrackPublication, participant: RemoteParticipant) => {
-        if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Track unsubscribed:`, {
-            kind: track.kind,
-            source: publication.source,
-            participant: participant.identity
-        });
-        
-        if (track.kind === Track.Kind.Audio) {
-            setIsAgentSpeaking(false);
-        }
-    };
-    
-    // Handler for transcription data
-    const handleTranscriptionReceived = (transcriptions: TranscriptionSegment[], participant?: Participant, publication?: TrackPublication) => {
-        if (LIVEKIT_DEBUG) console.log(`[useLiveKitSession] Transcription received:`, transcriptions);
-        
-        // Forward transcript text to global emitter and maintain legacy message list
-        transcriptions.forEach(segment => {
-            const text = segment.text?.trim();
-            if (text) {
-                // Emit plain text for the avatar bubble UI
 
-                // Preserve speaker-tagged history for any consumers still using it
-                const speaker = participant?.identity || 'Unknown';
-                const message = `${speaker}: ${text}`;
-                setTranscriptionMessages(prev => [...prev.slice(-19), message]); // Keep last 20 messages
+    // Track real-time speaking using LiveKit active speakers
+    const handleActiveSpeakersChanged = (speakers: Participant[]) => {
+      try {
+        const agentId = agentIdentity;
+        if (!agentId) return; // no known agent yet
+        const agentIsSpeakingNow = !!speakers.find((p) => p.identity === agentId);
+        setIsAgentSpeaking(agentIsSpeakingNow);
+        if (agentIsSpeakingNow) {
+          // Agent started speaking: stop thinking and clear timeout
+          try { setIsAwaitingAIResponse(false); } catch {}
+          try { if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; } } catch {}
+        }
+      } catch {}
+    };
+
+    const handleTrackUnsubscribed = (_track: Track, _publication: TrackPublication, _participant: RemoteParticipant) => {
+      setIsAgentSpeaking(false);
+      try { setIsAwaitingAIResponse(false); } catch {}
+      try { setShowWaitingPill(true); } catch {}
+    };
+
+    // Handler for transcription data (LiveKit STT)
+    const handleTranscriptionReceived = (transcriptions: TranscriptionSegment[], participant?: Participant, _publication?: TrackPublication) => {
+      if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
+      try {
+        const isLocal = participant && roomInstance.localParticipant && (participant.identity === roomInstance.localParticipant.identity);
+        if (isLocal && isPushToTalkActiveRef.current) {
+          transcriptions.forEach((seg) => {
+            const t = seg?.text;
+            if (typeof t === 'string' && t.trim()) {
+              pttBufferRef.current.push(t.trim());
             }
-        });
+          });
+        }
+      } catch {}
+      transcriptions.forEach((segment) => {
+        const text = segment.text?.trim();
+        if (text) {
+          const speaker = participant?.identity || 'Unknown';
+          const message = `${speaker}: ${text}`;
+          setTranscriptionMessages((prev) => [...prev.slice(-19), message]);
+        }
+      });
     };
 
     const handleDataReceived = async (payload: Uint8Array, participant?: RemoteParticipant, kind?: any, topic?: string) => {
@@ -1263,6 +1251,11 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                         })))
                     });
                     console.log(`[FLOW] Agent confirmation response:`, confirmationResponse);
+                    try {
+                      // Agent is ready -> not awaiting anymore
+                      setIsAwaitingAIResponse(false);
+                      if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; }
+                    } catch {}
                     setIsConnected(true); // NOW we are fully connected and ready to interact
                     console.log('[FLOW] Frontend ready (agent connected)');
                     
@@ -1338,6 +1331,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     roomInstance.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
     roomInstance.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
     roomInstance.on(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
+    roomInstance.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakersChanged);
 
     // RPC handler is registered inside onConnected to ensure localParticipant exists.
 
@@ -1348,8 +1342,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       roomInstance.off(RoomEvent.TrackSubscribed, handleTrackSubscribed);
       roomInstance.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
       roomInstance.off(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
+      roomInstance.off(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakersChanged);
+      try { if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; } } catch {}
     };
-  }, [roomName, setIsMicEnabled, setAgentStatusText, setIsAgentSpeaking, setActiveView, setSuggestedResponses, userName]); // Add all dependencies
+  }, [roomName, setIsMicEnabled, setAgentStatusText, setIsAgentSpeaking, setActiveView, setSuggestedResponses, userName, agentIdentity]); // Add all dependencies
 
 
   // --- API EXPOSED TO THE COMPONENTS ---
@@ -1379,6 +1375,64 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       setConnectionError(`Failed to start task: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, []);
+
+  // --- Push To Talk helpers (LiveKit STT) ---
+  const startPushToTalk = useCallback(async () => {
+    try {
+      // Mute agent audio locally
+      try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 0; } catch {} }); } catch {}
+      setIsPushToTalkActive(true);
+      setIsMicEnabled(true);
+      pttBufferRef.current = [];
+      if (roomInstance.localParticipant) {
+        await roomInstance.localParticipant.setMicrophoneEnabled(true);
+      }
+      try { setIsAwaitingAIResponse(false); } catch {}
+      // Clear any pending thinking timeout when user starts speaking
+      try { if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; } } catch {}
+      try { setShowWaitingPill(false); } catch {}
+    } catch (e) {
+      console.error('[PTT] startPushToTalk failed:', e);
+    }
+  }, [setIsPushToTalkActive, setIsMicEnabled]);
+
+  const stopPushToTalk = useCallback(async () => {
+    try {
+      // Disable mic first to stop sending
+      if (roomInstance.localParticipant) {
+        try { await roomInstance.localParticipant.setMicrophoneEnabled(false); } catch {}
+      }
+      // Unmute agent audio locally
+      try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 1; } catch {} }); } catch {}
+      setIsPushToTalkActive(false);
+      setIsMicEnabled(false);
+      // Collapse buffered transcript
+      const text = (pttBufferRef.current || []).join(' ').trim();
+      pttBufferRef.current = [];
+      if (text && text.length > 0) {
+        await startTask('student_spoke_or_acted', { transcript: text });
+        // Only enter awaiting state if we know who the agent is
+        if (agentIdentity) {
+          try {
+            setIsAwaitingAIResponse(true);
+            // Clear any previous timers
+            if (thinkingTimeoutRef.current) {
+              clearTimeout(thinkingTimeoutRef.current);
+              thinkingTimeoutRef.current = null;
+            }
+            // Auto-clear after timeout to avoid getting stuck in thinking mode
+            thinkingTimeoutRef.current = window.setTimeout(() => {
+              try { setIsAwaitingAIResponse(false); } catch {}
+              thinkingTimeoutRef.current = null;
+            }, thinkingTimeoutMsRef.current);
+          } catch {}
+        }
+        try { setShowWaitingPill(false); } catch {}
+      }
+    } catch (e) {
+      console.error('[PTT] stopPushToTalk failed:', e);
+    }
+  }, [setIsPushToTalkActive, setIsMicEnabled, startTask]);
 
   // --- TAB MANAGEMENT FUNCTIONS --- (declared after sendBrowserInteraction below)
 
@@ -1640,5 +1694,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     openNewTab,
     switchTab,
     closeTab,
+    // ptt
+    startPushToTalk,
+    stopPushToTalk,
   };
 }

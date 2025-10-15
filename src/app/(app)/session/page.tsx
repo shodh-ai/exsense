@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Footer from '@/components/Footer';
+import { StatusPill } from '@/components/StatusPill';
 import type { Room } from 'livekit-client';
 
 import NextDynamic from 'next/dynamic';
@@ -433,7 +434,8 @@ export default function Session() {
         startTask,
         agentIdentity,
         transcriptionMessages,
-        selectSuggestedResponse,
+        startPushToTalk,
+        stopPushToTalk,
         livekitUrl,
         livekitToken,
         deleteSessionNow,
@@ -449,6 +451,10 @@ export default function Session() {
     );
 
     // Suggested responses are now rendered inside the Sphere transcript bubble
+    const isAgentSpeaking = useSessionStore((s) => s.isAgentSpeaking);
+    const isAwaitingAIResponse = useSessionStore((s) => s.isAwaitingAIResponse);
+    const isPushToTalkActive = useSessionStore((s) => s.isPushToTalkActive);
+    const showWaitingPill = useSessionStore((s) => s.showWaitingPill);
 
     // Extract the latest transcript for the avatar bubble
     const [latestTranscript, setLatestTranscript] = useState("");
@@ -565,7 +571,14 @@ export default function Session() {
     return (
         <>
             <SignedIn>
-                <Sphere transcript={latestTranscript} onSelectSuggestion={selectSuggestedResponse} />
+                {/* Status pill overlay */}
+                {isAwaitingAIResponse ? (
+                  <StatusPill message="AI is Thinking..." type="ai" />
+                ) : (showWaitingPill ? (
+                  <StatusPill message="Waiting for your input..." type="ai" />
+                ) : null)}
+
+                <Sphere transcript={latestTranscript} />
 
                 <div className='flex flex-col w-full h-full items-center justify-between'>
                     <SessionContent
@@ -586,7 +599,7 @@ export default function Session() {
                     {/* Suggested responses are shown inline with the transcript bubble */}
 
                     {/* Re-introduced Footer to restore mic and session controls */}
-                    <Footer room={room} agentIdentity={agentIdentity || undefined} />
+                    <Footer room={room} agentIdentity={agentIdentity || undefined} onMicPress={startPushToTalk} onMicRelease={stopPushToTalk} />
                 </div>
 
                 {/* Status overlay removed */}
