@@ -76,30 +76,12 @@ class LiveKitRpcAdapter implements Rpc {
     const payloadString = uint8ArrayToBase64(data);
     try {
       if (LIVEKIT_DEBUG) console.log(`F2B RPC Request: To=${this.agentIdentity}, Method=${fullMethodName}`);
-      const doCall = async () => {
-        return await this.localParticipant.performRpc({
-          destinationIdentity: this.agentIdentity,
-          method: fullMethodName,
-          payload: payloadString,
-          responseTimeout: 30000,
-        });
-      };
-      let responseString: string = '';
-      let lastErr: any = null;
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          responseString = await doCall();
-          lastErr = null;
-          break;
-        } catch (e) {
-          lastErr = e;
-          if (attempt < 2) {
-            await new Promise(r => setTimeout(r, 500));
-            continue;
-          }
-        }
-      }
-      if (lastErr) throw lastErr;
+      const responseString = await this.localParticipant.performRpc({
+        destinationIdentity: this.agentIdentity,
+        method: fullMethodName,
+        payload: payloadString,
+        responseTimeout: 30000,
+      });
       return base64ToUint8Array(responseString);
     } catch (error) {
       console.error(`F2B RPC request to ${fullMethodName} failed:`, error);
@@ -690,77 +672,71 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         }
         console.log('[SET_UI_STATE] ===== END SET_UI_STATE PROCESSING =====');
       } else if (request.actionType === ClientUIActionType.SUGGESTED_RESPONSES) {
-        console.log('[B2F RPC] Handling SUGGESTED_RESPONSES (recreated handler)');
+        console.log('[B2F RPC] Handling SUGGESTED_RESPONSES');
         const payload = request.suggestedResponsesPayload;
-        const suggestions: { id: string; text: string; reason?: string }[] = [];
-        const now = Date.now();
-
-        if (payload && Array.isArray(payload.suggestions) && payload.suggestions.length > 0) {
-          payload.suggestions.forEach((entry: any, idx: number) => {
-            const idCandidate = typeof entry?.id === 'string' ? entry.id.trim() : '';
-            const textCandidate = typeof entry?.text === 'string' ? entry.text : String(entry?.text ?? '');
-            if (textCandidate.length > 0) {
-              suggestions.push({
-                id: idCandidate.length > 0 ? idCandidate : `s_${now}_${idx}`,
-                text: textCandidate,
-                reason: typeof entry?.reason === 'string' ? entry.reason : undefined,
-              });
-            }
+        if (payload && Array.isArray(payload.suggestions)) {
+          const now = Date.now();
+          const suggestions = payload.suggestions.map((s: any, idx: number) => {
+            const idRaw = s?.id;
+            const id = typeof idRaw === 'string' && idRaw.trim().length > 0 ? idRaw : `s_${now}_${idx}`;
+            const textRaw = s?.text;
+            const text = typeof textRaw === 'string' ? textRaw : String(textRaw ?? '');
+            return { id, text, reason: s?.reason } as { id: string; text: string; reason?: string };
           });
-        }
-
-        // *** VERIFICATION LOGGING BLOCK ***
-        if (suggestions.length > 0) {
-          console.log(`[UI-VERIFY] Data is available. Setting ${suggestions.length} suggestions in Zustand store.`);
-          try {
-            setSuggestedResponses(suggestions, payload?.title ?? undefined);
-            console.log('[UI-VERIFY] Zustand store updated successfully.');
-            console.log(`[B2F RPC] Set ${suggestions.length} suggested responses${payload?.title ? ` with title: ${payload.title}` : ''}`);
-          } catch (e) {
-            console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses in store:', e);
-          }
-        } else {
-          console.warn('[UI-VERIFY] No suggestions were parsed from the payload.');
-        }
-        // *** END OF VERIFICATION LOGGING BLOCK ***
-
-        // --- Fallback: some agents send suggestions via request.parameters ---
-        if (suggestions.length === 0) {
-          const params = (request as any).parameters || {};
-          const candidate = typeof params.suggestions === 'string' ? params.suggestions : params.suggested_responses;
-          if (Array.isArray(candidate)) {
-            candidate.forEach((entry: any, idx: number) => {
-              const textCandidate = typeof entry === 'string' ? entry : String(entry?.text ?? '');
-              const idCandidate = typeof entry === 'object' && entry?.id ? String(entry.id) : `s_${now}_${idx}`;
-              if (textCandidate.length > 0) {
-                suggestions.push({
-                  id: idCandidate,
-                  text: textCandidate,
-                  reason: typeof entry?.reason === 'string' ? entry.reason : undefined,
-                });
-              }
-            });
-          } else if (typeof candidate === 'string' && candidate.trim().length > 0) {
-            suggestions.push({ id: `s_${now}_0`, text: candidate.trim() });
-          }
-
+          
+          // *** VERIFICATION LOGGING BLOCK ***
           if (suggestions.length > 0) {
-            console.log(`[UI-VERIFY] Data is available (from parameters). Setting ${suggestions.length} suggestions in Zustand store.`);
+            console.log(`[UI-VERIFY] Data is available. Setting ${suggestions.length} suggestions in Zustand store.`);
             try {
-              setSuggestedResponses(suggestions, (params.title ?? params.suggested_title) as string | undefined);
-              console.log('[UI-VERIFY] Zustand store updated successfully (from parameters).');
-              console.log(`[B2F RPC] Set ${suggestions.length} suggested responses from parameters${params.title ? ` with title: ${params.title}` : ''}`);
+              setSuggestedResponses(suggestions, payload.title);
+              console.log("[UI-VERIFY] Zustand store updated successfully.");
+              console.log(`[B2F RPC] Set ${suggestions.length} suggested responses${payload.title ? ` with title: ${payload.title}` : ''}`);
             } catch (e) {
-              console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses (parameters) in store:', e);
+              console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses in store:', e);
             }
           } else {
-            console.warn('[UI-VERIFY] Parameters present but could not derive suggestions:', candidate);
+            console.warn('[UI-VERIFY] No suggestions were parsed from the payload.');
+          }
+          // *** END OF VERIFICATION LOGGING BLOCK ***
+        } else {
+          // --- Fallback: some agents send suggestions via request.parameters ---
+          const params = (request as any).parameters || {};
+          const parseMaybeJson = (v: unknown) => {
+            if (typeof v === 'string') {
+              try { return JSON.parse(v); } catch { return v; }
+            }
+            return v;
+          };
+          const candidate = parseMaybeJson(params.suggestions ?? params.suggested_responses);
+          const titleParam = (params.title ?? params.suggested_title) as string | undefined;
+          if (candidate) {
+            let suggestions: { id: string; text: string; reason?: string }[] = [];
+            if (Array.isArray(candidate)) {
+              if (candidate.length > 0 && typeof candidate[0] === 'string') {
+                suggestions = (candidate as string[]).map((t, idx) => ({ id: `s_${Date.now()}_${idx}`, text: t }));
+              } else {
+                suggestions = (candidate as any[]).map((s: any, idx: number) => ({ id: s.id || `s_${Date.now()}_${idx}` , text: s.text || String(s), reason: s.reason }));
+              }
+            } else if (typeof candidate === 'string') {
+              // Single string -> one suggestion
+              suggestions = [{ id: `s_${Date.now()}_0`, text: candidate }];
+            }
+            if (suggestions.length > 0) {
+              console.log(`[UI-VERIFY] Data is available (from parameters). Setting ${suggestions.length} suggestions in Zustand store.`);
+              try {
+                setSuggestedResponses(suggestions, titleParam);
+                console.log("[UI-VERIFY] Zustand store updated successfully (from parameters).");
+                console.log(`[B2F RPC] Set ${suggestions.length} suggested responses from parameters${titleParam ? ` with title: ${titleParam}` : ''}`);
+              } catch (e) {
+                console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses (parameters) in store:', e);
+              }
+            } else {
+              console.warn('[UI-VERIFY] Parameters present but could not derive suggestions:', candidate);
+            }
+          } else {
+            console.warn('[B2F RPC] SUGGESTED_RESPONSES payload missing or invalid, and no parsable parameters found:', { payload, params });
           }
         }
-
-        // CRITICAL: Return acknowledgment response
-        const response = ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true });
-        return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
       } else if (
         // Prefer enum when available, but also handle numeric value for backward compatibility
         (ClientUIActionType as any).RRWEB_REPLAY ?
@@ -1031,21 +1007,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         try {
           if (!rpcHandlerRegisteredRef.current) {
             console.log("!!!!!!!!!! ATTEMPTING TO REGISTER RPC HANDLER NOW !!!!!!!!!!");
-            // Room-level registration (preferred)
-            try {
-              roomInstance.registerRpcMethod("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
-              console.log('[useLiveKitSession] Registered (Room) RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
-            } catch (er) {
-              console.warn('[useLiveKitSession] Room.registerRpcMethod failed (non-fatal):', er);
-            }
-            // Participant-level registration (compatibility with SDKs)
-            try {
-              (roomInstance as any)?.localParticipant?.registerRpcMethod?.("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
-              console.log('[useLiveKitSession] Registered (LocalParticipant) RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
-            } catch (er2) {
-              if (LIVEKIT_DEBUG) console.warn('[useLiveKitSession] LocalParticipant.registerRpcMethod unavailable or failed (non-fatal):', er2);
-            }
+            roomInstance.registerRpcMethod("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
             rpcHandlerRegisteredRef.current = true;
+            console.log('[useLiveKitSession] Registered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
           } else if (LIVEKIT_DEBUG) {
             console.log('[useLiveKitSession] RPC handler already registered, skipping');
           }
@@ -1109,24 +1073,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           setShowWaitingPill(false);
           if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; }
           thinkingTimeoutRef.current = window.setTimeout(() => {
-            // On connect: if idle (not awaiting, not speaking, not PTT), show Waiting pill
-            try {
-              const st = useSessionStore.getState();
-              if (!st.isAwaitingAIResponse && !st.isAgentSpeaking && !st.isPushToTalkActive) {
-                setShowWaitingPill(true);
-              }
-            } catch {}
+            try { setIsAwaitingAIResponse(false); } catch {}
+            try { setShowWaitingPill(true); } catch {}
+            thinkingTimeoutRef.current = null;
           }, thinkingTimeoutMsRef.current);
-        } catch {}
-
-        // Proactively announce frontend readiness over data channel
-        try {
-          const pid = roomInstance?.localParticipant?.identity;
-          if (pid) {
-            const payload = JSON.stringify({ type: 'frontend_ready', identity: pid, ts: Date.now(), userId: userName, roomName });
-            const bytes = new TextEncoder().encode(payload);
-            await roomInstance.localParticipant.publishData(bytes);
-          }
         } catch {}
 
         // Fallback: if 'agent_ready' data message was missed, try to infer agent identity
@@ -1138,6 +1088,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             for (let i = 0; i < MAX_ATTEMPTS && !agentServiceClientRef.current; i++) {
               await new Promise(r => setTimeout(r, 1000));
               if (agentServiceClientRef.current) return;
+              // If handshake already set identity, stop
+              if (agentServiceClientRef.current) return;
               // Infer candidate: any non-browser remote participant
               const candidates = Array.from(roomInstance.remoteParticipants.keys()).filter(id => !String(id).startsWith('browser-bot-'));
               if (candidates.length > 0 && roomInstance.localParticipant) {
@@ -1146,32 +1098,21 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                   console.log('[FLOW] Fallback attempting to bind agent identity to', pid);
                   setAgentIdentity(pid);
                   const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, pid);
-                  agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
-                  // Validate with a lightweight TestPing
-                  const payload = uint8ArrayToBase64(new TextEncoder().encode(JSON.stringify({
-                    message: 'Fallback handshake',
-                    timestamp: Date.now(),
-                    userId: userName,
-                    roomName: roomName
-                  })));
-                  await roomInstance.localParticipant.performRpc({
-                    destinationIdentity: pid,
-                    method: 'rox.interaction.AgentInteraction/TestPing',
-                    payload,
-                    responseTimeout: 20000,
-                  });
+                  const client = new AgentInteractionClientImpl(adapter as any);
+                  agentServiceClientRef.current = client;
+                  await client.TestPing({} as any);
                   setIsConnected(true);
                   console.log('[FLOW] Fallback agent identity established and validated');
                   return;
-                } catch (e: any) {
-                  const msg = (e?.message || String(e) || '').toLowerCase();
-                  if (msg.includes('method not supported')) {
-                    console.debug('[FLOW] Fallback bind/validate failed: method not supported at destination (likely not the agent). Aborting fallback attempts.');
-                    try { setAgentIdentity(null); } catch {}
-                    agentServiceClientRef.current = null;
-                    break; // stop fallback loop; wait for agent_ready handshake
-                  }
+                } catch (e) {
                   console.warn('[FLOW] Fallback bind/validate failed; will retry if attempts remain', e);
+                  if (e instanceof RpcError) {
+                    const code = (e as any)?.code;
+                    if (code === 12 || code === 8) {
+                      console.warn('[FLOW] Fallback stopping retries due to unsupported RPC method');
+                      break;
+                    }
+                  }
                   // Reset and retry next loop
                   try { setAgentIdentity(null); } catch {}
                   agentServiceClientRef.current = null;
@@ -1199,8 +1140,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         }
         // Unregister RPC handler on disconnect
         try {
-          try { roomInstance.unregisterRpcMethod("rox.interaction.ClientSideUI/PerformUIAction"); } catch {}
-          try { (roomInstance as any)?.localParticipant?.unregisterRpcMethod?.("rox.interaction.ClientSideUI/PerformUIAction"); } catch {}
+          roomInstance.unregisterRpcMethod("rox.interaction.ClientSideUI/PerformUIAction");
           rpcHandlerRegisteredRef.current = false;
           console.log('[useLiveKitSession] Unregistered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
         } catch (e) {
@@ -1429,13 +1369,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     roomInstance.on(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
     roomInstance.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakersChanged);
 
-    // If the effect runs after connect completed, fire onConnected immediately (idempotent)
-    try {
-      if (roomInstance.state === ConnectionState.Connected) {
-        onConnected();
-      }
-    } catch {}
-
     // RPC handler is registered inside onConnected to ensure localParticipant exists.
 
     return () => {
@@ -1455,50 +1388,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // This is the clean interface your UI components will use to talk to the agent.
   const startTask = useCallback(async (taskName: string, payload: object) => {
     if (!agentServiceClientRef.current) {
-      const deadline = Date.now() + 8000;
-      while (!agentServiceClientRef.current && Date.now() < deadline) {
-        try {
-          const candidates = Array.from(roomInstance.remoteParticipants.keys()).filter(id => !String(id).startsWith('browser-bot-'));
-          if (candidates.length > 0 && roomInstance.localParticipant) {
-            const pid = String(candidates[0]);
-            try {
-              setAgentIdentity(pid);
-              const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, pid);
-              agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
-              const payloadPing = uint8ArrayToBase64(new TextEncoder().encode(JSON.stringify({
-                message: 'Pre-task handshake',
-                timestamp: Date.now(),
-                userId: userName,
-                roomName: roomName
-              })));
-              await roomInstance.localParticipant.performRpc({
-                destinationIdentity: pid,
-                method: 'rox.interaction.AgentInteraction/TestPing',
-                payload: payloadPing,
-                responseTimeout: 10000,
-              });
-              setIsConnected(true);
-              break;
-            } catch (e: any) {
-              const msg = (e?.message || String(e) || '').toLowerCase();
-              if (msg.includes('method not supported')) {
-                console.debug('[FLOW] Pre-task bind/validate failed: method not supported at destination (likely not the agent). Aborting binder.');
-                try { setAgentIdentity(null); } catch {}
-                agentServiceClientRef.current = null;
-                break; // abort binder; rely on agent_ready handshake
-              }
-              try { setAgentIdentity(null); } catch {}
-              agentServiceClientRef.current = null;
-            }
-          }
-        } catch {}
-        await new Promise(r => setTimeout(r, 300));
-      }
-      if (!agentServiceClientRef.current) {
-        setConnectionError("Cannot start task: Agent is not ready.");
-        console.error("Agent is not ready, cannot start task.");
-        return;
-      }
+      setConnectionError("Cannot start task: Agent is not ready.");
+      console.error("Agent is not ready, cannot start task.");
+      return;
     }
     try {
       console.log(`[F2B RPC] Starting task: ${taskName}`);
@@ -1513,12 +1405,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       };
       // InvokeAgentTask returns an Observable<AgentResponse> (server-streaming).
       // Our transport currently yields a single response; await the first emission.
-      try {
-        await firstValueFrom(agentServiceClientRef.current.InvokeAgentTask(request));
-      } catch (e) {
-        await new Promise(r => setTimeout(r, 500));
-        await firstValueFrom(agentServiceClientRef.current.InvokeAgentTask(request));
-      }
+      await firstValueFrom(agentServiceClientRef.current.InvokeAgentTask(request));
     } catch (e) {
       console.error("Failed to start agent task:", e);
       setConnectionError(`Failed to start task: ${e instanceof Error ? e.message : String(e)}`);
