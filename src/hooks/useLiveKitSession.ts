@@ -268,9 +268,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             }
             if (SESSION_FLOW_DEBUG) console.log('[FLOW] Clerk auth OK, acquired session token');
 
-            const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL;
+            const tokenServiceUrl = process.env.NEXT_PUBLIC_ONE_BACKEND_URL;
             if (!tokenServiceUrl) {
-                throw new Error('Missing NEXT_PUBLIC_WEBRTC_TOKEN_URL');
+                throw new Error('Missing NEXT_PUBLIC_ONE_BACKEND_URL');
             }
 
             // *** KEY CHANGE: Check URL for a room to join ***
@@ -295,7 +295,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 requestBody.room_name = roomToJoin;
             }
 
-            const response = await fetch(`${tokenServiceUrl}/api/generate-room`, {
+            const response = await fetch(`${tokenServiceUrl}/api/webrtc/generate-room`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -454,7 +454,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                                     // Request a token for the session room
                                 const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string;
                                 const bearer = await getToken();
-                                const devResp = await fetch(`${tokenServiceUrl}/api/dev/token-for-room`, {                                        method: 'POST',
+                                const devResp = await fetch(`${tokenServiceUrl}/api/webrtc/dev/token-for-room`, {
+                                       method: 'POST',
                                         headers: {
                                             'Content-Type': 'application/json',
                                             ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {}),

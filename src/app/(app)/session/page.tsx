@@ -485,37 +485,62 @@ export default function Session() {
 
     // Session restoration on initial load
     const restoredRef = useRef<string | null>(null);
-    // Create or get whiteboard session (scoped strictly by LiveKit-issued roomName)
+    
+    // ✅ FIXED: Create or get whiteboard session with proper courseId validation
     useEffect(() => {
-      const init = async () => {
-        if (!shouldInitializeLiveKit) return;
-        if (wbSessionId) return;
-        // Require the actual room name issued by token service (sess-...)
-        const roomForPersistence = currentRoomName;
-        if (!roomForPersistence) return;
-        try {
-          const payload: any = { roomName: roomForPersistence };
-          if (courseId) payload.courseId = courseId;
-          const session = await apiService.createOrGetWhiteboardSession(payload);
-          setWbSessionId(session.id);
-          // Restore blocks
-          try {
-            const full = await apiService.getWhiteboardSession(session.id);
-            const restored = (full.blocks || []).map((b: any) => {
-              if (b.type === 'EXCALIDRAW') return { id: b.id, type: 'excalidraw', summary: b.summary, elements: b.data || [] };
-              if (b.type === 'RRWEB') return { id: b.id, type: 'rrweb', summary: b.summary, eventsUrl: b.eventsUrl };
-              if (b.type === 'VIDEO') return { id: b.id, type: 'video', summary: b.summary, videoUrl: b.videoUrl };
-              return null;
-            }).filter(Boolean) as any[];
-            if (restored.length) setBlocks(restored);
-          } catch (restoreErr) {
-            console.warn('[Session] Failed to restore whiteboard blocks:', restoreErr);
-          }
-        } catch (err) {
-          console.warn('[Session] Failed to create/get whiteboard session:', err);
-        }
-      };
-      void init();
+        const init = async () => {
+            if (!shouldInitializeLiveKit) return;
+            if (wbSessionId) return;
+            
+            // Require the actual room name issued by token service (session-...)
+            const roomForPersistence = currentRoomName;
+            if (!roomForPersistence) return;
+            
+            try {
+                const payload: any = { roomName: roomForPersistence };
+                
+                // ✅ VALIDATE courseId before using it
+                if (courseId) {
+                    try {
+                        // Use the proper apiService method instead of .get()
+                        const course = await apiService.getCourse(courseId);
+                        if (course) {
+                            payload.courseId = courseId;
+                            console.log('[Session] Using validated courseId:', courseId);
+                        }
+                    } catch (courseCheckError) {
+                        console.warn('[Session] Could not validate courseId, proceeding without it:', courseCheckError);
+                        // Don't include courseId if validation fails
+                    }
+                }
+                
+                const session = await apiService.createOrGetWhiteboardSession(payload);
+                setWbSessionId(session.id);
+                console.log('[Session] ✅ Whiteboard session created/retrieved:', session.id);
+                
+                // Restore blocks
+                try {
+                    const full = await apiService.getWhiteboardSession(session.id);
+                    const restored = (full.blocks || []).map((b: any) => {
+                        if (b.type === 'EXCALIDRAW') return { id: b.id, type: 'excalidraw', summary: b.summary, elements: b.data || [] };
+                        if (b.type === 'RRWEB') return { id: b.id, type: 'rrweb', summary: b.summary, eventsUrl: b.eventsUrl };
+                        if (b.type === 'VIDEO') return { id: b.id, type: 'video', summary: b.summary, videoUrl: b.videoUrl };
+                        return null;
+                    }).filter(Boolean) as any[];
+                    
+                    if (restored.length) {
+                        setBlocks(restored);
+                        console.log('[Session] ✅ Restored', restored.length, 'whiteboard blocks');
+                    }
+                } catch (restoreErr) {
+                    console.warn('[Session] Failed to restore whiteboard blocks:', restoreErr);
+                }
+            } catch (err) {
+                console.error('[Session] Failed to create/get whiteboard session:', err);
+            }
+        };
+        
+        void init();
     }, [shouldInitializeLiveKit, roomName, currentRoomName, courseId, apiService, wbSessionId, setBlocks]);
 
     
