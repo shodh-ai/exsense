@@ -17,6 +17,9 @@ const LIVEKIT_DEBUG = false;
 const SESSION_FLOW_DEBUG = true;
 const DELETE_ON_UNLOAD = (process.env.NEXT_PUBLIC_SESSION_DELETE_ON_UNLOAD || 'true').toLowerCase() === 'true';
 
+// THIS IS THE NEW SINGLETON GUARD. It will survive all re-mounts.
+let hasConnectStarted = false;
+
 // Type declaration for Mermaid debug interface
 declare global {
   interface Window {
@@ -183,8 +186,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const [livekitToken, setLivekitToken] = useState<string>('');
   const [sessionStatusUrlState, setSessionStatusUrlState] = useState<string | null>(null);
   const [sessionManagerSessionIdState, setSessionManagerSessionIdState] = useState<string | null>(null);
-  // Prevent duplicate connect/token fetch during Strict Mode/HMR
-  const connectStartedRef = useRef<boolean>(false);
+  // Prevent duplicate connect/token fetch during Strict Mode/HMR (moved to module scope: hasConnectStarted)
   // Track session-manager sessionId for cleanup (pod deletion)
   const sessionIdRef = useRef<string | null>(null);
   const sessionStatusUrlRef = useRef<string | null>(null);
@@ -227,6 +229,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     const connectToRoom = async () => {
         // LOG 2: Is the connect function being called?
         console.log('[DIAGNOSTIC] 2. connectToRoom function called.');
+        console.log('%c[DEBUG] connectToRoom INVOKED', 'color: yellow; font-weight: bold;');
         if (LIVEKIT_DEBUG) console.log('useLiveKitSession - connectToRoom called:', { roomName, userName });
         if (!roomName || !userName || !courseId) {
             if (LIVEKIT_DEBUG) console.log('Missing roomName, userName, or courseId, skipping connection');
@@ -238,8 +241,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             if (LIVEKIT_DEBUG) console.log('Room already connected/connecting, skipping');
             return;
         }
-        if (connectStartedRef.current) {
+        if (hasConnectStarted) {
             if (SESSION_FLOW_DEBUG) console.log('[FLOW] connectToRoom already started; skipping duplicate');
+            console.log('%c[DEBUG] connectToRoom SKIPPED (guard is working)', 'color: green;');
             return;
         }
 
@@ -247,7 +251,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         setIsLoading(true);
         setConnectionError(null);
         try {
-            connectStartedRef.current = true;
+            hasConnectStarted = true; // Set the guard immediately
             // Check Clerk authentication
             if (!isSignedIn) {
                 throw new Error('User not authenticated. Please login first.');
@@ -468,7 +472,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                                         await roomInstance.disconnect();
                                     } catch {}
                                     // allow reconnect
-                                    connectStartedRef.current = false;
+                                    hasConnectStarted = false;
                                     setLivekitUrl(newUrl);
                                     setLivekitToken(newToken);
                                     await roomInstance.connect(newUrl, newToken);
@@ -496,7 +500,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             if (mounted) {
                 setConnectionError(`Failed to connect: ${error instanceof Error ? error.message : String(error)}`);
                 setIsLoading(false);
-                connectStartedRef.current = false; // allow retry on error
+                hasConnectStarted = false; // allow retry on error
             }
         }
     };
@@ -512,6 +516,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
 
     // The handler for commands coming FROM the agent TO the frontend
     const handlePerformUIAction = async (rpcData: RpcInvocationData): Promise<string> => {
+      console.log(`%c[B2F RPC RECV] ID: ${rpcData.requestId}`, 'color: cyan;', rpcData);
       const request = AgentToClientUIActionRequest.decode(base64ToUint8Array(rpcData.payload as string));
       console.log(`[B2F RPC] Received action: ${ClientUIActionType[request.actionType]}`);
       
@@ -985,6 +990,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       
       // We still need to return an acknowledgment
       const response = ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true });
+      console.log(`%c[B2F RPC ACK] ID: ${rpcData.requestId}`, 'color: cyan;', 'Sending acknowledgement.');
       return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
     };
 
@@ -1122,7 +1128,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         setIsConnected(false);
         setIsLoading(false);
         agentServiceClientRef.current = null;
-        connectStartedRef.current = false; // allow reconnect after disconnect
+        hasConnectStarted = false; // allow reconnect after disconnect
         
         // Clean up microphone track
         if (microphoneTrackRef.current) {
@@ -1378,27 +1384,32 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // --- API EXPOSED TO THE COMPONENTS ---
   // This is the clean interface your UI components will use to talk to the agent.
   const startTask = useCallback(async (taskName: string, payload: object) => {
+    const rpcId = `f2b_${uuidv4()}`;
+    console.log(`%c[F2B RPC PREP] ID: ${rpcId}`, 'color: orange;', `Task: ${taskName}`, {
+      roomState: roomInstance.state,
+      isAgentClientReady: !!agentServiceClientRef.current,
+    });
     if (!agentServiceClientRef.current) {
-      setConnectionError("Cannot start task: Agent is not ready.");
-      console.error("Agent is not ready, cannot start task.");
+      setConnectionError('Cannot start task: Agent is not ready.');
+      console.error(`[F2B RPC FAIL] ID: ${rpcId} - Agent is not ready.`);
       return;
     }
     try {
-      console.log(`[F2B RPC] Starting task: ${taskName}`);
-      // Generate a per-action trace id for distributed tracing
+      console.log(`%c[F2B RPC SEND] ID: ${rpcId}`, 'color: orange;', `Starting task: ${taskName}`);
       const traceId = uuidv4();
-      // Expose for devtools debugging
       try { (window as any).__lastTraceId = traceId; } catch {}
       const request = {
         taskName: taskName,
-        // Inject trace_id into the payload so downstream services can correlate
-        jsonPayload: JSON.stringify({ ...(payload as any), trace_id: traceId }),
+        jsonPayload: JSON.stringify({
+          ...(payload as any),
+          trace_id: traceId,
+          _rpcId: rpcId,
+        }),
       };
-      // InvokeAgentTask returns an Observable<AgentResponse> (server-streaming).
-      // Our transport currently yields a single response; await the first emission.
       await firstValueFrom(agentServiceClientRef.current.InvokeAgentTask(request));
+      console.log(`%c[F2B RPC SUCCESS] ID: ${rpcId}`, 'color: green;');
     } catch (e) {
-      console.error("Failed to start agent task:", e);
+      console.error(`%c[F2B RPC FAIL] ID: ${rpcId}`, 'color: red;', 'Failed to start agent task:', e);
       setConnectionError(`Failed to start task: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, []);
