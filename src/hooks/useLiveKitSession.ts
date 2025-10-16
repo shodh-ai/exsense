@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Observable, firstValueFrom } from 'rxjs';
 import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment, VideoPresets } from 'livekit-client';
+import { roomInstance } from '@/lib/livekit-room';
 import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
 import { useSessionStore, SessionView } from '@/lib/store';
 import { useAuth } from '@clerk/nextjs';
@@ -114,16 +115,6 @@ class LiveKitRpcAdapter implements Rpc {
     });
   }
 }
-
- // A single room instance to survive React Strict Mode re-mounts.
- // CRITICAL: Disable ALL adaptive features and force maximum quality
- const roomInstance = new Room({
-     adaptiveStream: false,  // No gradual quality ramp-up
-     dynacast: false,        // No dynamic casting
-     videoCaptureDefaults: {
-         resolution: VideoPresets.h1080.resolution,  // Request 1080p to match backend
-     },
- });
 
 // Main hook
 export interface UseLiveKitSessionReturn {
