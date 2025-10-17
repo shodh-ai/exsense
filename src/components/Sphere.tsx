@@ -97,12 +97,20 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
     // --- ZUSTAND STORE ---
     const { isMusicButtonPlaying, setIsMusicButtonPlaying, isMicEnabled } = useSessionStore();
     const suggestedResponses = useSessionStore((s) => s.suggestedResponses);
-    const promptText = useSessionStore((s) => s.suggestedTitle);
+    const promptTextFromStore = useSessionStore((s) => s.suggestedTitle);
+    const PLACEHOLDER_SUGGESTIONS: { id: string; text: string; reason?: string }[] = [
+        { id: 'ph_1', text: 'I have a doubt' },
+        { id: 'ph_2', text: 'Can you explain this?' },
+        { id: 'ph_3', text: 'Show an example' },
+        { id: 'ph_4', text: 'Summarize the topic' },
+    ];
+    const displaySuggestions = (suggestedResponses && suggestedResponses.length > 0) ? suggestedResponses : PLACEHOLDER_SUGGESTIONS;
+    const promptText = promptTextFromStore || 'How would you like to proceed?';
 
     // --- Sync state to refs to avoid stale closures in callbacks ---
     useEffect(() => { isAudioActiveRef.current = isAudioActive; }, [isAudioActive]);
     useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
-    useEffect(() => { suggestedResponsesRef.current = suggestedResponses || []; }, [suggestedResponses]);
+    useEffect(() => { suggestedResponsesRef.current = displaySuggestions || []; }, [displaySuggestions]);
     useEffect(() => { promptRef.current = promptText; }, [promptText]);
 
     // --- DEVELOPMENT HELPERS ---
@@ -491,7 +499,7 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
     // =================================================================
     return (
         <div className="absolute top-0 left-0 w-full h-full z-50 pointer-events-none">
-            {(transcript || (suggestedResponses && suggestedResponses.length > 0) || !!promptText) && (
+            {(transcript || (displaySuggestions && displaySuggestions.length > 0) || !!promptText) && (
                 <div
                     ref={bubbleRef}
                     className="absolute w-auto px-6 py-3 rounded-2xl pointer-events-auto text-center"
@@ -516,7 +524,7 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
                         whiteSpace: 'pre-wrap',
                     }}
                 >
-                    {suggestedResponses && suggestedResponses.length > 0 ? (
+                    {displaySuggestions && displaySuggestions.length > 0 ? (
                         <div className="flex flex-col items-center gap-3">
                             {(promptText || transcript) && (
                                 <h3 className="text-base md:text-lg font-semibold text-slate-800 text-center">
@@ -524,7 +532,7 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
                                 </h3>
                             )}
                             <div className="flex flex-wrap justify-center gap-2 md:gap-3">
-                                {suggestedResponses.map((s, idx) => {
+                                {displaySuggestions.map((s, idx) => {
                                     const safeId = s.id && s.id.trim().length > 0 ? s.id : `ui_${Date.now()}_${idx}`;
                                     return (
                                         <span

@@ -182,6 +182,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const [isLoading, setIsLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [agentIdentity, setAgentIdentity] = useState<string | null>(null);
+  const [agentRpcReady, setAgentRpcReady] = useState<boolean>(false);
   const [livekitUrl, setLivekitUrl] = useState<string>('');
   const [livekitToken, setLivekitToken] = useState<string>('');
   const [sessionStatusUrlState, setSessionStatusUrlState] = useState<string | null>(null);
@@ -202,6 +203,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const [statusMessages, setStatusMessages] = useState<string[]>([]);
   
   const agentServiceClientRef = useRef<AgentInteractionClientImpl | null>(null);
+  const pendingTasksRef = useRef<{ name: string; payload: any }[]>([]);
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
   const isPushToTalkActiveRef = useRef<boolean>(false);
   const pttBufferRef = useRef<string[]>([]);
@@ -516,6 +518,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
 
     // The handler for commands coming FROM the agent TO the frontend
     const handlePerformUIAction = async (rpcData: RpcInvocationData): Promise<string> => {
+      try { if (!agentRpcReady) setAgentRpcReady(true); } catch {}
       console.log(`%c[B2F RPC RECV] ID: ${rpcData.requestId}`, 'color: cyan;', rpcData);
       const request = AgentToClientUIActionRequest.decode(base64ToUint8Array(rpcData.payload as string));
       console.log(`[B2F RPC] Received action: ${ClientUIActionType[request.actionType]}`);
@@ -668,71 +671,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         }
         console.log('[SET_UI_STATE] ===== END SET_UI_STATE PROCESSING =====');
       } else if (request.actionType === ClientUIActionType.SUGGESTED_RESPONSES) {
-        console.log('[B2F RPC] Handling SUGGESTED_RESPONSES');
-        const payload = request.suggestedResponsesPayload;
-        if (payload && Array.isArray(payload.suggestions)) {
-          const now = Date.now();
-          const suggestions = payload.suggestions.map((s: any, idx: number) => {
-            const idRaw = s?.id;
-            const id = typeof idRaw === 'string' && idRaw.trim().length > 0 ? idRaw : `s_${now}_${idx}`;
-            const textRaw = s?.text;
-            const text = typeof textRaw === 'string' ? textRaw : String(textRaw ?? '');
-            return { id, text, reason: s?.reason } as { id: string; text: string; reason?: string };
-          });
-          
-          // *** VERIFICATION LOGGING BLOCK ***
-          if (suggestions.length > 0) {
-            console.log(`[UI-VERIFY] Data is available. Setting ${suggestions.length} suggestions in Zustand store.`);
-            try {
-              setSuggestedResponses(suggestions, payload.title);
-              console.log("[UI-VERIFY] Zustand store updated successfully.");
-              console.log(`[B2F RPC] Set ${suggestions.length} suggested responses${payload.title ? ` with title: ${payload.title}` : ''}`);
-            } catch (e) {
-              console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses in store:', e);
-            }
-          } else {
-            console.warn('[UI-VERIFY] No suggestions were parsed from the payload.');
-          }
-          // *** END OF VERIFICATION LOGGING BLOCK ***
-        } else {
-          // --- Fallback: some agents send suggestions via request.parameters ---
-          const params = (request as any).parameters || {};
-          const parseMaybeJson = (v: unknown) => {
-            if (typeof v === 'string') {
-              try { return JSON.parse(v); } catch { return v; }
-            }
-            return v;
-          };
-          const candidate = parseMaybeJson(params.suggestions ?? params.suggested_responses);
-          const titleParam = (params.title ?? params.suggested_title) as string | undefined;
-          if (candidate) {
-            let suggestions: { id: string; text: string; reason?: string }[] = [];
-            if (Array.isArray(candidate)) {
-              if (candidate.length > 0 && typeof candidate[0] === 'string') {
-                suggestions = (candidate as string[]).map((t, idx) => ({ id: `s_${Date.now()}_${idx}`, text: t }));
-              } else {
-                suggestions = (candidate as any[]).map((s: any, idx: number) => ({ id: s.id || `s_${Date.now()}_${idx}` , text: s.text || String(s), reason: s.reason }));
-              }
-            } else if (typeof candidate === 'string') {
-              // Single string -> one suggestion
-              suggestions = [{ id: `s_${Date.now()}_0`, text: candidate }];
-            }
-            if (suggestions.length > 0) {
-              console.log(`[UI-VERIFY] Data is available (from parameters). Setting ${suggestions.length} suggestions in Zustand store.`);
-              try {
-                setSuggestedResponses(suggestions, titleParam);
-                console.log("[UI-VERIFY] Zustand store updated successfully (from parameters).");
-                console.log(`[B2F RPC] Set ${suggestions.length} suggested responses from parameters${titleParam ? ` with title: ${titleParam}` : ''}`);
-              } catch (e) {
-                console.error('[UI-VERIFY] CRITICAL: Failed to set suggested responses (parameters) in store:', e);
-              }
-            } else {
-              console.warn('[UI-VERIFY] Parameters present but could not derive suggestions:', candidate);
-            }
-          } else {
-            console.warn('[B2F RPC] SUGGESTED_RESPONSES payload missing or invalid, and no parsable parameters found:', { payload, params });
-          }
-        }
+        // Disable backend-driven suggestions. Keep UI placeholders only.
+        console.log('[B2F RPC] SUGGESTED_RESPONSES received but suppressed; UI will show placeholders.');
+        try { clearSuggestedResponses(); } catch {}
       } else if (
         // Prefer enum when available, but also handle numeric value for backward compatibility
         (ClientUIActionType as any).RRWEB_REPLAY ?
@@ -1092,24 +1033,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
               if (candidates.length > 0 && roomInstance.localParticipant) {
                 const pid = String(candidates[0]);
                 try {
-                  console.log('[FLOW] Fallback attempting to bind agent identity to', pid);
+                  console.log('[FLOW] Fallback inferred agent identity:', pid, '- waiting for agent_ready to enable RPC');
                   setAgentIdentity(pid);
-                  const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, pid);
-                  const client = new AgentInteractionClientImpl(adapter as any);
-                  agentServiceClientRef.current = client;
-                  await client.TestPing({} as any);
-                  setIsConnected(true);
-                  console.log('[FLOW] Fallback agent identity established and validated');
+                  // Do NOT set agentServiceClientRef or isConnected here. Wait for 'agent_ready'.
                   return;
                 } catch (e) {
-                  console.warn('[FLOW] Fallback bind/validate failed; will retry if attempts remain', e);
-                  if (e instanceof RpcError) {
-                    const code = (e as any)?.code;
-                    if (code === 12 || code === 8) {
-                      console.warn('[FLOW] Fallback stopping retries due to unsupported RPC method');
-                      break;
-                    }
-                  }
+                  console.warn('[FLOW] Fallback bind failed; will retry if attempts remain', e);
                   // Reset and retry next loop
                   try { setAgentIdentity(null); } catch {}
                   agentServiceClientRef.current = null;
@@ -1269,34 +1198,35 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 return; // Stop further processing for this packet
             }
             if (data.type === 'agent_ready' && roomInstance.localParticipant) {
-                console.log(`[FLOW] Agent ready signal received from ${participant.identity}`);
-                setAgentIdentity(participant.identity); // Store the agent identity
-                const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, participant.identity);
+                const advertisedAgent = (data && (data as any).agent_identity) ? String((data as any).agent_identity) : String(participant.identity || '');
+                console.log(`[FLOW] Agent ready signal received from ${participant.identity}. Advertised agent identity: ${advertisedAgent}`);
+                // Ignore agent_ready from browser-bot identities; they don't implement AgentInteraction
+                if (advertisedAgent.startsWith('browser-bot-')) {
+                    console.warn('[FLOW] agent_ready from browser-bot ignored for RPC binding');
+                    return;
+                }
+                setAgentIdentity(advertisedAgent);
+                const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, advertisedAgent);
                 agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
-                
-                // Send confirmation RPC to agent to complete handshake
+                // Do not send confirmation RPC; consider agent connected once client is established
+                setIsConnected(true);
+                console.log('[FLOW] Frontend ready (agent client established)');
+                // Flush any queued F2B tasks now that agent is bound
                 try {
-                    console.log(`[FLOW] Sending confirmation RPC to agent...`);
-                    const confirmationResponse = await roomInstance.localParticipant.performRpc({
-                        destinationIdentity: participant.identity,
-                        method: 'rox.interaction.AgentInteraction/TestPing',
-                        payload: uint8ArrayToBase64(new TextEncoder().encode(JSON.stringify({
-                            message: 'Frontend connected and ready',
-                            timestamp: Date.now(),
-                            userId: userName,
-                            roomName: roomName
-                        }))),
-                        responseTimeout: 20000,
-                    });
-                    console.log(`[FLOW] Agent confirmation response:`, confirmationResponse);
-                    setIsConnected(true); // NOW we are fully connected and ready to interact
-                    console.log('[FLOW] Frontend ready (agent connected)');
-                    
-                } catch (rpcError) {
-                    console.error(`[FLOW] Failed to send confirmation RPC to agent:`, rpcError);
-                    // Still set connected as the agent is ready, even if confirmation failed
-                    setIsConnected(true);
-                    console.log('[FLOW] Frontend ready (agent connected, handshake error ignored)');
+                  const queued = pendingTasksRef.current.splice(0);
+                  for (const t of queued) {
+                    const qRpcId = `f2b_${uuidv4()}`;
+                    console.log(`%c[F2B RPC SEND] ID: ${qRpcId}`, 'color: orange;', `(flushed) Starting task: ${t.name}`);
+                    const qTrace = uuidv4();
+                    const req = {
+                      taskName: t.name,
+                      jsonPayload: JSON.stringify({ ...(t.payload || {}), trace_id: qTrace, _rpcId: qRpcId }),
+                    };
+                    await firstValueFrom(agentServiceClientRef.current!.InvokeAgentTask(req));
+                    console.log(`%c[F2B RPC SUCCESS] ID: ${qRpcId}`, 'color: green;', '(flushed)');
+                  }
+                } catch (flushErr) {
+                  console.warn('[F2B RPC] Failed to flush queued tasks (non-fatal):', flushErr);
                 }
             }
 
@@ -1390,8 +1320,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       isAgentClientReady: !!agentServiceClientRef.current,
     });
     if (!agentServiceClientRef.current) {
-      setConnectionError('Cannot start task: Agent is not ready.');
-      console.error(`[F2B RPC FAIL] ID: ${rpcId} - Agent is not ready.`);
+      // Queue the task to run after agent binds (agent_ready)
+      pendingTasksRef.current.push({ name: taskName, payload });
+      console.warn(`[F2B RPC QUEUED] ID: ${rpcId} - Agent not ready; queued task '${taskName}'.`);
       return;
     }
     try {
@@ -1498,7 +1429,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // --- Send restored_feed_summary to the agent once after connect ---
   const sentSummaryRef = useRef(false);
   useEffect(() => {
-    if (!isConnected || sentSummaryRef.current) return;
+    if (!isConnected || !agentRpcReady || sentSummaryRef.current) return;
     try {
       const blocks = (useSessionStore.getState().whiteboardBlocks || []).map((b: any) => {
         if (b?.type === 'excalidraw') {
@@ -1516,7 +1447,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     } catch (e) {
       console.warn('[F2B RPC] Failed to send restored_feed_summary (non-fatal):', e);
     }
-  }, [isConnected, startTask]);
+  }, [isConnected, agentRpcReady, startTask]);
 
   // --- Deletion helper shared by multiple event hooks ---
   useEffect(() => {
@@ -1604,29 +1535,11 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     return () => {};
   }, []);
 
-  // Convenience method for Suggested Responses selection
-  const selectSuggestedResponse = useCallback(async (suggestion: { id: string; text: string; reason?: string }) => {
-    try {
-      // Optimistically stop current agent audio playback locally for responsiveness
-      if (agentIdentity) {
-        const agentParticipant = roomInstance.remoteParticipants.get(agentIdentity);
-        if (agentParticipant && (agentParticipant as any).audioTrackPublications) {
-          (agentParticipant as any).audioTrackPublications.forEach((pub: any) => {
-            try { pub.track?.detach(); } catch {}
-          });
-        }
-      }
-
-      await startTask('select_suggested_response', {
-        id: suggestion.id,
-        text: suggestion.text,
-        reason: suggestion.reason ?? null,
-        interaction_type: 'suggested_response',
-      });
-    } finally {
-      try { clearSuggestedResponses(); } catch {}
-    }
-  }, [startTask, clearSuggestedResponses, agentIdentity]);
+  // Convenience method for Suggested Responses selection (no-op)
+  const selectSuggestedResponse = useCallback(async (_suggestion: { id: string; text: string; reason?: string }) => {
+    console.log('[UI] selectSuggestedResponse suppressed; no backend RPC will be sent.');
+    try { clearSuggestedResponses(); } catch {}
+  }, [clearSuggestedResponses]);
 
   // Expose an imperative deletion helper so pages can terminate the pod when leaving route
   const deleteSessionNow = useCallback(async () => {
