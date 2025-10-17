@@ -16,6 +16,7 @@ import { useBrowserActionExecutor } from './useBrowserActionExecutor';
 const LIVEKIT_DEBUG = false;
 const SESSION_FLOW_DEBUG = true;
 const DELETE_ON_UNLOAD = (process.env.NEXT_PUBLIC_SESSION_DELETE_ON_UNLOAD || 'true').toLowerCase() === 'true';
+const AGENT_RPC_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_AGENT_RPC_TIMEOUT_MS || '30000') || 30000;
 
 // THIS IS THE NEW SINGLETON GUARD. It will survive all re-mounts.
 let hasConnectStarted = false;
@@ -78,18 +79,31 @@ class LiveKitRpcAdapter implements Rpc {
   async request(service: string, method: string, data: Uint8Array): Promise<Uint8Array> {
     const fullMethodName = `${service}/${method}`;
     const payloadString = uint8ArrayToBase64(data);
-    try {
-      if (LIVEKIT_DEBUG) console.log(`F2B RPC Request: To=${this.agentIdentity}, Method=${fullMethodName}`);
-      const responseString = await this.localParticipant.performRpc({
+    const doOnce = async () => {
+      return await this.localParticipant.performRpc({
         destinationIdentity: this.agentIdentity,
         method: fullMethodName,
         payload: payloadString,
-        responseTimeout: 30000,
+        responseTimeout: AGENT_RPC_TIMEOUT_MS,
       });
-      return base64ToUint8Array(responseString);
-    } catch (error) {
-      console.error(`F2B RPC request to ${fullMethodName} failed:`, error);
-      throw error;
+    };
+    let attempts = 0;
+    const maxAttempts = 2;
+    while (true) {
+      try {
+        if (LIVEKIT_DEBUG) console.log(`F2B RPC Request: To=${this.agentIdentity}, Method=${fullMethodName}, attempt=${attempts+1}`);
+        const responseString = await doOnce();
+        return base64ToUint8Array(responseString);
+      } catch (error: any) {
+        const msg = String(error?.message || '').toLowerCase();
+        attempts += 1;
+        if (attempts < maxAttempts && (msg.includes('timeout') || msg.includes('connection'))) {
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
+        console.error(`F2B RPC request to ${fullMethodName} failed:`, error);
+        throw error;
+      }
     }
   }
 
@@ -1104,27 +1118,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       });
     };
 
-    // Track real-time speaking using LiveKit active speakers
-    const handleActiveSpeakersChanged = (speakers: Participant[]) => {
-      try {
-        const agentId = agentIdentity;
-        if (!agentId) return; // no known agent yet
-        const agentIsSpeakingNow = !!speakers.find((p) => p.identity === agentId);
-        setIsAgentSpeaking(agentIsSpeakingNow);
-        if (agentIsSpeakingNow) {
-          // Agent started speaking: stop thinking and clear timeout
-          try { setIsAwaitingAIResponse(false); } catch {}
-          try { if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; } } catch {}
-          try { setShowWaitingPill(false); } catch {}
-        } else {
-          // Agent stopped speaking: if not awaiting, show waiting pill
-          const awaiting = useSessionStore.getState().isAwaitingAIResponse;
-          if (!awaiting) {
-            try { setShowWaitingPill(true); } catch {}
-          }
-        }
-      } catch {}
-    };
+    // Turn detection via ActiveSpeakers removed
 
     const handleTrackUnsubscribed = (_track: Track, _publication: TrackPublication, _participant: RemoteParticipant) => {
       setIsAgentSpeaking(false);
@@ -1211,23 +1205,63 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 // Do not send confirmation RPC; consider agent connected once client is established
                 setIsConnected(true);
                 console.log('[FLOW] Frontend ready (agent client established)');
-                // Flush any queued F2B tasks now that agent is bound
+                // Send TestPing so backend can start or handle reconnect
                 try {
-                  const queued = pendingTasksRef.current.splice(0);
-                  for (const t of queued) {
-                    const qRpcId = `f2b_${uuidv4()}`;
-                    console.log(`%c[F2B RPC SEND] ID: ${qRpcId}`, 'color: orange;', `(flushed) Starting task: ${t.name}`);
-                    const qTrace = uuidv4();
-                    const req = {
-                      taskName: t.name,
-                      jsonPayload: JSON.stringify({ ...(t.payload || {}), trace_id: qTrace, _rpcId: qRpcId }),
-                    };
-                    await firstValueFrom(agentServiceClientRef.current!.InvokeAgentTask(req));
-                    console.log(`%c[F2B RPC SUCCESS] ID: ${qRpcId}`, 'color: green;', '(flushed)');
-                  }
-                } catch (flushErr) {
-                  console.warn('[F2B RPC] Failed to flush queued tasks (non-fatal):', flushErr);
+                  console.log('[FLOW] Sending TestPing to agent...');
+                  await agentServiceClientRef.current!.TestPing({} as any);
+                  console.log('[FLOW] TestPing success');
+                } catch (tpErr) {
+                  console.warn('[FLOW] TestPing failed (non-fatal):', tpErr);
                 }
+                return;
+            }
+
+            if (data.type === 'ui') {
+                try {
+                    const action = String((data as any).action || '');
+                    const params = ((data as any).parameters || {}) as any;
+                    if (action === 'BROWSER_NAVIGATE') {
+                        const url = params?.url;
+                        if (url) {
+                            try {
+                                await executeBrowserAction({ tool_name: 'browser_navigate', parameters: { url } });
+                            } catch (err) {}
+                        }
+                    } else if (action === 'JUPYTER_CLICK_PYODIDE') {
+                        try { await executeBrowserAction({ tool_name: 'jupyter_click_pyodide', parameters: {} }); } catch (err) {}
+                    } else if (action === 'JUPYTER_TYPE_IN_CELL') {
+                        try { await executeBrowserAction({ tool_name: 'jupyter_type_in_cell', parameters: params || {} }); } catch (err) {}
+                    } else if (action === 'JUPYTER_RUN_CELL') {
+                        try { await executeBrowserAction({ tool_name: 'jupyter_run_cell', parameters: { cell_index: params?.cell_index || 0 } }); } catch (err) {}
+                    } else if (action === 'JUPYTER_CREATE_NEW_CELL') {
+                        try { await executeBrowserAction({ tool_name: 'jupyter_create_new_cell', parameters: {} }); } catch (err) {}
+                    } else if (action === 'SET_UI_STATE') {
+                        try {
+                            const p = params || {};
+                            if ('statusText' in p || 'status_text' in p) {
+                                const statusText = (p.statusText || p.status_text) as string;
+                                try { setAgentStatusText(statusText); } catch {}
+                            }
+                            if ('view' in p) {
+                                const viewParam = String(p.view || '');
+                                if (viewParam) {
+                                    let targetView: SessionView | null = null;
+                                    if (viewParam === 'vnc_browser' || viewParam === 'vnc') targetView = 'vnc';
+                                    else if (viewParam === 'excalidraw' || viewParam === 'drawing') targetView = 'excalidraw';
+                                    else if (viewParam === 'video') targetView = 'video';
+                                    else if (viewParam === 'intro') targetView = 'intro';
+                                    if (targetView) { try { setActiveView(targetView); } catch {} }
+                                }
+                            }
+                        } catch (e) {}
+                    } else if (action === 'RRWEB_REPLAY') {
+                        const events_url = params?.events_url;
+                        if (events_url) {
+                            try { await sendBrowserInteraction({ action: 'rrweb_replay', events_url }); } catch {}
+                        }
+                    }
+                } catch (e) {}
+                return;
             }
 
             // Detect suggested responses sent via generic data channel messages
@@ -1294,7 +1328,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     roomInstance.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
     roomInstance.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
     roomInstance.on(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
-    roomInstance.on(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakersChanged);
+    // ActiveSpeakersChanged listener removed
 
     // RPC handler is registered inside onConnected to ensure localParticipant exists.
 
@@ -1305,7 +1339,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       roomInstance.off(RoomEvent.TrackSubscribed, handleTrackSubscribed);
       roomInstance.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
       roomInstance.off(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
-      roomInstance.off(RoomEvent.ActiveSpeakersChanged, handleActiveSpeakersChanged);
+      // ActiveSpeakersChanged listener was removed
       try { if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; } } catch {}
     };
   }, [roomName, setIsMicEnabled, setAgentStatusText, setIsAgentSpeaking, setActiveView, setSuggestedResponses, userName, agentIdentity]); // Add all dependencies
@@ -1426,7 +1460,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     } catch {}
   }, [isConnected]);
 
-  // --- Send restored_feed_summary to the agent once after connect ---
+  // --- Send restored_feed_summary via UpdateAgentContext once after connect ---
   const sentSummaryRef = useRef(false);
   useEffect(() => {
     if (!isConnected || !agentRpcReady || sentSummaryRef.current) return;
@@ -1439,15 +1473,15 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         }
         return { id: b?.id, type: b?.type };
       });
-      const payload = { restored_feed_summary: { blocks } };
-      // Fire-and-forget: if this fails, normal flow continues
-      void startTask('start_tutoring_session', payload);
+      const contextPayload = { restored_feed_summary: { blocks } };
+      // Fire-and-forget: pass context without triggering a session start
+      void agentServiceClientRef.current?.UpdateAgentContext({ jsonContextPayload: JSON.stringify(contextPayload) } as any);
       sentSummaryRef.current = true;
-      console.log('[F2B RPC] Sent start_tutoring_session with restored_feed_summary');
+      console.log('[F2B RPC] Sent UpdateAgentContext with restored_feed_summary');
     } catch (e) {
-      console.warn('[F2B RPC] Failed to send restored_feed_summary (non-fatal):', e);
+      console.warn('[F2B RPC] Failed to send restored_feed_summary context (non-fatal):', e);
     }
-  }, [isConnected, agentRpcReady, startTask]);
+  }, [isConnected, agentRpcReady]);
 
   // --- Deletion helper shared by multiple event hooks ---
   useEffect(() => {
