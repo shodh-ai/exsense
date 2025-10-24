@@ -64,7 +64,7 @@ const TeacherDashboard = (): JSX.Element => {
   // This function is simplified to just navigate to the details form page.
   // The responsibility of creating the course is moved to the form itself.
   const handleCreateNewCourse = () => {
-    router.push('/courses/new/details-form');
+    router.push('/profile/new/details-form');
   };
   // --- MODIFICATION END ---
 
