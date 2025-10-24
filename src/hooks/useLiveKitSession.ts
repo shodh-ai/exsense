@@ -179,6 +179,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const setIsMicActivatingPending = useSessionStore((s) => s.setIsMicActivatingPending);
   const setSuggestedResponses = useSessionStore((s) => s.setSuggestedResponses);
   const clearSuggestedResponses = useSessionStore((s) => s.clearSuggestedResponses);
+  const setVisualizationData = useSessionStore((s) => s.setVisualizationData);
+  const setIsDiagramGenerating = useSessionStore((s) => s.setIsDiagramGenerating);
   const isPushToTalkActive = useSessionStore((s) => s.isPushToTalkActive);
   const setIsPushToTalkActive = useSessionStore((s) => s.setIsPushToTalkActive);
   const setIsAwaitingAIResponse = useSessionStore((s) => s.setIsAwaitingAIResponse);
@@ -1259,6 +1261,15 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                         if (events_url) {
                             try { await sendBrowserInteraction({ action: 'rrweb_replay', events_url }); } catch {}
                         }
+                    } else if (action === 'GENERATE_VISUALIZATION') {
+                        try {
+                            const els = params?.elements;
+                            if (Array.isArray(els)) {
+                                setIsDiagramGenerating(true);
+                                setVisualizationData(els);
+                                setIsDiagramGenerating(false);
+                            }
+                        } catch {}
                     }
                 } catch (e) {}
                 return;

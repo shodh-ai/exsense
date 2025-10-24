@@ -98,14 +98,8 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
     const { isMusicButtonPlaying, setIsMusicButtonPlaying, isMicEnabled } = useSessionStore();
     const suggestedResponses = useSessionStore((s) => s.suggestedResponses);
     const promptTextFromStore = useSessionStore((s) => s.suggestedTitle);
-    const PLACEHOLDER_SUGGESTIONS: { id: string; text: string; reason?: string }[] = [
-        { id: 'ph_1', text: 'I have a doubt' },
-        { id: 'ph_2', text: 'Can you explain this?' },
-        { id: 'ph_3', text: 'Show an example' },
-        { id: 'ph_4', text: 'Summarize the topic' },
-    ];
-    const displaySuggestions = (suggestedResponses && suggestedResponses.length > 0) ? suggestedResponses : PLACEHOLDER_SUGGESTIONS;
-    const promptText = promptTextFromStore || 'How would you like to proceed?';
+    const displaySuggestions = Array.isArray(suggestedResponses) ? suggestedResponses : [];
+    const promptText = promptTextFromStore; // no default; only show when backend provides
 
     // --- Sync state to refs to avoid stale closures in callbacks ---
     useEffect(() => { isAudioActiveRef.current = isAudioActive; }, [isAudioActive]);
@@ -429,7 +423,7 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
                     style.left = `${left}px`;
                     style.top = `${top}px`;
                     style.transform = 'none';
-                    const shouldShow = !!transcriptRef.current || (suggestedResponsesRef.current?.length ?? 0) > 0 || !!promptRef.current;
+                    const shouldShow = !!transcriptRef.current || (suggestedResponsesRef.current?.length ?? 0) > 0;
                     style.opacity = shouldShow ? '1' : '0';
                 }
 
