@@ -3,10 +3,10 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Observable, firstValueFrom } from 'rxjs';
+import { Observable } from 'rxjs';
 import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment, VideoPresets } from 'livekit-client';
 import { roomInstance } from '@/lib/livekit-room';
-import { AgentInteractionClientImpl, AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
+import { AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
 import { useSessionStore, SessionView } from '@/lib/store';
 import { useAuth } from '@clerk/nextjs';
 import { useBrowserActionExecutor } from './useBrowserActionExecutor';
@@ -218,7 +218,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const [transcriptionMessages, setTranscriptionMessages] = useState<string[]>([]);
   const [statusMessages, setStatusMessages] = useState<string[]>([]);
   
-  const agentServiceClientRef = useRef<AgentInteractionClientImpl | null>(null);
+  const agentServiceClientRef = useRef<any | null>(null); // deprecated RPC client (unused; DataChannel is used now)
   const pendingTasksRef = useRef<{ name: string; payload: any }[]>([]);
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
   const isPushToTalkActiveRef = useRef<boolean>(false);
@@ -535,9 +535,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     // The handler for commands coming FROM the agent TO the frontend
     const handlePerformUIAction = async (rpcData: RpcInvocationData): Promise<string> => {
       try { if (!agentRpcReady) setAgentRpcReady(true); } catch {}
-      console.log(`%c[B2F RPC RECV] ID: ${rpcData.requestId}`, 'color: cyan;', rpcData);
+      console.log(`%c[B2F DC RECV] ID: ${rpcData.requestId}`, 'color: cyan;', rpcData);
       const request = AgentToClientUIActionRequest.decode(base64ToUint8Array(rpcData.payload as string));
-      console.log(`[B2F RPC] Received action: ${ClientUIActionType[request.actionType]}`);
+      console.log(`[B2F DC] Received action: ${ClientUIActionType[request.actionType]}`);
       
       // --- THE BRIDGE FROM RPC TO ZUSTAND ---
       if (request.actionType === ClientUIActionType.BROWSER_NAVIGATE) {
@@ -688,7 +688,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         console.log('[SET_UI_STATE] ===== END SET_UI_STATE PROCESSING =====');
       } else if (request.actionType === ClientUIActionType.SUGGESTED_RESPONSES) {
         // Disable backend-driven suggestions. Keep UI placeholders only.
-        console.log('[B2F RPC] SUGGESTED_RESPONSES received but suppressed; UI will show placeholders.');
+        console.log('[B2F DC] SUGGESTED_RESPONSES received but suppressed; UI will show placeholders.');
         try { clearSuggestedResponses(); } catch {}
       } else if (
         // Prefer enum when available, but also handle numeric value for backward compatibility
@@ -696,7 +696,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           request.actionType === (ClientUIActionType as any).RRWEB_REPLAY :
           (request.actionType as number) === 73
       ) {
-        console.log('[B2F RPC] Handling RRWEB_REPLAY');
+        console.log('[B2F DC] Handling RRWEB_REPLAY');
         const url = (request as any).parameters?.events_url;
         if (url && typeof url === 'string') {
           try {
@@ -708,12 +708,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             useSessionStore.getState().addBlock(block);
             // Switch to whiteboard view so the user sees the replay
             try { setActiveView('excalidraw' as SessionView); } catch {}
-            console.log('[B2F RPC] rrweb replay block added to whiteboard feed');
+            console.log('[B2F DC] rrweb replay block added to whiteboard feed');
           } catch (e) {
-            console.error('[B2F RPC] Failed to add rrweb replay block:', e);
+            console.error('[B2F DC] Failed to add rrweb replay block:', e);
           }
         } else {
-          console.error('[B2F RPC] RRWEB_REPLAY action received without a valid events_url.');
+          console.error('[B2F DC] RRWEB_REPLAY action received without a valid events_url.');
         }
       } else if (
         // SET_UI_STATE is used for a lightweight request/response hook as well
@@ -742,7 +742,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
           }
         } catch (e) {
-          console.warn('[B2F RPC] SET_UI_STATE handler error:', e);
+          console.warn('[B2F DC] SET_UI_STATE handler error:', e);
         }
         // default ack
         const response = ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true });
@@ -753,40 +753,40 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           request.actionType === (ClientUIActionType as any).EXCALIDRAW_CLEAR_CANVAS :
           (request.actionType as number) === 64
       ) { // EXCALIDRAW_CLEAR_CANVAS
-        console.log('[B2F RPC] Handling EXCALIDRAW_CLEAR_CANVAS');
+        console.log('[B2F DC] Handling EXCALIDRAW_CLEAR_CANVAS');
         // Clear canvas via debug functions if available
         if (typeof window !== 'undefined' && window.__excalidrawDebug) {
           try {
             window.__excalidrawDebug.clearCanvas();
-            console.log('[B2F RPC] ✅ Canvas cleared successfully');
+            console.log('[B2F DC] ✅ Canvas cleared successfully');
           } catch (error) {
-            console.error('[B2F RPC] ❌ Failed to clear canvas:', error);
+            console.error('[B2F DC] ❌ Failed to clear canvas:', error);
           }
         } else {
-          console.warn('[B2F RPC] ⚠️ Excalidraw debug functions not available for canvas clear');
+          console.warn('[B2F DC] ⚠️ Excalidraw debug functions not available for canvas clear');
         }
       } else if (
         (ClientUIActionType as any).GENERATE_VISUALIZATION ?
           request.actionType === (ClientUIActionType as any).GENERATE_VISUALIZATION :
           (request.actionType as number) === 49
       ) { // GENERATE_VISUALIZATION
-        console.log('[B2F RPC] Handling GENERATE_VISUALIZATION');
+        console.log('[B2F DC] Handling GENERATE_VISUALIZATION');
         try {
           const params = request.parameters || {} as any;
           // Path A: Precomputed elements provided
           const elements = params.elements ? JSON.parse(params.elements) : null;
           if (elements && Array.isArray(elements)) {
-            console.log(`[B2F RPC] Parsed ${elements.length} elements from RPC`);
+            console.log(`[B2F DC] Parsed ${elements.length} elements from message`);
             const { setVisualizationData } = useSessionStore.getState();
             if (setVisualizationData) {
-              console.log('[B2F RPC] Setting visualization data in store...');
+              console.log('[B2F DC] Setting visualization data in store...');
               setVisualizationData(elements);
             } else {
-              console.warn('[B2F RPC] Store setVisualizationData not available, using direct method');
+              console.warn('[B2F DC] Store setVisualizationData not available, using direct method');
               if (typeof window !== 'undefined' && window.__excalidrawDebug) {
                 const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(elements);
                 window.__excalidrawDebug.setElements(excalidrawElements);
-                console.log('[B2F RPC] ✅ Direct visualization rendering completed');
+                console.log('[B2F DC] ✅ Direct visualization rendering completed');
               }
             }
           } else {
@@ -794,9 +794,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           const prompt = params.prompt as string | undefined;
           const topicContext = (params.topic_context as string | undefined) || '';
           if (!prompt) {
-            console.error('[B2F RPC] ❌ GENERATE_VISUALIZATION missing both elements and prompt');
+            console.error('[B2F DC] ❌ GENERATE_VISUALIZATION missing both elements and prompt');
           } else {
-            console.log('[B2F RPC] Optimistic UI: showing placeholder and calling Visualizer...');
+            console.log('[B2F DC] Optimistic UI: showing placeholder and calling Visualizer...');
             // --- Optimistic UI: show placeholder immediately ---
             const placeholderSkeleton = [
               {
@@ -1198,23 +1198,37 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 console.log(`[FLOW] Agent ready signal received from ${participant.identity}. Advertised agent identity: ${advertisedAgent}`);
                 // Ignore agent_ready from browser-bot identities; they don't implement AgentInteraction
                 if (advertisedAgent.startsWith('browser-bot-')) {
-                    console.warn('[FLOW] agent_ready from browser-bot ignored for RPC binding');
+                    console.warn('[FLOW] agent_ready from browser-bot ignored for agent binding');
                     return;
                 }
                 setAgentIdentity(advertisedAgent);
-                const adapter = new LiveKitRpcAdapter(roomInstance.localParticipant, advertisedAgent);
-                agentServiceClientRef.current = new AgentInteractionClientImpl(adapter as any);
-                // Do not send confirmation RPC; consider agent connected once client is established
                 setIsConnected(true);
-                console.log('[FLOW] Frontend ready (agent client established)');
-                // Send TestPing so backend can start or handle reconnect
+                console.log('[FLOW] Frontend ready (DataChannel established; using DataChannel for agent tasks)');
+                // Flush any queued tasks via DataChannel
                 try {
-                  console.log('[FLOW] Sending TestPing to agent...');
-                  await agentServiceClientRef.current!.TestPing({} as any);
-                  console.log('[FLOW] TestPing success');
-                } catch (tpErr) {
-                  console.warn('[FLOW] TestPing failed (non-fatal):', tpErr);
-                }
+                  const queued = [...pendingTasksRef.current];
+                  pendingTasksRef.current = [];
+                  for (const t of queued) {
+                    try {
+                      const traceId = uuidv4();
+                      const envelope = {
+                        type: 'agent_task',
+                        taskName: t.name,
+                        payload: { ...(t.payload || {}), trace_id: traceId },
+                      };
+                      const bytes = new TextEncoder().encode(JSON.stringify(envelope));
+                      try {
+                        await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [advertisedAgent], reliable: true } as any);
+                      } catch {
+                        // Fallback for SDKs without object options signature
+                        await roomInstance.localParticipant.publishData(bytes);
+                      }
+                      console.log('[FLOW] Flushed queued task over DataChannel:', t.name);
+                    } catch (e) {
+                      console.warn('[FLOW] Failed to flush queued task:', t?.name, e);
+                    }
+                  }
+                } catch {}
                 return;
             }
 
@@ -1222,6 +1236,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 try {
                     const action = String((data as any).action || '');
                     const params = ((data as any).parameters || {}) as any;
+                    try { console.log('[B2F DC][UI] Received action', action, params); } catch {}
                     if (action === 'BROWSER_NAVIGATE') {
                         const url = params?.url;
                         if (url) {
@@ -1263,15 +1278,55 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                         }
                     } else if (action === 'GENERATE_VISUALIZATION') {
                         try {
+                            console.log('[B2F DC] GENERATE_VISUALIZATION received:', params);
                             const els = params?.elements;
+                            const prompt = params?.prompt;
+                            const topic = params?.topic_context || params?.topic || '';
                             if (Array.isArray(els)) {
+                                console.log('[B2F DC] Using elements path. Count=', els.length);
                                 setIsDiagramGenerating(true);
                                 setVisualizationData(els);
                                 setIsDiagramGenerating(false);
+                            } else if (typeof prompt === 'string' && prompt.trim().length > 0) {
+                                try { setIsDiagramGenerating(true); } catch {}
+                                try {
+                                    const base = (visualizerBaseUrl && visualizerBaseUrl.trim().length > 0) ? visualizerBaseUrl.replace(/\/$/, '') : 'http://localhost:8011';
+                                    const url = `${base}/generate-mermaid-text`;
+                                    console.log('[B2F DC] Calling Visualizer:', { url, topic, promptPreview: prompt.slice(0, 120) });
+                                    const resp = await fetch(url, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ text_to_visualize: prompt, topic_context: topic }),
+                                    });
+                                    if (!resp.ok) {
+                                        console.error('[B2F DC] Visualizer HTTP error', resp.status, resp.statusText);
+                                    } else {
+                                        const mermaidText = (await resp.text()).trim();
+                                        console.log('[B2F DC] Visualizer responded (len):', mermaidText.length);
+                                        try { useSessionStore.getState().setDiagramDefinition(mermaidText); } catch {}
+                                    }
+                                } catch (vizErr) {
+                                    console.error('[B2F DC] Visualizer call failed:', vizErr);
+                                    try { useSessionStore.getState().setDiagramDefinition('flowchart TD\n    Error["Generation Failed"]'); } catch {}
+                                } finally {
+                                    try { setIsDiagramGenerating(false); } catch {}
+                                }
+                            } else {
+                                console.warn('[B2F DC] GENERATE_VISUALIZATION missing both elements and prompt');
                             }
-                        } catch {}
+                        } catch (e) {
+                            console.warn('[B2F DC] GENERATE_VISUALIZATION handler error:', e);
+                        }
                     }
                 } catch (e) {}
+                return;
+            }
+
+            // --- Handle backend-sent transcript fallback (when LiveKit STT events are unavailable/disabled) ---
+            if (data?.type === 'transcript' && typeof data?.text === 'string') {
+                const spk = (typeof data.speaker === 'string' && data.speaker.trim().length > 0) ? data.speaker : (participant?.identity || 'Student');
+                const line = `${spk}: ${data.text}`;
+                setTranscriptionMessages((prev) => [...prev.slice(-19), line]);
                 return;
             }
 
@@ -1359,36 +1414,37 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // --- API EXPOSED TO THE COMPONENTS ---
   // This is the clean interface your UI components will use to talk to the agent.
   const startTask = useCallback(async (taskName: string, payload: object) => {
-    const rpcId = `f2b_${uuidv4()}`;
-    console.log(`%c[F2B RPC PREP] ID: ${rpcId}`, 'color: orange;', `Task: ${taskName}`, {
+    const dcId = `dc_${uuidv4()}`;
+    console.log(`%c[F2B DC PREP] ID: ${dcId}`, 'color: orange;', `Task: ${taskName}`, {
       roomState: roomInstance.state,
-      isAgentClientReady: !!agentServiceClientRef.current,
+      agentIdentity,
     });
-    if (!agentServiceClientRef.current) {
-      // Queue the task to run after agent binds (agent_ready)
+    if (!agentIdentity) {
       pendingTasksRef.current.push({ name: taskName, payload });
-      console.warn(`[F2B RPC QUEUED] ID: ${rpcId} - Agent not ready; queued task '${taskName}'.`);
+      console.warn(`[F2B DC QUEUED] ID: ${dcId} - Agent not ready; queued task '${taskName}'.`);
       return;
     }
     try {
-      console.log(`%c[F2B RPC SEND] ID: ${rpcId}`, 'color: orange;', `Starting task: ${taskName}`);
+      console.log(`%c[F2B DC SEND] ID: ${dcId}`, 'color: orange;', `Starting task: ${taskName}`);
       const traceId = uuidv4();
       try { (window as any).__lastTraceId = traceId; } catch {}
-      const request = {
-        taskName: taskName,
-        jsonPayload: JSON.stringify({
-          ...(payload as any),
-          trace_id: traceId,
-          _rpcId: rpcId,
-        }),
+      const envelope = {
+        type: 'agent_task',
+        taskName,
+        payload: { ...(payload as any), trace_id: traceId, _dcId: dcId },
       };
-      await firstValueFrom(agentServiceClientRef.current.InvokeAgentTask(request));
-      console.log(`%c[F2B RPC SUCCESS] ID: ${rpcId}`, 'color: green;');
+      const bytes = new TextEncoder().encode(JSON.stringify(envelope));
+      try {
+        await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [agentIdentity], reliable: true } as any);
+      } catch {
+        await roomInstance.localParticipant.publishData(bytes);
+      }
+      console.log(`%c[F2B DC SUCCESS] ID: ${dcId}`, 'color: green;');
     } catch (e) {
-      console.error(`%c[F2B RPC FAIL] ID: ${rpcId}`, 'color: red;', 'Failed to start agent task:', e);
+      console.error(`%c[F2B DC FAIL] ID: ${dcId}`, 'color: red;', 'Failed to send agent task:', e);
       setConnectionError(`Failed to start task: ${e instanceof Error ? e.message : String(e)}`);
     }
-  }, []);
+  }, [agentIdentity]);
 
   // --- Push To Talk helpers (LiveKit STT) ---
   const startPushToTalk = useCallback(async () => {
@@ -1425,6 +1481,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       pttBufferRef.current = [];
       if (text && text.length > 0) {
         await startTask('student_spoke_or_acted', { transcript: text });
+      } else {
+        // Fallback: notify backend to flush any buffered transcript from server-side STT
+        await startTask('student_stopped_listening', {});
       }
       // Enter awaiting state immediately after user releases PTT (even if no transcript)
       try {
@@ -1474,7 +1533,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // --- Send restored_feed_summary via UpdateAgentContext once after connect ---
   const sentSummaryRef = useRef(false);
   useEffect(() => {
-    if (!isConnected || !agentRpcReady || sentSummaryRef.current) return;
+    if (!isConnected || !agentIdentity || sentSummaryRef.current) return;
     try {
       const blocks = (useSessionStore.getState().whiteboardBlocks || []).map((b: any) => {
         if (b?.type === 'excalidraw') {
@@ -1485,14 +1544,25 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         return { id: b?.id, type: b?.type };
       });
       const contextPayload = { restored_feed_summary: { blocks } };
-      // Fire-and-forget: pass context without triggering a session start
-      void agentServiceClientRef.current?.UpdateAgentContext({ jsonContextPayload: JSON.stringify(contextPayload) } as any);
+      // Fire-and-forget: pass context to agent via DataChannel
+      const envelope = {
+        type: 'agent_context',
+        action: 'UPDATE_AGENT_CONTEXT',
+        parameters: { jsonContextPayload: JSON.stringify(contextPayload) },
+      };
+      const bytes = new TextEncoder().encode(JSON.stringify(envelope));
+      try {
+        // Non-async effect: chain promises instead of await
+        roomInstance.localParticipant
+          .publishData(bytes, { destinationIdentities: [agentIdentity], reliable: true } as any)
+          .catch(() => roomInstance.localParticipant.publishData(bytes).catch(() => {}));
+      } catch {}
       sentSummaryRef.current = true;
-      console.log('[F2B RPC] Sent UpdateAgentContext with restored_feed_summary');
+      console.log('[F2B DC] Sent UpdateAgentContext with restored_feed_summary');
     } catch (e) {
-      console.warn('[F2B RPC] Failed to send restored_feed_summary context (non-fatal):', e);
+      console.warn('[F2B DC] Failed to send restored_feed_summary context (non-fatal):', e);
     }
-  }, [isConnected, agentRpcReady]);
+  }, [isConnected, agentIdentity]);
 
   // --- Deletion helper shared by multiple event hooks ---
   useEffect(() => {

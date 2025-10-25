@@ -520,10 +520,13 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
                 >
                     {displaySuggestions && displaySuggestions.length > 0 ? (
                         <div className="flex flex-col items-center gap-3">
-                            {(promptText || transcript) && (
+                            {(transcript || promptText) && (
                                 <h3 className="text-base md:text-lg font-semibold text-slate-800 text-center">
-                                    {promptText || transcript}
+                                    {transcript || promptText}
                                 </h3>
+                            )}
+                            {promptText && transcript && (
+                                <p className="text-sm text-slate-600 text-center">{promptText}</p>
                             )}
                             <div className="flex flex-wrap justify-center gap-2 md:gap-3">
                                 {displaySuggestions.map((s, idx) => {
