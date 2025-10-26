@@ -231,6 +231,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const agentAudioElsRef = useRef<HTMLAudioElement[]>([]);
   const thinkingTimeoutRef = useRef<number | null>(null);
   const thinkingTimeoutMsRef = useRef<number>(Number(process.env.NEXT_PUBLIC_AI_THINKING_TIMEOUT_MS) || 8000);
+  // Ensure we only issue one RPC TestPing per session
+  const testPingSentRef = useRef<boolean>(false);
   // Track whether we've registered the RPC handler to avoid duplicate registrations under StrictMode/HMR
   // RPC handler is deprecated; UI actions come over DataChannel now
 
@@ -351,22 +353,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 try {
                   console.log('[FLOW] Fallback inferred agent identity:', pid, '- waiting for agent_ready to enable RPC');
                   setAgentIdentity(pid);
-                  (async () => {
-                    try {
-                      await new Promise(r => setTimeout(r, 2000));
-                      if (!roomInstance?.localParticipant) return;
-                      if (!isConnected) {
-                        const envelope = { type: 'agent_task', taskName: 'start_tutoring_session', payload: {} };
-                        const bytes = new TextEncoder().encode(JSON.stringify(envelope));
-                        try {
-                          await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [pid], reliable: true } as any);
-                        } catch {
-                          await roomInstance.localParticipant.publishData(bytes);
-                        }
-                        console.log('[FLOW] Fallback sent start_tutoring_session to agent via DataChannel');
-                      }
-                    } catch {}
-                  })();
+                  // Do not send DC fallback start; RPC TestPing will handle starting the session.
                   return;
                 } catch (e) {
                   console.warn('[FLOW] Fallback bind failed; will retry if attempts remain', e);
@@ -376,14 +363,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 }
               }
             }
-            try {
-              if (!isConnected && roomInstance?.localParticipant) {
-                const envelope = { type: 'agent_task', taskName: 'start_tutoring_session', payload: {} };
-                const bytes = new TextEncoder().encode(JSON.stringify(envelope));
-                await roomInstance.localParticipant.publishData(bytes).catch(() => {});
-                console.log('[FLOW] Fallback broadcast start_tutoring_session via DataChannel');
-              }
-            } catch {}
+            // Skip DC broadcast fallback; RPC path is authoritative now.
           } catch (e) {
             console.warn('[FLOW] Fallback handshake watcher error (non-fatal):', e);
           }
@@ -392,19 +372,19 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }, [setIsLoading, setConnectionError, setIsAwaitingAIResponse, setShowWaitingPill, thinkingTimeoutRef, thinkingTimeoutMsRef]);
     
     const onDisconnected = useCallback(() => {
-        console.log('[FLOW] LiveKit Disconnected');
-        setIsConnected(false);
-        setIsLoading(false);
-        agentServiceClientRef.current = null;
-        hasConnectStarted = false; // allow reconnect after disconnect
-        try { resetConnectGuard(); } catch {}
+      console.log('[FLOW] LiveKit Disconnected');
+      setIsConnected(false);
+      setIsLoading(false);
+      agentServiceClientRef.current = null;
+      hasConnectStarted = false; // allow reconnect after disconnect
+      try { resetConnectGuard(); } catch {}
+      try { testPingSentRef.current = false; } catch {}
         
         // Clean up microphone track
         if (microphoneTrackRef.current) {
             microphoneTrackRef.current.stop();
             microphoneTrackRef.current = null;
         }
-        // No RPC unregistration needed
     }, [setIsConnected, setIsLoading, resetConnectGuard]);
 
     // Handler for audio tracks (agent voice output)
@@ -510,6 +490,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           return;
         }
 
+        // --- Agent handshake: bind identity and send TestPing once ---
         if (data.type === 'agent_ready' && roomInstance.localParticipant) {
           const advertisedAgent = (data && (data as any).agent_identity) ? String((data as any).agent_identity) : String(participant.identity || '');
           console.log(`[FLOW] Agent ready signal received from ${participant.identity}. Advertised agent identity: ${advertisedAgent}`);
@@ -520,6 +501,28 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           setAgentIdentity(advertisedAgent);
           setIsConnected(true);
           console.log('[FLOW] Frontend ready (DataChannel established; using DataChannel for agent tasks)');
+          try {
+            if (roomInstance?.localParticipant) {
+              const sessKey = (sessionIdRef.current && sessionIdRef.current.trim().length > 0)
+                ? `rox_testping_${sessionIdRef.current}`
+                : (`rox_testping_${roomInstance?.name || roomName || 'unknown'}`);
+              const alreadyPinged = (typeof window !== 'undefined') ? sessionStorage.getItem(sessKey) === '1' : false;
+              if (!testPingSentRef.current && !alreadyPinged) {
+                const rpc = new LiveKitRpcAdapter(roomInstance.localParticipant, advertisedAgent);
+                try {
+                  await rpc.request('rox.interaction.AgentInteraction', 'TestPing', new Uint8Array());
+                  testPingSentRef.current = true;
+                  try { sessionStorage.setItem(sessKey, '1'); } catch {}
+                  console.log('[FLOW] RPC TestPing sent to agent (once)');
+                } catch (e) {
+                  console.warn('[FLOW] RPC TestPing failed:', e);
+                }
+              } else {
+                console.log('[FLOW] Skipping RPC TestPing; already sent for this session/room');
+              }
+            }
+          } catch {}
+          // Flush any queued tasks now that agent identity is known
           try {
             const queued = [...pendingTasksRef.current];
             pendingTasksRef.current = [];
