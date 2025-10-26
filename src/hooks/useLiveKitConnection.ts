@@ -167,23 +167,69 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
                 if (sessId && sessId.startsWith('sess-')) {
                   sessionIdRef.current = sessId;
                   setSessionManagerSessionIdState(sessId);
-                  return true;
+                  return sessId;
                 }
               }
-              return false;
+              return null;
             };
-            if (await tryFetch()) return;
-            const MAX_ATTEMPTS = 30;
-            for (let i = 0; i < MAX_ATTEMPTS; i++) {
-              await new Promise((r) => setTimeout(r, 2000));
-              if (await tryFetch()) return;
+            let sessId = await tryFetch();
+            if (!sessId) {
+              const MAX_ATTEMPTS = 30;
+              for (let i = 0; i < MAX_ATTEMPTS; i++) {
+                await new Promise((r) => setTimeout(r, 2000));
+                sessId = await tryFetch();
+                if (sessId) break;
+              }
+            }
+            // If we found a sessionId and our current room differs, reconnect into that exact room
+            if (sessId && room.name && room.name !== sessId) {
+              try {
+                console.log('[FLOW] Reconnecting to session room discovered by SessionManager:', { from: room.name, to: sessId });
+              } catch {}
+              try {
+                const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string;
+                const bearer = await getToken();
+                const joinResp = await fetch(`${tokenServiceUrl}/api/generate-room`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+                  },
+                  body: JSON.stringify({
+                    curriculum_id: (typeof ("" + ("")) === 'string') ? (undefined) : undefined, // placeholder (ignored by server when joining)
+                    room_name: sessId,
+                    spawn_agent: false,
+                    spawn_browser: false,
+                  }),
+                });
+                if (joinResp.ok) {
+                  const joinData = await joinResp.json();
+                  const newToken = joinData?.studentToken as string | undefined;
+                  const newUrl = joinData?.livekitUrl as string | undefined;
+                  if (newToken && newUrl) {
+                    try { await room.disconnect(); } catch {}
+                    hasConnectStartedRef.current = false;
+                    setLivekitUrl(newUrl);
+                    setLivekitToken(newToken);
+                    await room.connect(newUrl, newToken);
+                    try { console.log('[FLOW] Reconnected to session room:', sessId); } catch {}
+                  } else {
+                    console.warn('[FLOW] generate-room join response missing token/url');
+                  }
+                } else {
+                  console.warn('[FLOW] generate-room join failed:', joinResp.status, joinResp.statusText);
+                }
+              } catch (err) {
+                console.warn('[FLOW] Failed to reconnect to session room:', err);
+              }
             }
           } catch (e) {
-            console.warn('[FLOW] Could not capture sessionId for cleanup:', e);
+            console.warn('[FLOW] Could not capture/reconnect to session room:', e);
           }
         })();
       }
 
+      // Legacy dev reconnect block retained but no longer required since we reconnect above when sessionId is discovered
       const DEV_FORCE_RECONNECT = (process.env.NEXT_PUBLIC_LK_DEV_RECONNECT || '').toLowerCase() === 'true';
       if (sessionStatusUrl && DEV_FORCE_RECONNECT) {
         (async () => {
