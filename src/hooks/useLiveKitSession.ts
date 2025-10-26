@@ -635,16 +635,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // This is the clean interface your UI components will use to talk to the agent.
   const startTask = useCallback(async (taskName: string, payload: object) => {
     const dcId = `dc_${uuidv4()}`;
-    console.log(`%c[F2B DC PREP] ID: ${dcId}`, 'color: orange;', `Task: ${taskName}`, {
-      roomState: roomInstance.state,
-      agentIdentity,
-    });
-    if (!agentIdentity) {
+    console.log(`%c[F2B DC PREP] ID: ${dcId}`, 'color: orange;', `Task: ${taskName}`, { roomState: roomInstance.state, agentIdentity });
+    if (!agentIdentity || agentIdentity.startsWith('browser-bot-')) {
       pendingTasksRef.current.push({ name: taskName, payload });
-      console.warn(`[F2B DC QUEUED] ID: ${dcId} - Agent not ready; queued task '${taskName}'.`);
+      console.warn(`[F2B DC QUEUED] ID: ${dcId} - Invalid agentIdentity='${agentIdentity || 'null'}'; queued '${taskName}' until agent_ready.`);
       return;
     }
     try {
+      console.log(`[F2B DC TARGET] agentIdentity='${agentIdentity}'`);
       console.log(`%c[F2B DC SEND] ID: ${dcId}`, 'color: orange;', `Starting task: ${taskName}`);
       const traceId = uuidv4();
       try { (window as any).__lastTraceId = traceId; } catch {}
@@ -654,16 +652,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         payload: { ...(payload as any), trace_id: traceId, _dcId: dcId },
       };
       const bytes = new TextEncoder().encode(JSON.stringify(envelope));
-      try {
-        await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [agentIdentity], reliable: true } as any);
-      } catch (e) {
-        console.error(`%c[F2B DC FAIL] ID: ${dcId}`, 'color: red;', `Targeted send to '${agentIdentity}' failed. Error:`, e);
-        console.warn(`[F2B DC FALLBACK] ID: ${dcId}`, 'Broadcasting agent_task to all participants');
-        await roomInstance.localParticipant.publishData(bytes, { reliable: true } as any);
-      }
+      await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [agentIdentity], reliable: true } as any);
       console.log(`%c[F2B DC SUCCESS] ID: ${dcId}`, 'color: green;');
     } catch (e) {
-      console.error(`%c[F2B DC FAIL] ID: ${dcId}`, 'color: red;', 'Failed to send agent task:', e);
+      console.error(`%c[F2B DC FAIL] ID: ${dcId}`, 'color: red;', `Failed to send '${taskName}' to agent='${agentIdentity}':`, e);
       setConnectionError(`Failed to start task: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [agentIdentity]);
@@ -680,7 +672,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     setIsAwaitingAIResponse,
     setShowWaitingPill,
     startTask,
-    agentIdentity,
   });
 
   // --- TAB MANAGEMENT FUNCTIONS --- (declared after sendBrowserInteraction below)
