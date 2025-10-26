@@ -4,12 +4,17 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Observable } from 'rxjs';
-import { Room, RoomEvent, LocalParticipant, RpcInvocationData, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment, VideoPresets } from 'livekit-client';
+import { Room, RoomEvent, LocalParticipant, ConnectionState, RemoteParticipant, RpcError, Track, TrackPublication, AudioTrack, createLocalAudioTrack, Participant, TranscriptionSegment, VideoPresets } from 'livekit-client';
 import { roomInstance } from '@/lib/livekit-room';
-import { AgentToClientUIActionRequest, ClientUIActionResponse, ClientUIActionType } from '@/generated/protos/interaction';
+// Deprecated RPC UI path removed; DataChannel handles UI actions
 import { useSessionStore, SessionView } from '@/lib/store';
 import { useAuth } from '@clerk/nextjs';
 import { useBrowserActionExecutor } from './useBrowserActionExecutor';
+import { handleUiAction } from './uiActionHandler';
+import { usePTT } from './usePTT';
+import { useSessionCleanup } from './useSessionCleanup';
+import { useLiveKitEvents } from './useLiveKitEvents';
+import { useLiveKitConnection } from './useLiveKitConnection';
 
 // File: exsense/src/hooks/useLiveKitSession.ts
 
@@ -24,12 +29,11 @@ let hasConnectStarted = false;
 // Type declaration for Mermaid debug interface
 declare global {
   interface Window {
-    __mermaidDebug?: {
+    __mermaidDebug: {
       setDiagram: (diagram: string) => void;
     };
   }
 }
-
 
 // --- RPC UTILITIES ---
 // These helpers are essential for the hook's operation.
@@ -227,7 +231,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const thinkingTimeoutRef = useRef<number | null>(null);
   const thinkingTimeoutMsRef = useRef<number>(Number(process.env.NEXT_PUBLIC_AI_THINKING_TIMEOUT_MS) || 8000);
   // Track whether we've registered the RPC handler to avoid duplicate registrations under StrictMode/HMR
-  const rpcHandlerRegisteredRef = useRef<boolean>(false);
+  // RPC handler is deprecated; UI actions come over DataChannel now
 
   useEffect(() => {
     isPushToTalkActiveRef.current = isPushToTalkActive;
@@ -236,746 +240,41 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // LOG 1: Is the hook even running?
   console.log('[DIAGNOSTIC] 1. useLiveKitSession hook has started.');
 
-  // --- TOKEN FETCHING & CONNECTION LOGIC ---
+  // --- TOKEN FETCHING & CONNECTION LOGIC (moved to hook) ---
+  const { connectToRoom, resetConnectGuard } = useLiveKitConnection({
+    room: roomInstance,
+    isSignedIn: !!isSignedIn,
+    getToken,
+    roomName,
+    userName,
+    courseId,
+    options,
+    setIsLoading,
+    setConnectionError,
+    setLivekitUrl,
+    setLivekitToken,
+    setUserRole,
+    setCurrentRoomName,
+    setSessionManagerSessionIdState,
+    setSessionStatusUrlState,
+    sessionIdRef,
+    sessionStatusUrlRef,
+  });
+
   useEffect(() => {
-    // THIS IS YOUR PROVEN TOKEN-FETCHING LOGIC FROM `LiveKitSession.tsx`.
-    // It can be pasted here directly without changes. It will manage its own
-    // loading/error states and eventually call `roomInstance.connect(...)`.
-    // For this example, we'll represent it with a simplified version.
-    
-    let mounted = true;
-    const connectToRoom = async () => {
-        // LOG 2: Is the connect function being called?
-        console.log('[DIAGNOSTIC] 2. connectToRoom function called.');
-        console.log('%c[DEBUG] connectToRoom INVOKED', 'color: yellow; font-weight: bold;');
-        if (LIVEKIT_DEBUG) console.log('useLiveKitSession - connectToRoom called:', { roomName, userName });
-        if (!roomName || !userName || !courseId) {
-            if (LIVEKIT_DEBUG) console.log('Missing roomName, userName, or courseId, skipping connection');
-            setIsLoading(false);
-            if (!courseId) setConnectionError('Missing courseId. Please provide a valid courseId in the URL.');
-            return;
-        }
-        if (roomInstance.state === ConnectionState.Connected || roomInstance.state === ConnectionState.Connecting) {
-            if (LIVEKIT_DEBUG) console.log('Room already connected/connecting, skipping');
-            return;
-        }
-        if (hasConnectStarted) {
-            if (SESSION_FLOW_DEBUG) console.log('[FLOW] connectToRoom already started; skipping duplicate');
-            console.log('%c[DEBUG] connectToRoom SKIPPED (guard is working)', 'color: green;');
-            return;
-        }
-
-        if (LIVEKIT_DEBUG) console.log('Starting LiveKit connection process');
-        setIsLoading(true);
-        setConnectionError(null);
-        try {
-            hasConnectStarted = true; // Set the guard immediately
-            // Check Clerk authentication
-            if (!isSignedIn) {
-                throw new Error('User not authenticated. Please login first.');
-            }
-
-            const clerkToken = await getToken();
-            if (!clerkToken) {
-                throw new Error('Failed to get authentication token from Clerk.');
-            }
-            if (SESSION_FLOW_DEBUG) console.log('[FLOW] Clerk auth OK, acquired session token');
-
-            const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL;
-            if (!tokenServiceUrl) {
-                throw new Error('Missing NEXT_PUBLIC_WEBRTC_TOKEN_URL');
-            }
-
-            // *** KEY CHANGE: Check URL for a room to join ***
-            const urlParams = new URLSearchParams(window.location.search);
-            const roomToJoin = urlParams.get('joinRoom');
-
-            if (roomToJoin) {
-                console.log(`[FLOW] Detected joinRoom parameter: ${roomToJoin} - joining as viewer`);
-            }
-
-            console.log(`[FLOW] Requesting token+room from ${tokenServiceUrl}/api/generate-room (courseId=${courseId})`);
-            
-            // Build the request body
-            const requestBody: any = {
-                curriculum_id: courseId,
-                spawn_agent: options?.spawnAgent !== false,
-                spawn_browser: options?.spawnBrowser !== false,
-            };
-            
-            // If we have a room to join, include it in the request
-            if (roomToJoin) {
-                requestBody.room_name = roomToJoin;
-            }
-
-            const response = await fetch(`${tokenServiceUrl}/api/generate-room`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${clerkToken}`,
-                },
-                body: JSON.stringify(requestBody),
-            });
-            
-            console.log('[FLOW] Token service response status:', response.status);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch token: ${response.status} ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            // LOG 3: Did we get a valid token from our service?
-            console.log('[DIAGNOSTIC] 3. Token fetched successfully. Preparing to connect to LiveKit.');
-            console.log('[FLOW] Token service response data:', data);
-            if (!data.success) {
-                throw new Error('Token generation failed');
-            }
-
-            const { studentToken: token, livekitUrl: wsUrl, roomName: actualRoomName } = data;
-            
-            // Set user role and room name in store
-            setUserRole(roomToJoin ? 'viewer' : 'presenter');
-            setCurrentRoomName(actualRoomName);
-            console.log(`[FLOW] User role: ${roomToJoin ? 'viewer' : 'presenter'}, Room: ${actualRoomName}`);
-            
-            // NEW: capture sessionId immediately if provided by token service
-            try {
-                const sid = (data.sessionId as string | null) || null;
-                if (sid && typeof sid === 'string' && sid.startsWith('sess-')) {
-                  sessionIdRef.current = sid;
-                  setSessionManagerSessionIdState(sid);
-                  if (SESSION_FLOW_DEBUG) console.log('[FLOW] Captured sessionId from token service response:', sid);
-                }
-            } catch {}
-            const sessionStatusUrl: string | undefined = (data.sessionStatusUrl as string | undefined) || undefined;
-            if (sessionStatusUrl) {
-              const proxied = toLocalStatusUrl(sessionStatusUrl);
-              sessionStatusUrlRef.current = proxied;
-              setSessionStatusUrlState(proxied);
-            }
-            
-            // Update the room name with the one generated by the backend
-            console.log(`[FLOW] Using backend-generated room: ${actualRoomName}`);
-            
-            if (!token || !wsUrl) {
-                throw new Error('Invalid token response from backend');
-            }
-
-            // Save for UI components (e.g., LiveKitViewer)
-            setLivekitUrl(wsUrl);
-            setLivekitToken(token);
-            console.log(`[FLOW] Connecting to LiveKit at ${wsUrl} with issued token...`);
-            // LOG 4: Are we about to call the connect method?
-            console.log('[DIAGNOSTIC] 4. Calling roomInstance.connect() NOW.');
-            await roomInstance.connect(wsUrl, token);
-            // LOG 5: Did the connect method complete without throwing an error?
-            console.log('[DIAGNOSTIC] 5. roomInstance.connect() has completed.');
-            try {
-                // Debug: expose room for console inspection and add event listeners
-                // You can inspect window.lkRoom.remoteParticipants in DevTools
-                // and see trackPublications when they arrive.
-                (window as any).lkRoom = roomInstance;
-                roomInstance.on('participantConnected', (p: any) => {
-                    try { console.log('[LK] participantConnected:', p?.identity); } catch {}
-                    try {
-                        p.on?.('trackSubscribed', (track: any, pub: any, participant: any) => {
-                            try { console.log('[LK] trackSubscribed:', { kind: track?.kind, sid: pub?.trackSid, from: participant?.identity }); } catch {}
-                        });
-                        p.on?.('trackPublished', (pub: any) => {
-                            try { console.log('[LK] trackPublished from', p?.identity, pub?.trackSid); } catch {}
-                        });
-                    } catch {}
-                });
-                // Attach listeners for already present participants
-                Array.from(roomInstance.remoteParticipants.values()).forEach((p: any) => {
-                    try {
-                        p.on?.('trackSubscribed', (track: any, pub: any, participant: any) => {
-                            try { console.log('[LK] trackSubscribed (existing p):', { kind: track?.kind, sid: pub?.trackSid, from: participant?.identity }); } catch {}
-                        });
-                    } catch {}
-                });
-            } catch {}
-            
-            // --- Capture sessionId for cleanup regardless of reconnect setting ---
-            if (sessionStatusUrl) {
-                // background task to fetch sessionId once READY (faster: immediate + 2s polling)
-                (async () => {
-                    try {
-                        const tryFetch = async () => {
-                            const statusUrl = sessionStatusUrlRef.current || sessionStatusUrl;
-                            const stResp = await fetch(statusUrl, { cache: 'no-store' });
-                            if (stResp.ok) {
-                                const st = await stResp.json();
-                                const sessId = st?.sessionId as string | undefined;
-                                if (sessId && sessId.startsWith('sess-')) {
-                                    sessionIdRef.current = sessId;
-                                    setSessionManagerSessionIdState(sessId);
-                                    if (SESSION_FLOW_DEBUG) console.log('[FLOW] Captured sessionId for cleanup:', sessId);
-                                    return true;
-                                  }
-                            }
-                            return false;
-                        };
-                        // Immediate attempt
-                        if (await tryFetch()) return;
-                        // Poll every 2s up to 60s
-                        const MAX_ATTEMPTS = 30;
-                        for (let i = 0; i < MAX_ATTEMPTS && mounted; i++) {
-                            await new Promise(r => setTimeout(r, 2000));
-                            if (await tryFetch()) return;
-                        }
-                    } catch (e) {
-                        console.warn('[FLOW] Could not capture sessionId for cleanup:', e);
-                    }
-                })();
-            }
-
-            // --- DEV OPTION A (gated): Poll session-manager and reconnect viewer to sess-<id> room when READY ---
-            const DEV_FORCE_RECONNECT = (process.env.NEXT_PUBLIC_LK_DEV_RECONNECT || '').toLowerCase() === 'true';
-            if (sessionStatusUrl && DEV_FORCE_RECONNECT) {
-                (async () => {
-                    try {
-                        const statusUrl = sessionStatusUrlRef.current || sessionStatusUrl;
-                        if (SESSION_FLOW_DEBUG) console.log('[FLOW] Polling session status URL:', statusUrl);
-                        // Give some time for the browser pod to join and publish to the initial room.
-                        // If a video track arrives, we will skip the dev reconnect.
-                        await new Promise(r => setTimeout(r, 12000));
-                        const MAX_ATTEMPTS = 24; // ~2 minutes @5s
-                        for (let i = 0; i < MAX_ATTEMPTS && mounted; i++) {
-                            const stResp = await fetch(statusUrl);
-                            if (!stResp.ok) {
-                                if (SESSION_FLOW_DEBUG) console.warn('[FLOW] Session status HTTP', stResp.status);
-                            } else {
-                                const st = await stResp.json();
-                                const status = st?.status as string | undefined;
-                                const sessId = st?.sessionId as string | undefined;
-                                if (SESSION_FLOW_DEBUG) console.log(`[FLOW] Session status attempt ${i+1}:`, status, sessId);
-                                if (status === 'READY' && sessId) {
-                                    // If we already have a remote video track, don't switch rooms.
-                                    try {
-                                        const anyVideo = Array.from(roomInstance.remoteParticipants.values()).some((p: RemoteParticipant) => {
-                                            return Array.from(p.trackPublications.values()).some((pub: TrackPublication) => {
-                                                return (pub.isSubscribed === true) || (!!pub.track);
-                                            });
-                                        });
-                                        if (anyVideo) {
-                                            if (SESSION_FLOW_DEBUG) console.log('[FLOW] Remote video already present; skipping dev reconnect');
-                                            break;
-                                        }
-                                    } catch (chkErr) {
-                                        console.warn('[FLOW] Could not check for remote video presence:', chkErr);
-                                    }
-                                    // Request a token for the session room
-                                const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string;
-                                const bearer = await getToken();
-                                const devResp = await fetch(`${tokenServiceUrl}/api/dev/token-for-room`, {                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            ...(bearer ? { 'Authorization': `Bearer ${bearer}` } : {}),
-                                        },
-                                        body: JSON.stringify({ room_name: sessId })
-                                    });
-                                    if (!devResp.ok) {
-                                        console.error('[FLOW] token-for-room failed:', devResp.status, devResp.statusText);
-                                        break;
-                                    }
-                                    const devData = await devResp.json();
-                                    const newToken = devData?.studentToken as string | undefined;
-                                    const newUrl = devData?.livekitUrl as string | undefined;
-                                    if (!newToken || !newUrl) {
-                                        console.error('[FLOW] token-for-room missing fields');
-                                        break;
-                                    }
-                                    if (SESSION_FLOW_DEBUG) console.log(`[FLOW] Reconnecting viewer to session room: ${sessId}`);
-                                    try {
-                                        await roomInstance.disconnect();
-                                    } catch {}
-                                    // allow reconnect
-                                    hasConnectStarted = false;
-                                    setLivekitUrl(newUrl);
-                                    setLivekitToken(newToken);
-                                    await roomInstance.connect(newUrl, newToken);
-                                    if (SESSION_FLOW_DEBUG) console.log('[FLOW] Viewer reconnected to session room');
-                                    break;
-                                }
-                                if (status === 'FAILED') {
-                                    console.error('[FLOW] Session-manager reported FAILED:', st?.error);
-                                    break;
-                                }
-                            }
-                            await new Promise(r => setTimeout(r, 5000));
-                        }
-                    } catch (err) {
-                        console.error('[FLOW] Error while polling/reconnecting to session room:', err);
-                    }
-                })();
-            }
-            if(mounted) {
-                // Connection success is handled by the event listeners below
-            }
-        } catch (error: unknown) {
-            // LOG E: If anything fails in the try block
-            console.error('[DIAGNOSTIC] ERROR in connectToRoom:', error);
-            if (mounted) {
-                setConnectionError(`Failed to connect: ${error instanceof Error ? error.message : String(error)}`);
-                setIsLoading(false);
-                hasConnectStarted = false; // allow retry on error
-            }
-        }
-    };
     connectToRoom();
-
-    return () => { mounted = false; };
-  }, [roomName, userName, courseId, options?.spawnAgent, options?.spawnBrowser, getToken, isSignedIn]);
+  }, [connectToRoom]);
 
 
-  // --- EVENT & RPC HANDLER LOGIC ---
-  useEffect(() => {
-    if (!roomInstance) return;
+  // --- EVENT & DATA CHANNEL HANDLERS ---
 
-    // The handler for commands coming FROM the agent TO the frontend
-    const handlePerformUIAction = async (rpcData: RpcInvocationData): Promise<string> => {
-      try { if (!agentRpcReady) setAgentRpcReady(true); } catch {}
-      console.log(`%c[B2F DC RECV] ID: ${rpcData.requestId}`, 'color: cyan;', rpcData);
-      const request = AgentToClientUIActionRequest.decode(base64ToUint8Array(rpcData.payload as string));
-      console.log(`[B2F DC] Received action: ${ClientUIActionType[request.actionType]}`);
-      
-      // --- THE BRIDGE FROM RPC TO ZUSTAND ---
-      if (request.actionType === ClientUIActionType.BROWSER_NAVIGATE) {
-        const url = request.parameters?.url;
-        if (url) {
-          try {
-            await executeBrowserAction({
-              tool_name: 'browser_navigate',
-              parameters: { url },
-            });
-          } catch (err) {
-            console.error('[BROWSER_NAVIGATE] Failed to perform browser action:', err);
-          }
-        }
-      } else if (request.actionType === ClientUIActionType.START_LISTENING_VISUAL) {
-        // Ignored in PTT client flow
-        return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true })).finish());
-      } else if (request.actionType === ClientUIActionType.STOP_LISTENING_VISUAL) {
-        // Ignored in PTT client flow
-        return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true })).finish());
-      } else if (request.actionType === ClientUIActionType.JUPYTER_CLICK_PYODIDE) {
-        console.log('[JUPYTER_CLICK_PYODIDE] Received jupyter_click_pyodide action');
-        try {
-          await executeBrowserAction({
-            tool_name: 'jupyter_click_pyodide',
-            parameters: {}
-          });
-        } catch (err) {
-          console.error('[JUPYTER_CLICK_PYODIDE] Failed:', err);
-        }
-      } else if (request.actionType === ClientUIActionType.JUPYTER_TYPE_IN_CELL) {
-        console.log('[JUPYTER_TYPE_IN_CELL] Received jupyter_type_in_cell action');
-        const params = request.parameters || {};
-        try {
-          await executeBrowserAction({
-            tool_name: 'jupyter_type_in_cell',
-            parameters: params
-          });
-          // If we are connected and not awaiting a response and not speaking/PTT, show the Waiting pill by default
-          try {
-            const st = useSessionStore.getState();
-            if (!st.isAwaitingAIResponse && !st.isPushToTalkActive && !st.isAgentSpeaking) {
-              setShowWaitingPill(true);
-            }
-          } catch {}
-        } catch (err) {
-          console.error('[JUPYTER_TYPE_IN_CELL] Failed:', err);
-        }
-      } else if (request.actionType === ClientUIActionType.JUPYTER_RUN_CELL) {
-        console.log('[JUPYTER_RUN_CELL] Received jupyter_run_cell action');
-        const params = request.parameters || {};
-        executeBrowserAction({
-          tool_name: 'jupyter_run_cell',
-          parameters: {
-            cell_index: params.cell_index || 0
-          }
-        });
-      } else if (request.actionType === ClientUIActionType.JUPYTER_CREATE_NEW_CELL) {
-        console.log('[JUPYTER_CREATE_NEW_CELL] Received jupyter_create_new_cell action');
-        executeBrowserAction({
-          tool_name: 'jupyter_create_new_cell',
-          parameters: {}
-        });
-      } else if (request.actionType === ClientUIActionType.SET_UI_STATE) {
-        console.log('[SET_UI_STATE] ===== RECEIVED SET_UI_STATE ACTION =====');
-        console.log('[SET_UI_STATE] Full request object:', request);
-        console.log('[SET_UI_STATE] Current activeView:', useSessionStore.getState().activeView);
-        
-        // Note: Property name may need adjustment based on actual protobuf definition
-        const params = (request as unknown as Record<string, unknown>).parameters;
-        console.log('[SET_UI_STATE] Extracted params:', params);
-        
-        // --- Lightweight request/response hook: GET_BLOCK_CONTENT ---
-        try {
-          const innerAction = ((params as any)?.action || (params as any)?.Action || '').toString();
-          if (innerAction === 'GET_BLOCK_CONTENT') {
-            const blockId = ((params as any)?.block_id || (params as any)?.blockId || (params as any)?.id || '').toString();
-            let result: any = null;
-            if (blockId) {
-              const { whiteboardBlocks } = useSessionStore.getState();
-              const found = (whiteboardBlocks || []).find(b => b.id === blockId);
-              if (found) result = found;
-            }
-            const response = ClientUIActionResponse.create({
-              requestId: rpcData.requestId,
-              success: !!result,
-              message: result ? JSON.stringify(result) : ''
-            });
-            return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
-          }
-        } catch (e) {
-          console.warn('[SET_UI_STATE] Inline GET_BLOCK_CONTENT handling error:', e);
-        }
-
-        if (params && typeof params === 'object') {
-          // Handle status text update
-          if ('statusText' in params || 'status_text' in params) {
-            const statusText = ((params as any).statusText || (params as any).status_text) as string;
-            console.log('[SET_UI_STATE] Setting status text:', statusText);
-            setAgentStatusText(statusText);
-          }
-          
-          // Handle view switching
-          if ('view' in params) {
-            const viewParam = (params as any).view as string;
-            console.log('[SET_UI_STATE] View parameter received:', viewParam);
-            
-            if (viewParam) {
-              let targetView: SessionView;
-              
-              switch (viewParam) {
-                case 'vnc_browser':
-                case 'vnc':
-                  targetView = 'vnc';
-                  console.log('[SET_UI_STATE] Mapped to vnc view');
-                  break;
-                case 'excalidraw':
-                case 'drawing':
-                  targetView = 'excalidraw';
-                  console.log('[SET_UI_STATE] Mapped to excalidraw view');
-                  break;
-                case 'video':
-                  targetView = 'video';
-                  console.log('[SET_UI_STATE] Mapped to video view');
-                  break;
-                case 'intro':
-                  targetView = 'intro';
-                  console.log('[SET_UI_STATE] Mapped to intro view');
-                  break;
-                default:
-                  console.warn(`[SET_UI_STATE] Unknown view parameter: ${viewParam}`);
-                  console.log('[SET_UI_STATE] Available view options: vnc_browser, vnc, excalidraw, drawing, video, intro');
-                  return uint8ArrayToBase64(ClientUIActionResponse.encode(ClientUIActionResponse.create({ requestId: rpcData.requestId, success: false })).finish());
-              }
-              
-              console.log(`[SET_UI_STATE] Switching view from ${useSessionStore.getState().activeView} to ${targetView}`);
-              setActiveView(targetView);
-              console.log('[SET_UI_STATE] setActiveView called successfully');
-            } else {
-              console.log('[SET_UI_STATE] View parameter is empty or null');
-            }
-          } else {
-            console.log('[SET_UI_STATE] No view parameter found in params');
-          }
-        } else {
-          console.log('[SET_UI_STATE] No parameters found in request');
-        }
-        console.log('[SET_UI_STATE] ===== END SET_UI_STATE PROCESSING =====');
-      } else if (request.actionType === ClientUIActionType.SUGGESTED_RESPONSES) {
-        // Disable backend-driven suggestions. Keep UI placeholders only.
-        console.log('[B2F DC] SUGGESTED_RESPONSES received but suppressed; UI will show placeholders.');
-        try { clearSuggestedResponses(); } catch {}
-      } else if (
-        // Prefer enum when available, but also handle numeric value for backward compatibility
-        (ClientUIActionType as any).RRWEB_REPLAY ?
-          request.actionType === (ClientUIActionType as any).RRWEB_REPLAY :
-          (request.actionType as number) === 73
-      ) {
-        console.log('[B2F DC] Handling RRWEB_REPLAY');
-        const url = (request as any).parameters?.events_url;
-        if (url && typeof url === 'string') {
-          try {
-            // Add rrweb replay as a block in the whiteboard feed
-            const params = (request as any).parameters || {};
-            const id = params.id || `rrweb_${Date.now()}`;
-            const summary = params.summary || params.title || 'Session Replay';
-            const block = { id, type: 'rrweb', summary, eventsUrl: url } as any;
-            useSessionStore.getState().addBlock(block);
-            // Switch to whiteboard view so the user sees the replay
-            try { setActiveView('excalidraw' as SessionView); } catch {}
-            console.log('[B2F DC] rrweb replay block added to whiteboard feed');
-          } catch (e) {
-            console.error('[B2F DC] Failed to add rrweb replay block:', e);
-          }
-        } else {
-          console.error('[B2F DC] RRWEB_REPLAY action received without a valid events_url.');
-        }
-      } else if (
-        // SET_UI_STATE is used for a lightweight request/response hook as well
-        (ClientUIActionType as any).SET_UI_STATE ?
-          request.actionType === (ClientUIActionType as any).SET_UI_STATE :
-          (request.actionType as number) === 41
-      ) {
-        // If the agent is asking for block content, return it in the response message
-        try {
-          const p = (request as any).parameters || {};
-          const inner = typeof p === 'object' ? p : {};
-          const innerAction = (inner.action || inner.Action || '').toString();
-          if (innerAction === 'GET_BLOCK_CONTENT') {
-            const blockId = (inner.block_id || inner.blockId || inner.id || '').toString();
-            let result: any = null;
-            if (blockId) {
-              const { whiteboardBlocks } = useSessionStore.getState();
-              const found = (whiteboardBlocks || []).find(b => b.id === blockId);
-              if (found) result = found;
-            }
-            const response = ClientUIActionResponse.create({
-              requestId: rpcData.requestId,
-              success: !!result,
-              message: result ? JSON.stringify(result) : ''
-            });
-            return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
-          }
-        } catch (e) {
-          console.warn('[B2F DC] SET_UI_STATE handler error:', e);
-        }
-        // default ack
-        const response = ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true });
-        return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
-      } else if (
-        // Prefer enum when available, but also handle numeric value for backward compatibility
-        (ClientUIActionType as any).EXCALIDRAW_CLEAR_CANVAS ?
-          request.actionType === (ClientUIActionType as any).EXCALIDRAW_CLEAR_CANVAS :
-          (request.actionType as number) === 64
-      ) { // EXCALIDRAW_CLEAR_CANVAS
-        console.log('[B2F DC] Handling EXCALIDRAW_CLEAR_CANVAS');
-        // Clear canvas via debug functions if available
-        if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-          try {
-            window.__excalidrawDebug.clearCanvas();
-            console.log('[B2F DC] ✅ Canvas cleared successfully');
-          } catch (error) {
-            console.error('[B2F DC] ❌ Failed to clear canvas:', error);
-          }
-        } else {
-          console.warn('[B2F DC] ⚠️ Excalidraw debug functions not available for canvas clear');
-        }
-      } else if (
-        (ClientUIActionType as any).GENERATE_VISUALIZATION ?
-          request.actionType === (ClientUIActionType as any).GENERATE_VISUALIZATION :
-          (request.actionType as number) === 49
-      ) { // GENERATE_VISUALIZATION
-        console.log('[B2F DC] Handling GENERATE_VISUALIZATION');
-        try {
-          const params = request.parameters || {} as any;
-          // Path A: Precomputed elements provided
-          const elements = params.elements ? JSON.parse(params.elements) : null;
-          if (elements && Array.isArray(elements)) {
-            console.log(`[B2F DC] Parsed ${elements.length} elements from message`);
-            const { setVisualizationData } = useSessionStore.getState();
-            if (setVisualizationData) {
-              console.log('[B2F DC] Setting visualization data in store...');
-              setVisualizationData(elements);
-            } else {
-              console.warn('[B2F DC] Store setVisualizationData not available, using direct method');
-              if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(elements);
-                window.__excalidrawDebug.setElements(excalidrawElements);
-                console.log('[B2F DC] ✅ Direct visualization rendering completed');
-              }
-            }
-          } else {
-          // Path B: Only prompt provided -> call Visualizer service from frontend
-          const prompt = params.prompt as string | undefined;
-          const topicContext = (params.topic_context as string | undefined) || '';
-          if (!prompt) {
-            console.error('[B2F DC] ❌ GENERATE_VISUALIZATION missing both elements and prompt');
-          } else {
-            console.log('[B2F DC] Optimistic UI: showing placeholder and calling Visualizer...');
-            // --- Optimistic UI: show placeholder immediately ---
-            const placeholderSkeleton = [
-              {
-                id: 'generating_placeholder',
-                type: 'text',
-                text: '🎨 Generating diagram...',
-                x: 100,
-                y: 80,
-                width: 260,
-                height: 40,
-                fontSize: 20,
-                strokeColor: '#1e1e1e'
-              }
-            ];
-            try {
-              const { setVisualizationData } = useSessionStore.getState();
-              if (setVisualizationData) {
-                setVisualizationData(placeholderSkeleton as any);
-              } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(placeholderSkeleton);
-                window.__excalidrawDebug.setElements(excalidrawElements);
-              }
-            } catch (phErr) {
-              console.warn('[B2F RPC] Placeholder render failed (non-fatal):', phErr);
-            }
-            // Call the Visualizer to get Mermaid text and let the client convert it
-            const { setDiagramDefinition, setIsDiagramGenerating } = useSessionStore.getState();
-            try {
-              if (!visualizerBaseUrl) {
-                throw new Error('NEXT_PUBLIC_VISUALIZER_URL is not set');
-              }
-              setIsDiagramGenerating?.(true);
-              const resp = await fetch(`${visualizerBaseUrl}/generate-mermaid-text`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ topic_context: topicContext, text_to_visualize: prompt })
-              });
-              if (!resp.ok) {
-                throw new Error(`Visualizer service returned ${resp.status}`);
-              }
-              const text = (await resp.text()).trim();
-              // Send to debug window (optional) and update centralized state
-              if (text && typeof window !== 'undefined' && (window as any).__mermaidDebug?.setDiagram) {
-                try { (window as any).__mermaidDebug.setDiagram(text); } catch {}
-              }
-              setDiagramDefinition?.(text);
-              if (LIVEKIT_DEBUG) console.log('[B2F RPC] ✅ Mermaid text received and state updated');
-            } catch (svcErr) {
-              console.error('[B2F RPC] ❌ Failed to call Visualizer service:', svcErr);
-              // Replace placeholder with an error message on failure
-              try {
-                const errorSkeleton = [
-                  {
-                    id: 'generating_error',
-                    type: 'text',
-                    text: '⚠️ Could not generate diagram.'
-                  }
-                ];
-                const { setVisualizationData } = useSessionStore.getState();
-                if (setVisualizationData) {
-                  setVisualizationData(errorSkeleton as any);
-                } else if (typeof window !== 'undefined' && window.__excalidrawDebug) {
-                  const excalidrawElements = window.__excalidrawDebug.convertSkeletonToExcalidraw(errorSkeleton);
-                  window.__excalidrawDebug.setElements(excalidrawElements);
-                }
-              } catch (errRender) {
-                console.warn('[B2F RPC] Error placeholder render failed (non-fatal):', errRender);
-              }
-            } finally {
-              try { setIsDiagramGenerating?.(false); } catch {}
-            }
-          }
-          // Close the outer `else` branch for when no precomputed elements are provided
-        }
-        } catch (error) {
-          console.error('[B2F RPC] GENERATE_VISUALIZATION handler failed:', error);
-        }
-      } else if (
-        // ADD_EXCALIDRAW_BLOCK: fall back to numeric if enum not present
-        (ClientUIActionType as any).ADD_EXCALIDRAW_BLOCK ?
-          request.actionType === (ClientUIActionType as any).ADD_EXCALIDRAW_BLOCK :
-          (request.actionType as number) === 201
-      ) {
-        console.log('[B2F RPC] Handling ADD_EXCALIDRAW_BLOCK');
-        try {
-          const params = (request as any).parameters || {};
-          const id = params.id || `exb_${Date.now()}`;
-          const summary = params.summary || params.title || 'Diagram';
-          let elements: any[] = [];
-          const raw = params.elements;
-          if (Array.isArray(raw)) {
-            elements = raw as any[];
-          } else if (typeof raw === 'string') {
-            try { elements = JSON.parse(raw); } catch { elements = []; }
-          }
-          const block = { id, type: 'excalidraw', summary, elements } as any;
-          useSessionStore.getState().addBlock(block);
-          // Switch to whiteboard view so the user sees the block
-          try { setActiveView('excalidraw' as SessionView); } catch {}
-        } catch (e) {
-          console.error('[B2F RPC] Failed to add excalidraw block:', e);
-        }
-      } else if (
-        (ClientUIActionType as any).UPDATE_EXCALIDRAW_BLOCK ?
-          request.actionType === (ClientUIActionType as any).UPDATE_EXCALIDRAW_BLOCK :
-          (request.actionType as number) === 202
-      ) {
-        console.log('[B2F RPC] Handling UPDATE_EXCALIDRAW_BLOCK');
-        try {
-          const params = (request as any).parameters || {};
-          const blockId = params.id || params.block_id || params.blockId;
-          if (!blockId) throw new Error('Missing block id');
-          let elements: any[] | undefined = undefined;
-          const raw = params.elements;
-          if (Array.isArray(raw)) {
-            elements = raw as any[];
-          } else if (typeof raw === 'string') {
-            try { elements = JSON.parse(raw); } catch { elements = undefined; }
-          }
-          if (elements) {
-            useSessionStore.getState().updateBlock(blockId, { elements } as any);
-            // Ensure the user sees the updated block
-            try { setActiveView('excalidraw' as SessionView); } catch {}
-          }
-        } catch (e) {
-          console.error('[B2F RPC] Failed to update excalidraw block:', e);
-        }
-      } else if (
-        (ClientUIActionType as any).FOCUS_ON_BLOCK ?
-          request.actionType === (ClientUIActionType as any).FOCUS_ON_BLOCK :
-          (request.actionType as number) === 203
-      ) {
-        console.log('[B2F RPC] Handling FOCUS_ON_BLOCK');
-        try {
-          const params = (request as any).parameters || {};
-          const blockId = params.id || params.block_id || params.blockId;
-          if (blockId && typeof document !== 'undefined') {
-            const el = document.getElementById(String(blockId));
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-          try { setActiveView('excalidraw' as SessionView); } catch {}
-        } catch (e) {
-          console.error('[B2F RPC] Failed to focus on block:', e);
-        }
-      } else {
-        if (LIVEKIT_DEBUG) console.log('[B2F RPC] Unknown action type:', request.actionType);
-      }
-      
-      // We still need to return an acknowledgment
-      const response = ClientUIActionResponse.create({ requestId: rpcData.requestId, success: true });
-      console.log(`%c[B2F RPC ACK] ID: ${rpcData.requestId}`, 'color: cyan;', 'Sending acknowledgement.');
-      return uint8ArrayToBase64(ClientUIActionResponse.encode(response).finish());
-    };
-
-    const onConnected = async () => {
+    const onConnected = useCallback(async () => {
         // LOG 6: The final goal - did the event fire?
         console.log('[DIAGNOSTIC] 6. The onConnected event handler has FIRED!');
         console.log('[FLOW] LiveKit Connected');
         setIsLoading(false);
         
-        // Register RPC handler on the Room (preferred API) once per connection
-        try {
-          if (!rpcHandlerRegisteredRef.current) {
-            console.log("!!!!!!!!!! ATTEMPTING TO REGISTER RPC HANDLER NOW !!!!!!!!!!");
-            roomInstance.registerRpcMethod("rox.interaction.ClientSideUI/PerformUIAction", handlePerformUIAction);
-            rpcHandlerRegisteredRef.current = true;
-            console.log('[useLiveKitSession] Registered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
-          } else if (LIVEKIT_DEBUG) {
-            console.log('[useLiveKitSession] RPC handler already registered, skipping');
-          }
-        } catch (e: any) {
-          // Room.registerRpcMethod throws if already registered; that's fine across HMR
-          if (typeof e?.message === 'string' && e.message.includes('already registered')) {
-            console.warn('[useLiveKitSession] RPC method already registered; continuing');
-            rpcHandlerRegisteredRef.current = true;
-          } else {
-            console.error('Failed to register client-side RPC handler:', e);
-          }
-        }
+        // RPC registration removed; UI actions handled via DataChannel
         // Set up microphone but keep it disabled by default
         // ⭐ CRITICAL: Skip microphone setup for viewers - they cannot publish
         const currentUserRole = useSessionStore.getState().userRole;
@@ -1066,32 +365,26 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           }
         })();
         // We wait for the agent_ready signal before setting isConnected to true
-    };
+    }, [setIsLoading, setConnectionError, setIsAwaitingAIResponse, setShowWaitingPill, thinkingTimeoutRef, thinkingTimeoutMsRef]);
     
-    const onDisconnected = () => {
+    const onDisconnected = useCallback(() => {
         console.log('[FLOW] LiveKit Disconnected');
         setIsConnected(false);
         setIsLoading(false);
         agentServiceClientRef.current = null;
         hasConnectStarted = false; // allow reconnect after disconnect
+        try { resetConnectGuard(); } catch {}
         
         // Clean up microphone track
         if (microphoneTrackRef.current) {
             microphoneTrackRef.current.stop();
             microphoneTrackRef.current = null;
         }
-        // Unregister RPC handler on disconnect
-        try {
-          roomInstance.unregisterRpcMethod("rox.interaction.ClientSideUI/PerformUIAction");
-          rpcHandlerRegisteredRef.current = false;
-          console.log('[useLiveKitSession] Unregistered RPC handler for rox.interaction.ClientSideUI/PerformUIAction');
-        } catch (e) {
-          console.error('[useLiveKitSession] Failed to unregister RPC handler:', e);
-        }
-    };
+        // No RPC unregistration needed
+    }, [setIsConnected, setIsLoading, resetConnectGuard]);
 
     // Handler for audio tracks (agent voice output)
-    const handleTrackSubscribed = (track: Track, publication: TrackPublication, participant: RemoteParticipant) => {
+    const handleTrackSubscribed = useCallback((track: Track, publication: TrackPublication, participant: RemoteParticipant) => {
       if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Track subscribed:', { kind: track.kind, source: publication.source, participant: participant.identity });
       if (track.kind !== Track.Kind.Audio) return;
       const audioTrack = track as AudioTrack;
@@ -1118,18 +411,18 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         try { setIsAwaitingAIResponse(false); } catch {}
         try { setShowWaitingPill(true); } catch {}
       });
-    };
+    }, [setIsAgentSpeaking, setIsAwaitingAIResponse, setShowWaitingPill]);
 
     // Turn detection via ActiveSpeakers removed
 
-    const handleTrackUnsubscribed = (_track: Track, _publication: TrackPublication, _participant: RemoteParticipant) => {
+    const handleTrackUnsubscribed = useCallback((_track: Track, _publication: TrackPublication, _participant: RemoteParticipant) => {
       setIsAgentSpeaking(false);
       try { setIsAwaitingAIResponse(false); } catch {}
       try { setShowWaitingPill(true); } catch {}
-    };
+    }, [setIsAgentSpeaking, setIsAwaitingAIResponse, setShowWaitingPill]);
 
     // Handler for transcription data (LiveKit STT)
-    const handleTranscriptionReceived = (transcriptions: TranscriptionSegment[], participant?: Participant, _publication?: TrackPublication) => {
+    const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant, _publication?: TrackPublication) => {
       if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
       try {
         const isLocal = participant && roomInstance.localParticipant && (participant.identity === roomInstance.localParticipant.identity);
@@ -1150,266 +443,161 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           setTranscriptionMessages((prev) => [...prev.slice(-19), message]);
         }
       });
-    };
+    }, [setTranscriptionMessages]);
 
-    const handleDataReceived = async (payload: Uint8Array, participant?: RemoteParticipant, kind?: any, topic?: string) => {
-        if (!participant) return;
-        try {
-            const data = JSON.parse(new TextDecoder().decode(payload));
-            console.log('[DataReceived] Packet from', participant.identity, { kind, topic, data });
+    const handleDataReceived = useCallback(async (payload: Uint8Array, participant?: RemoteParticipant, kind?: any, topic?: string) => {
+      if (!participant) return;
+      try {
+        const data = JSON.parse(new TextDecoder().decode(payload));
+        console.log('[DataReceived] Packet from', participant.identity, { kind, topic, data });
 
-            // --- Handle initial tab created by backend ---
-            if (data?.type === 'initial_tab_created' && data?.tab_id) {
-                console.log('[Tabs] Received initial tab from backend:', data);
-                try {
-                    const tab = {
-                        id: data.tab_id,
-                        name: data.name || 'Home',
-                        url: data.url || 'about:blank'
-                    };
-                    addTab(tab);
-                    setActiveTabIdInStore(data.tab_id);
-                    console.log('[Tabs] Registered initial tab in store:', tab);
-                } catch (e) {
-                    console.warn('[Tabs] Failed to register initial tab:', e);
-                }
-                return; // Stop further processing for this packet
-            }
-
-            // --- Handle AI debrief question relayed by the browser pod ---
-            if (data?.type === 'ai_debrief_question' && typeof data?.text === 'string' && data.text.length > 0) {
-                console.log('[FLOW] Received AI debrief question from pod:', data.text);
-                try {
-                    const { setDebriefMessage, setImprintingMode, setActiveView, setConceptualStarted, setIsAwaitingAIResponse } = useSessionStore.getState();
-                    // Stop global loading when AI response arrives
-                    try { setIsAwaitingAIResponse(false); } catch {}
-                    setDebriefMessage({ text: data.text });
-                    setImprintingMode('DEBRIEF_CONCEPTUAL');
-                    setActiveView('excalidraw');
-                    setConceptualStarted(true);
-                    console.log('[FLOW] Store updated for debrief; UI will re-render.');
-                } catch (e) {
-                    console.warn('[FLOW] Failed to apply debrief update to store:', e);
-                }
-                return; // Stop further processing for this packet
-            }
-            if (data.type === 'agent_ready' && roomInstance.localParticipant) {
-                const advertisedAgent = (data && (data as any).agent_identity) ? String((data as any).agent_identity) : String(participant.identity || '');
-                console.log(`[FLOW] Agent ready signal received from ${participant.identity}. Advertised agent identity: ${advertisedAgent}`);
-                // Ignore agent_ready from browser-bot identities; they don't implement AgentInteraction
-                if (advertisedAgent.startsWith('browser-bot-')) {
-                    console.warn('[FLOW] agent_ready from browser-bot ignored for agent binding');
-                    return;
-                }
-                setAgentIdentity(advertisedAgent);
-                setIsConnected(true);
-                console.log('[FLOW] Frontend ready (DataChannel established; using DataChannel for agent tasks)');
-                // Flush any queued tasks via DataChannel
-                try {
-                  const queued = [...pendingTasksRef.current];
-                  pendingTasksRef.current = [];
-                  for (const t of queued) {
-                    try {
-                      const traceId = uuidv4();
-                      const envelope = {
-                        type: 'agent_task',
-                        taskName: t.name,
-                        payload: { ...(t.payload || {}), trace_id: traceId },
-                      };
-                      const bytes = new TextEncoder().encode(JSON.stringify(envelope));
-                      try {
-                        await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [advertisedAgent], reliable: true } as any);
-                      } catch {
-                        // Fallback for SDKs without object options signature
-                        await roomInstance.localParticipant.publishData(bytes);
-                      }
-                      console.log('[FLOW] Flushed queued task over DataChannel:', t.name);
-                    } catch (e) {
-                      console.warn('[FLOW] Failed to flush queued task:', t?.name, e);
-                    }
-                  }
-                } catch {}
-                return;
-            }
-
-            if (data.type === 'ui') {
-                try {
-                    const action = String((data as any).action || '');
-                    const params = ((data as any).parameters || {}) as any;
-                    try { console.log('[B2F DC][UI] Received action', action, params); } catch {}
-                    if (action === 'BROWSER_NAVIGATE') {
-                        const url = params?.url;
-                        if (url) {
-                            try {
-                                await executeBrowserAction({ tool_name: 'browser_navigate', parameters: { url } });
-                            } catch (err) {}
-                        }
-                    } else if (action === 'JUPYTER_CLICK_PYODIDE') {
-                        try { await executeBrowserAction({ tool_name: 'jupyter_click_pyodide', parameters: {} }); } catch (err) {}
-                    } else if (action === 'JUPYTER_TYPE_IN_CELL') {
-                        try { await executeBrowserAction({ tool_name: 'jupyter_type_in_cell', parameters: params || {} }); } catch (err) {}
-                    } else if (action === 'JUPYTER_RUN_CELL') {
-                        try { await executeBrowserAction({ tool_name: 'jupyter_run_cell', parameters: { cell_index: params?.cell_index || 0 } }); } catch (err) {}
-                    } else if (action === 'JUPYTER_CREATE_NEW_CELL') {
-                        try { await executeBrowserAction({ tool_name: 'jupyter_create_new_cell', parameters: {} }); } catch (err) {}
-                    } else if (action === 'SET_UI_STATE') {
-                        try {
-                            const p = params || {};
-                            if ('statusText' in p || 'status_text' in p) {
-                                const statusText = (p.statusText || p.status_text) as string;
-                                try { setAgentStatusText(statusText); } catch {}
-                            }
-                            if ('view' in p) {
-                                const viewParam = String(p.view || '');
-                                if (viewParam) {
-                                    let targetView: SessionView | null = null;
-                                    if (viewParam === 'vnc_browser' || viewParam === 'vnc') targetView = 'vnc';
-                                    else if (viewParam === 'excalidraw' || viewParam === 'drawing') targetView = 'excalidraw';
-                                    else if (viewParam === 'video') targetView = 'video';
-                                    else if (viewParam === 'intro') targetView = 'intro';
-                                    if (targetView) { try { setActiveView(targetView); } catch {} }
-                                }
-                            }
-                        } catch (e) {}
-                    } else if (action === 'RRWEB_REPLAY') {
-                        const events_url = params?.events_url;
-                        if (events_url) {
-                            try { await sendBrowserInteraction({ action: 'rrweb_replay', events_url }); } catch {}
-                        }
-                    } else if (action === 'GENERATE_VISUALIZATION') {
-                        try {
-                            console.log('[B2F DC] GENERATE_VISUALIZATION received:', params);
-                            const els = params?.elements;
-                            const prompt = params?.prompt;
-                            const topic = params?.topic_context || params?.topic || '';
-                            if (Array.isArray(els)) {
-                                console.log('[B2F DC] Using elements path. Count=', els.length);
-                                setIsDiagramGenerating(true);
-                                setVisualizationData(els);
-                                setIsDiagramGenerating(false);
-                            } else if (typeof prompt === 'string' && prompt.trim().length > 0) {
-                                try { setIsDiagramGenerating(true); } catch {}
-                                try {
-                                    const base = (visualizerBaseUrl && visualizerBaseUrl.trim().length > 0) ? visualizerBaseUrl.replace(/\/$/, '') : 'http://localhost:8011';
-                                    const url = `${base}/generate-mermaid-text`;
-                                    console.log('[B2F DC] Calling Visualizer:', { url, topic, promptPreview: prompt.slice(0, 120) });
-                                    const resp = await fetch(url, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ text_to_visualize: prompt, topic_context: topic }),
-                                    });
-                                    if (!resp.ok) {
-                                        console.error('[B2F DC] Visualizer HTTP error', resp.status, resp.statusText);
-                                    } else {
-                                        const mermaidText = (await resp.text()).trim();
-                                        console.log('[B2F DC] Visualizer responded (len):', mermaidText.length);
-                                        try { useSessionStore.getState().setDiagramDefinition(mermaidText); } catch {}
-                                    }
-                                } catch (vizErr) {
-                                    console.error('[B2F DC] Visualizer call failed:', vizErr);
-                                    try { useSessionStore.getState().setDiagramDefinition('flowchart TD\n    Error["Generation Failed"]'); } catch {}
-                                } finally {
-                                    try { setIsDiagramGenerating(false); } catch {}
-                                }
-                            } else {
-                                console.warn('[B2F DC] GENERATE_VISUALIZATION missing both elements and prompt');
-                            }
-                        } catch (e) {
-                            console.warn('[B2F DC] GENERATE_VISUALIZATION handler error:', e);
-                        }
-                    }
-                } catch (e) {}
-                return;
-            }
-
-            // --- Handle backend-sent transcript fallback (when LiveKit STT events are unavailable/disabled) ---
-            if (data?.type === 'transcript' && typeof data?.text === 'string') {
-                const spk = (typeof data.speaker === 'string' && data.speaker.trim().length > 0) ? data.speaker : (participant?.identity || 'Student');
-                const line = `${spk}: ${data.text}`;
-                setTranscriptionMessages((prev) => [...prev.slice(-19), line]);
-                return;
-            }
-
-            // Detect suggested responses sent via generic data channel messages
-            try {
-                const deepFind = (obj: any): { items?: any; title?: string } | undefined => {
-                    if (!obj || typeof obj !== 'object') return undefined;
-                    // direct
-                    const meta = obj.metadata || obj.meta || obj;
-                    if (meta && (meta.suggested_responses || meta.suggestedResponses)) {
-                        return { items: meta.suggested_responses || meta.suggestedResponses, title: meta.title || meta.suggested_title };
-                    }
-                    // search children
-                    for (const key of Object.keys(obj)) {
-                        const child = obj[key];
-                        if (child && typeof child === 'object') {
-                            const found = deepFind(child);
-                            if (found) return found;
-                        } else if (typeof child === 'string') {
-                            const trimmed = child.trim();
-                            if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-                                try {
-                                    const parsed = JSON.parse(trimmed);
-                                    const found = deepFind(parsed);
-                                    if (found) return found;
-                                } catch {}
-                            }
-                        }
-                    }
-                    return undefined;
-                };
-
-                const found = deepFind(data);
-                if (found && found.items) {
-                    const candidate = found.items;
-                    const title = found.title || 'Suggestions';
-                    let suggestions: { id: string; text: string; reason?: string }[] = [];
-                    if (Array.isArray(candidate)) {
-                        if (candidate.length > 0 && typeof candidate[0] === 'string') {
-                            suggestions = (candidate as string[]).map((t, idx) => ({ id: `s_${Date.now()}_${idx}`, text: t }));
-                        } else {
-                            suggestions = (candidate as any[]).map((s: any, idx: number) => ({ id: s.id || `s_${Date.now()}_${idx}`, text: s.text || String(s), reason: s.reason }));
-                        }
-                    } else if (typeof candidate === 'string') {
-                        suggestions = [{ id: `s_${Date.now()}_0`, text: candidate }];
-                    }
-                    if (suggestions.length > 0) {
-                        console.log(`[DataReceived] Setting ${suggestions.length} suggested responses from data channel${title ? ` with title: ${title}` : ''}`);
-                        setSuggestedResponses(suggestions, title);
-                    }
-                } else {
-                    console.debug('[DataReceived] No suggested responses found in packet');
-                }
-            } catch (srErr) {
-                console.warn('[DataReceived] Failed to extract suggested responses from packet (non-fatal):', srErr);
-            }
-        } catch (error) {
-            console.error("Failed to parse agent data packet:", error);
+        // --- Handle initial tab created by backend ---
+        if (data?.type === 'initial_tab_created' && data?.tab_id) {
+          console.log('[Tabs] Received initial tab from backend:', data);
+          try {
+            const tab = { id: data.tab_id, name: data.name || 'Home', url: data.url || 'about:blank' };
+            addTab(tab);
+            setActiveTabIdInStore(data.tab_id);
+            console.log('[Tabs] Registered initial tab in store:', tab);
+          } catch (e) {
+            console.warn('[Tabs] Failed to register initial tab:', e);
+          }
+          return;
         }
-    };
+
+        // --- Handle AI debrief question relayed by the browser pod ---
+        if (data?.type === 'ai_debrief_question' && typeof data?.text === 'string' && data.text.length > 0) {
+          console.log('[FLOW] Received AI debrief question from pod:', data.text);
+          try {
+            const { setDebriefMessage, setImprintingMode, setActiveView, setConceptualStarted, setIsAwaitingAIResponse } = useSessionStore.getState();
+            try { setIsAwaitingAIResponse(false); } catch {}
+            setDebriefMessage({ text: data.text });
+            setImprintingMode('DEBRIEF_CONCEPTUAL');
+            setActiveView('excalidraw');
+            setConceptualStarted(true);
+          } catch (e) {
+            console.warn('[FLOW] Failed to apply debrief update to store:', e);
+          }
+          return;
+        }
+
+        if (data.type === 'agent_ready' && roomInstance.localParticipant) {
+          const advertisedAgent = (data && (data as any).agent_identity) ? String((data as any).agent_identity) : String(participant.identity || '');
+          console.log(`[FLOW] Agent ready signal received from ${participant.identity}. Advertised agent identity: ${advertisedAgent}`);
+          if (advertisedAgent.startsWith('browser-bot-')) {
+            console.warn('[FLOW] agent_ready from browser-bot ignored for agent binding');
+            return;
+          }
+          setAgentIdentity(advertisedAgent);
+          setIsConnected(true);
+          console.log('[FLOW] Frontend ready (DataChannel established; using DataChannel for agent tasks)');
+          try {
+            const queued = [...pendingTasksRef.current];
+            pendingTasksRef.current = [];
+            for (const t of queued) {
+              try {
+                const traceId = uuidv4();
+                const envelope = { type: 'agent_task', taskName: t.name, payload: { ...(t.payload || {}), trace_id: traceId } };
+                const bytes = new TextEncoder().encode(JSON.stringify(envelope));
+                try {
+                  await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [advertisedAgent], reliable: true } as any);
+                } catch {
+                  await roomInstance.localParticipant.publishData(bytes);
+                }
+                console.log('[FLOW] Flushed queued task over DataChannel:', t.name);
+              } catch (e) {
+                console.warn('[FLOW] Failed to flush queued task:', t?.name, e);
+              }
+            }
+          } catch {}
+          return;
+        }
+
+        if (data.type === 'ui') {
+          try {
+            const action = String((data as any).action || '');
+            const params = ((data as any).parameters || {}) as any;
+            try { console.log('[B2F DC][UI] Received action', action, params); } catch {}
+            await handleUiAction(action, params, { executeBrowserAction, visualizerBaseUrl });
+          } catch (e) {
+            console.warn('[B2F DC] Unified UI action handler failed:', e);
+          }
+          return;
+        }
+
+        // --- Handle backend-sent transcript fallback ---
+        if (data?.type === 'transcript' && typeof data?.text === 'string') {
+          const spk = (typeof data.speaker === 'string' && data.speaker.trim().length > 0) ? data.speaker : (participant?.identity || 'Student');
+          const line = `${spk}: ${data.text}`;
+          setTranscriptionMessages((prev) => [...prev.slice(-19), line]);
+          return;
+        }
+
+        // --- Detect suggested responses ---
+        try {
+          const deepFind = (obj: any): { items?: any; title?: string } | undefined => {
+            if (!obj || typeof obj !== 'object') return undefined;
+            const meta = obj.metadata || obj.meta || obj;
+            if (meta && (meta.suggested_responses || meta.suggestedResponses)) {
+              return { items: meta.suggested_responses || meta.suggestedResponses, title: meta.title || meta.suggested_title };
+            }
+            for (const key of Object.keys(obj)) {
+              const child = obj[key];
+              if (child && typeof child === 'object') {
+                const found = deepFind(child);
+                if (found) return found;
+              } else if (typeof child === 'string') {
+                const trimmed = child.trim();
+                if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                  try {
+                    const parsed = JSON.parse(trimmed);
+                    const found = deepFind(parsed);
+                    if (found) return found;
+                  } catch {}
+                }
+              }
+            }
+            return undefined;
+          };
+
+          const found = deepFind(data);
+          if (found && found.items) {
+            const candidate = found.items;
+            const title = found.title || 'Suggestions';
+            let suggestions: { id: string; text: string; reason?: string }[] = [];
+            if (Array.isArray(candidate)) {
+              if (candidate.length > 0 && typeof candidate[0] === 'string') {
+                suggestions = (candidate as string[]).map((t, idx) => ({ id: `s_${Date.now()}_${idx}`, text: t }));
+              } else {
+                suggestions = (candidate as any[]).map((s: any, idx: number) => ({ id: s.id || `s_${Date.now()}_${idx}`, text: s.text || String(s), reason: s.reason }));
+              }
+            } else if (typeof candidate === 'string') {
+              suggestions = [{ id: `s_${Date.now()}_0`, text: candidate }];
+            }
+            if (suggestions.length > 0) {
+              console.log(`[DataReceived] Setting ${suggestions.length} suggested responses from data channel${title ? ` with title: ${title}` : ''}`);
+              setSuggestedResponses(suggestions, title);
+            }
+          } else {
+            console.debug('[DataReceived] No suggested responses found in packet');
+          }
+        } catch (srErr) {
+          console.warn('[DataReceived] Failed to extract suggested responses from packet (non-fatal):', srErr);
+        }
+      } catch (error) {
+        console.error('Failed to parse agent data packet:', error);
+      }
+    }, [addTab, setActiveTabIdInStore, executeBrowserAction, visualizerBaseUrl, setTranscriptionMessages, setSuggestedResponses, setAgentIdentity, setIsConnected]);
     
-    roomInstance.on(RoomEvent.Connected, onConnected);
-    roomInstance.on(RoomEvent.Disconnected, onDisconnected);
-    roomInstance.on(RoomEvent.DataReceived, handleDataReceived);
-    roomInstance.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
-    roomInstance.on(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
-    roomInstance.on(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
-    // ActiveSpeakersChanged listener removed
-
-    // RPC handler is registered inside onConnected to ensure localParticipant exists.
-
-    return () => {
-      roomInstance.off(RoomEvent.Connected, onConnected);
-      roomInstance.off(RoomEvent.Disconnected, onDisconnected);
-      roomInstance.off(RoomEvent.DataReceived, handleDataReceived);
-      roomInstance.off(RoomEvent.TrackSubscribed, handleTrackSubscribed);
-      roomInstance.off(RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
-      roomInstance.off(RoomEvent.TranscriptionReceived, handleTranscriptionReceived);
-      // ActiveSpeakersChanged listener was removed
-      try { if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; } } catch {}
-    };
-  }, [roomName, setIsMicEnabled, setAgentStatusText, setIsAgentSpeaking, setActiveView, setSuggestedResponses, userName, agentIdentity]); // Add all dependencies
-
+    // Wire LiveKit events via shared hook
+    useLiveKitEvents(roomInstance, {
+      onConnected,
+      onDisconnected,
+      onDataReceived: handleDataReceived as any,
+      onTrackSubscribed: handleTrackSubscribed as any,
+      onTrackUnsubscribed: handleTrackUnsubscribed as any,
+      onTranscriptionReceived: handleTranscriptionReceived as any,
+    });
 
   // --- API EXPOSED TO THE COMPONENTS ---
   // This is the clean interface your UI components will use to talk to the agent.
@@ -1447,64 +635,18 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   }, [agentIdentity]);
 
   // --- Push To Talk helpers (LiveKit STT) ---
-  const startPushToTalk = useCallback(async () => {
-    try {
-      // Mute agent audio locally
-      try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 0; } catch {} }); } catch {}
-      setIsPushToTalkActive(true);
-      setIsMicEnabled(true);
-      pttBufferRef.current = [];
-      if (roomInstance.localParticipant) {
-        await roomInstance.localParticipant.setMicrophoneEnabled(true);
-      }
-      try { setIsAwaitingAIResponse(false); } catch {}
-      // Clear any pending thinking timeout when user starts speaking
-      try { if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; } } catch {}
-      try { setShowWaitingPill(false); } catch {}
-    } catch (e) {
-      console.error('[PTT] startPushToTalk failed:', e);
-    }
-  }, [setIsPushToTalkActive, setIsMicEnabled]);
-
-  const stopPushToTalk = useCallback(async () => {
-    try {
-      // Disable mic first to stop sending
-      if (roomInstance.localParticipant) {
-        try { await roomInstance.localParticipant.setMicrophoneEnabled(false); } catch {}
-      }
-      // Unmute agent audio locally
-      try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 1; } catch {} }); } catch {}
-      setIsPushToTalkActive(false);
-      setIsMicEnabled(false);
-      // Collapse buffered transcript
-      const text = (pttBufferRef.current || []).join(' ').trim();
-      pttBufferRef.current = [];
-      if (text && text.length > 0) {
-        await startTask('student_spoke_or_acted', { transcript: text });
-      } else {
-        // Fallback: notify backend to flush any buffered transcript from server-side STT
-        await startTask('student_stopped_listening', {});
-      }
-      // Enter awaiting state immediately after user releases PTT (even if no transcript)
-      try {
-        setIsAwaitingAIResponse(true);
-        // Clear any previous timers
-        if (thinkingTimeoutRef.current) {
-          clearTimeout(thinkingTimeoutRef.current);
-          thinkingTimeoutRef.current = null;
-        }
-        // Auto-clear after timeout to avoid getting stuck in thinking mode
-        thinkingTimeoutRef.current = window.setTimeout(() => {
-          try { setIsAwaitingAIResponse(false); } catch {}
-          try { setShowWaitingPill(true); } catch {}
-          thinkingTimeoutRef.current = null;
-        }, thinkingTimeoutMsRef.current);
-      } catch {}
-      try { setShowWaitingPill(false); } catch {}
-    } catch (e) {
-      console.error('[PTT] stopPushToTalk failed:', e);
-    }
-  }, [setIsPushToTalkActive, setIsMicEnabled, startTask]);
+  const { startPushToTalk, stopPushToTalk } = usePTT({
+    roomInstance,
+    agentAudioElsRef,
+    pttBufferRef,
+    thinkingTimeoutRef,
+    thinkingTimeoutMsRef,
+    setIsPushToTalkActive,
+    setIsMicEnabled,
+    setIsAwaitingAIResponse,
+    setShowWaitingPill,
+    startTask,
+  });
 
   // --- TAB MANAGEMENT FUNCTIONS --- (declared after sendBrowserInteraction below)
 
@@ -1565,84 +707,13 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   }, [isConnected, agentIdentity]);
 
   // --- Deletion helper shared by multiple event hooks ---
-  useEffect(() => {
-    const sendDelete = async () => {
-      try {
-        let sessId = sessionIdRef.current;
-        if (!sessId) {
-          // Try to resolve sessionId synchronously from status URL if set
-          const statusUrl = sessionStatusUrlRef.current;
-          if (statusUrl) {
-            try {
-              const ctrl = new AbortController();
-              const t = setTimeout(() => ctrl.abort(), 1500);
-              const stResp = await fetch(statusUrl, { signal: ctrl.signal, cache: 'no-store' });
-              clearTimeout(t);
-              if (stResp.ok) {
-                const st = await stResp.json();
-                const id = st?.sessionId as string | undefined;
-                if (id && id.startsWith('sess-')) {
-                  sessId = id;
-                  sessionIdRef.current = id;
-                  if (SESSION_FLOW_DEBUG) console.log('[FLOW] Resolved sessionId during unload:', id);
-                }
-              }
-            } catch {}
-          }
-          // Poll for sessionId for 2 seconds
-          if (!sessId) {
-            for (let i = 0; i < 10; i++) {
-              await new Promise(resolve => setTimeout(resolve, 200));
-              sessId = sessionIdRef.current;
-              if (sessId) break;
-            }
-          }
-        }
-        if (!sessId) return;
-        // Use Next.js API proxy so we don't depend on external origin/CORS
-        const url = `/api/sessions/${sessId}?_method=DELETE`;
-        // Prefer keepalive fetch on unload
-        try {
-          await fetch(url, {
-            method: 'DELETE',
-            keepalive: true,
-            mode: 'cors',
-          });
-        } catch {
-          // fallback to sendBeacon
-          try {
-            if (typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
-              const blob = new Blob([], { type: 'text/plain' });
-              (navigator as any).sendBeacon(url, blob);
-            }
-          } catch {}
-        }
-        if (SESSION_FLOW_DEBUG) console.log('[FLOW] Sent session delete beacon for', sessId);
-      } catch (e) {
-        console.warn('[FLOW] Session delete beacon failed (non-fatal):', e);
-      }
-    };
-    // Expose for other effects
-    sendDeleteNowRef.current = () => sendDelete();
-    // Register only real unload events to avoid premature deletion
-    if (DELETE_ON_UNLOAD) {
-      const onUnload = () => { try { isUnloadingRef.current = true; void sendDelete(); } catch {} };
-      window.addEventListener('beforeunload', onUnload);
-      // Also handle pagehide (fires on bfcache and mobile Safari backgrounding)
-      window.addEventListener('pagehide', onUnload, { capture: true });
-      return () => {
-        window.removeEventListener('beforeunload', onUnload);
-        window.removeEventListener('pagehide', onUnload, { capture: true } as any);
-        // Do NOT send delete on React unmount/HMR
-        if (isUnloadingRef.current) {
-          // In the narrow case cleanup runs during a real unload, deletion was already fired above
-        }
-      };
-    } else {
-      if (SESSION_FLOW_DEBUG) console.log('[FLOW] Auto-delete on unload is disabled via NEXT_PUBLIC_SESSION_DELETE_ON_UNLOAD');
-      return () => {};
-    }
-  }, []);
+  useSessionCleanup({
+    DELETE_ON_UNLOAD,
+    isUnloadingRef,
+    sessionIdRef,
+    sessionStatusUrlRef,
+    sendDeleteNowRef,
+  });
 
   // --- Do NOT auto-delete on transient LiveKit disconnects ---
   useEffect(() => {
