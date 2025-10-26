@@ -56,9 +56,13 @@ export function usePTT(deps: UsePTTDeps) {
       setIsMicEnabled(false);
       const text = (pttBufferRef.current || []).join(' ').trim();
       pttBufferRef.current = [];
+      // Diagnostics: log transcript and decision
+      console.log(`[PTT] stopPushToTalk triggered. Final transcript: "${text}"`);
       if (text && text.length > 0) {
+        console.log('[PTT] Transcript is not empty. Sending "student_spoke_or_acted".');
         await startTask('student_spoke_or_acted', { transcript: text });
       } else {
+        console.log('[PTT] Transcript is empty. Sending "student_stopped_listening".');
         await startTask('student_stopped_listening', {});
       }
       try {
