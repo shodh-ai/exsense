@@ -172,7 +172,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // --- CLERK AUTHENTICATION ---
   const { getToken, isSignedIn } = useAuth();
   const visualizerBaseUrl = process.env.NEXT_PUBLIC_VISUALIZER_URL;
-  const { executeBrowserAction } = useBrowserActionExecutor(roomInstance);
+  const [browserIdentity, setBrowserIdentity] = useState<string | null>(null);
+  const { executeBrowserAction } = useBrowserActionExecutor(roomInstance, browserIdentity || undefined);
   
   // --- ZUSTAND STORE ACTIONS ---
   // Select only needed actions to avoid broad subscription re-renders
@@ -473,6 +474,11 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       try {
         const data = JSON.parse(new TextDecoder().decode(payload));
         console.log('[DataReceived] Packet from', participant.identity, { kind, topic, data });
+        try {
+          if (typeof participant.identity === 'string' && participant.identity.startsWith('browser-bot-')) {
+            setBrowserIdentity(participant.identity);
+          }
+        } catch {}
 
         // --- Handle initial tab created by backend ---
         if (data?.type === 'initial_tab_created' && data?.tab_id) {
@@ -684,8 +690,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         const payload = JSON.stringify({ action: 'navigate', url: startUrl });
         const bytes = new TextEncoder().encode(payload);
         try {
-          roomInstance?.localParticipant?.publishData(bytes);
-          if (SESSION_FLOW_DEBUG) console.log('[FLOW] Sent initial navigate to', startUrl);
+          if (browserIdentity && browserIdentity.trim().length > 0) {
+            roomInstance?.localParticipant?.publishData(bytes, { destinationIdentities: [browserIdentity], reliable: true } as any);
+          } else {
+            roomInstance?.localParticipant?.publishData(bytes);
+          }
+          if (SESSION_FLOW_DEBUG) console.log('[FLOW] Sent initial navigate to', startUrl, browserIdentity ? `(to ${browserIdentity})` : '(broadcast)');
         } catch (e) {
           console.warn('[FLOW] Failed to publish initial navigate:', e);
         }
@@ -693,7 +703,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         if (SESSION_FLOW_DEBUG) console.log('[FLOW] No NEXT_PUBLIC_BROWSER_START_URL set; skipping initial navigate');
       }
     } catch {}
-  }, [isConnected]);
+  }, [isConnected, browserIdentity]);
 
   // --- Send restored_feed_summary via UpdateAgentContext once after connect ---
   const sentSummaryRef = useRef(false);

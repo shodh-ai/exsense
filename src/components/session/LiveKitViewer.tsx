@@ -251,7 +251,24 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     }
     try {
       const bytes = new TextEncoder().encode(JSON.stringify(payload));
-      await room.localParticipant.publishData(bytes, { reliable: true });
+      // Target the browser-bot participant if available to avoid broadcasting to the agent
+      let browserId: string | null = null;
+      try {
+        room.remoteParticipants.forEach((p: RemoteParticipant) => {
+          const id = String(p.identity || '');
+          if (!browserId && id.startsWith('browser-bot-')) browserId = id;
+        });
+      } catch {}
+      try {
+        if (browserId) {
+          await room.localParticipant.publishData(bytes, { destinationIdentities: [browserId], reliable: true } as any);
+        } else {
+          await room.localParticipant.publishData(bytes, { reliable: true } as any);
+        }
+      } catch {
+        // Final fallback: broadcast
+        await room.localParticipant.publishData(bytes);
+      }
     } catch (e) {
       console.warn('[Interaction] publishData failed, queuing:', e);
       pendingRef.current.push(payload);
