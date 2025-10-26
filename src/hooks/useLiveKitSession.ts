@@ -350,7 +350,22 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 try {
                   console.log('[FLOW] Fallback inferred agent identity:', pid, '- waiting for agent_ready to enable RPC');
                   setAgentIdentity(pid);
-                  // Do NOT set agentServiceClientRef or isConnected here. Wait for 'agent_ready'.
+                  (async () => {
+                    try {
+                      await new Promise(r => setTimeout(r, 2000));
+                      if (!roomInstance?.localParticipant) return;
+                      if (!isConnected) {
+                        const envelope = { type: 'agent_task', taskName: 'start_tutoring_session', payload: {} };
+                        const bytes = new TextEncoder().encode(JSON.stringify(envelope));
+                        try {
+                          await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [pid], reliable: true } as any);
+                        } catch {
+                          await roomInstance.localParticipant.publishData(bytes);
+                        }
+                        console.log('[FLOW] Fallback sent start_tutoring_session to agent via DataChannel');
+                      }
+                    } catch {}
+                  })();
                   return;
                 } catch (e) {
                   console.warn('[FLOW] Fallback bind failed; will retry if attempts remain', e);
@@ -360,6 +375,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 }
               }
             }
+            try {
+              if (!isConnected && roomInstance?.localParticipant) {
+                const envelope = { type: 'agent_task', taskName: 'start_tutoring_session', payload: {} };
+                const bytes = new TextEncoder().encode(JSON.stringify(envelope));
+                await roomInstance.localParticipant.publishData(bytes).catch(() => {});
+                console.log('[FLOW] Fallback broadcast start_tutoring_session via DataChannel');
+              }
+            } catch {}
           } catch (e) {
             console.warn('[FLOW] Fallback handshake watcher error (non-fatal):', e);
           }
