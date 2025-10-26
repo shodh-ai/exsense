@@ -228,6 +228,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
   const isPushToTalkActiveRef = useRef<boolean>(false);
   const pttBufferRef = useRef<string[]>([]);
+  const pttAcceptUntilTsRef = useRef<number>(0);
   const agentAudioElsRef = useRef<HTMLAudioElement[]>([]);
   const thinkingTimeoutRef = useRef<number | null>(null);
   const thinkingTimeoutMsRef = useRef<number>(Number(process.env.NEXT_PUBLIC_AI_THINKING_TIMEOUT_MS) || 8000);
@@ -429,8 +430,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant, _publication?: TrackPublication) => {
       if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
       try {
-        const isLocal = participant && roomInstance.localParticipant && (participant.identity === roomInstance.localParticipant.identity);
-        if (isLocal && isPushToTalkActiveRef.current) {
+        const now = Date.now();
+        const accept = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
+        const speakerId = participant?.identity || '';
+        const isLocal = !!participant && !!roomInstance.localParticipant && (speakerId === roomInstance.localParticipant.identity);
+        const isAgentLike = typeof speakerId === 'string' && speakerId.startsWith('simulated-agent-');
+        const isBrowserBot = typeof speakerId === 'string' && speakerId.startsWith('browser-bot-');
+        const isStudentLike = (!isAgentLike && !isBrowserBot) && (!!speakerId);
+        if (accept && (isLocal || isStudentLike || !participant)) {
           transcriptions.forEach((seg) => {
             const t = seg?.text;
             if (typeof t === 'string' && t.trim()) {
@@ -533,8 +540,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 const bytes = new TextEncoder().encode(JSON.stringify(envelope));
                 try {
                   await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [advertisedAgent], reliable: true } as any);
-                } catch {
-                  await roomInstance.localParticipant.publishData(bytes);
+                } catch (e) {
+                  console.warn('[FLOW] Failed to flush queued task to agent:', e);
                 }
                 console.log('[FLOW] Flushed queued task over DataChannel:', t.name);
               } catch (e) {
