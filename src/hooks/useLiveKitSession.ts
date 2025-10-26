@@ -653,8 +653,10 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       const bytes = new TextEncoder().encode(JSON.stringify(envelope));
       try {
         await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [agentIdentity], reliable: true } as any);
-      } catch {
-        await roomInstance.localParticipant.publishData(bytes);
+      } catch (e) {
+        console.error(`%c[F2B DC FAIL] ID: ${dcId}`, 'color: red;', `Targeted send to '${agentIdentity}' failed. Error:`, e);
+        console.warn(`[F2B DC FALLBACK] ID: ${dcId}`, 'Broadcasting agent_task to all participants');
+        await roomInstance.localParticipant.publishData(bytes, { reliable: true } as any);
       }
       console.log(`%c[F2B DC SUCCESS] ID: ${dcId}`, 'color: green;');
     } catch (e) {
