@@ -13,6 +13,7 @@ interface UsePTTDeps {
   setIsAwaitingAIResponse: (v: boolean) => void;
   setShowWaitingPill: (v: boolean) => void;
   startTask: (taskName: string, payload: object) => Promise<void>;
+  agentIdentity?: string | null;
 }
 
 export function usePTT(deps: UsePTTDeps) {
@@ -27,7 +28,15 @@ export function usePTT(deps: UsePTTDeps) {
     setIsAwaitingAIResponse,
     setShowWaitingPill,
     startTask,
+    agentIdentity,
   } = deps;
+
+  const textToBase64 = (str: string): string => {
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  };
 
   const startPushToTalk = useCallback(async () => {
     try {
@@ -58,12 +67,42 @@ export function usePTT(deps: UsePTTDeps) {
       pttBufferRef.current = [];
       // Diagnostics: log transcript and decision
       console.log(`[PTT] stopPushToTalk triggered. Final transcript: "${text}"`);
-      if (text && text.length > 0) {
-        console.log('[PTT] Transcript is not empty. Sending "student_spoke_or_acted".');
-        await startTask('student_spoke_or_acted', { transcript: text });
+      const canRpc = !!agentIdentity && !!roomInstance?.localParticipant;
+      if (canRpc) {
+        try {
+          if (text && text.length > 0) {
+            console.log('[PTT] Transcript is not empty. Sending via RPC: student_spoke_or_acted');
+            await (roomInstance.localParticipant as any).performRpc({
+              destinationIdentity: agentIdentity,
+              method: 'rox.interaction.AgentInteraction/student_spoke_or_acted',
+              payload: textToBase64(text),
+              responseTimeout: 30000,
+            });
+          } else {
+            console.log('[PTT] Transcript empty. Sending via RPC: student_stopped_listening');
+            await (roomInstance.localParticipant as any).performRpc({
+              destinationIdentity: agentIdentity,
+              method: 'rox.interaction.AgentInteraction/student_stopped_listening',
+              payload: '',
+              responseTimeout: 15000,
+            });
+          }
+        } catch (e) {
+          console.warn('[PTT] RPC path failed, falling back to DataChannel startTask:', e);
+          if (text && text.length > 0) {
+            await startTask('student_spoke_or_acted', { transcript: text });
+          } else {
+            await startTask('student_stopped_listening', {});
+          }
+        }
       } else {
-        console.log('[PTT] Transcript is empty. Sending "student_stopped_listening".');
-        await startTask('student_stopped_listening', {});
+        if (text && text.length > 0) {
+          console.log('[PTT] RPC not available. Fallback DataChannel: student_spoke_or_acted');
+          await startTask('student_spoke_or_acted', { transcript: text });
+        } else {
+          console.log('[PTT] RPC not available. Fallback DataChannel: student_stopped_listening');
+          await startTask('student_stopped_listening', {});
+        }
       }
       try {
         setIsAwaitingAIResponse(true);

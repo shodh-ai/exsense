@@ -680,6 +680,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     setIsAwaitingAIResponse,
     setShowWaitingPill,
     startTask,
+    agentIdentity,
   });
 
   // --- TAB MANAGEMENT FUNCTIONS --- (declared after sendBrowserInteraction below)
