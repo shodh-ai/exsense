@@ -539,8 +539,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 const envelope = { type: 'agent_task', taskName: t.name, payload: { ...(t.payload || {}), trace_id: traceId } };
                 const bytes = new TextEncoder().encode(JSON.stringify(envelope));
                 try {
-                  const opts: any = { destination: [advertisedAgent], reliable: true, topic: 'agent_task' };
-                  await roomInstance.localParticipant.publishData(bytes, opts);
+                  // Use positional signature: publishData(data, reliable, destinationIdentities)
+                  await (roomInstance.localParticipant.publishData as any)(bytes, true, [advertisedAgent]);
+                  try { console.log('[F2B DC VARIANT] queued flush: positional reliable+destinationIdentities'); } catch {}
                 } catch (e) {
                   console.warn('[FLOW] Failed to flush queued task to agent:', e);
                 }
@@ -665,6 +666,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     try {
       console.log(`[F2B DC TARGET] agentIdentity='${agentIdentity}'`);
       console.log(`%c[F2B DC SEND] ID: ${dcId}`, 'color: orange;', `Starting task: ${taskName}`);
+      try {
+        const lp: any = roomInstance?.localParticipant as any;
+        const perms = lp?.permissions || (lp?._permissions) || null;
+        const rem = Array.from(roomInstance?.remoteParticipants?.keys?.() || []);
+        console.log('[F2B DC DIAG]', { localIdentity: lp?.identity, permissions: perms, remoteParticipants: rem });
+      } catch {}
       const traceId = uuidv4();
       try { (window as any).__lastTraceId = traceId; } catch {}
       const envelope = {
@@ -673,9 +680,39 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         payload: { ...(payload as any), trace_id: traceId, _dcId: dcId },
       };
       const bytes = new TextEncoder().encode(JSON.stringify(envelope));
-      const opts: any = { destination: [agentIdentity], reliable: true, topic: 'agent_task' };
+      // Prefer modern options-object targeted send; fallback to positional signature only if needed.
+      const opts: any = {
+        destination: [agentIdentity],
+        destinationIdentities: [agentIdentity],
+        destinationIdentity: agentIdentity,
+        reliable: true,
+        topic: 'agent_task',
+      };
+      let sent = false;
       try { console.log(`[F2B DC OPTS]`, opts); } catch {}
-      await roomInstance.localParticipant.publishData(bytes, opts);
+      try {
+        await roomInstance.localParticipant.publishData(bytes, opts);
+        sent = true;
+      } catch (optErr) {
+        console.warn('[F2B DC VARIANT] options-object send failed, trying positional', optErr);
+      }
+      if (!sent) {
+        try {
+          await (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity]);
+          try { console.log('[F2B DC VARIANT] direct send: positional reliable+destinationIdentities'); } catch {}
+          sent = true;
+        } catch (posErr) {
+          console.warn('[F2B DC VARIANT] positional send also failed', posErr);
+        }
+      }
+      try {
+        const PROBE = (process.env.NEXT_PUBLIC_LK_DC_PROBE || '').toLowerCase() === 'true';
+        if (PROBE) {
+          const probe = new TextEncoder().encode(JSON.stringify({ type: 'probe', ts: Date.now(), note: 'dc_broadcast_probe' }));
+          await roomInstance.localParticipant.publishData(probe);
+          console.log('[F2B DC PROBE] broadcast probe sent');
+        }
+      } catch {}
       console.log(`%c[F2B DC SUCCESS] ID: ${dcId}`, 'color: green;');
     } catch (e) {
       console.error(`%c[F2B DC FAIL] ID: ${dcId}`, 'color: red;', `Failed to send '${taskName}' to agent='${agentIdentity}':`, e);
@@ -748,10 +785,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       };
       const bytes = new TextEncoder().encode(JSON.stringify(envelope));
       try {
-        // Non-async effect: chain promises instead of await
+        // Prefer options-object targeted send; fallback to positional; final fallback broadcast.
         roomInstance.localParticipant
-          .publishData(bytes, { destinationIdentities: [agentIdentity], reliable: true } as any)
-          .catch(() => roomInstance.localParticipant.publishData(bytes).catch(() => {}));
+          .publishData(bytes, { destination: [agentIdentity], destinationIdentities: [agentIdentity], reliable: true } as any)
+          .then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: options targeted'); } catch {} })
+          .catch(() => (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity])
+            .then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: positional targeted'); } catch {} })
+            .catch(() => roomInstance.localParticipant.publishData(bytes).then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: broadcast fallback'); } catch {} }).catch(() => {}))
+          );
       } catch {}
       sentSummaryRef.current = true;
       console.log('[F2B DC] Sent UpdateAgentContext with restored_feed_summary');
