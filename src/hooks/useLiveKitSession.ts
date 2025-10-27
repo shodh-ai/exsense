@@ -336,39 +336,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           }, thinkingTimeoutMsRef.current);
         } catch {}
 
-        // Fallback: if 'agent_ready' data message was missed, try to infer agent identity
-        // and validate with a TestPing to establish RPC client.
-        (async () => {
-          try {
-            // Poll a few times in case remote participant arrives slightly after connect
-            const MAX_ATTEMPTS = 6; // ~6s
-            for (let i = 0; i < MAX_ATTEMPTS && !agentServiceClientRef.current; i++) {
-              await new Promise(r => setTimeout(r, 1000));
-              if (agentServiceClientRef.current) return;
-              // If handshake already set identity, stop
-              if (agentServiceClientRef.current) return;
-              // Infer candidate: any non-browser remote participant
-              const candidates = Array.from(roomInstance.remoteParticipants.keys()).filter(id => !String(id).startsWith('browser-bot-'));
-              if (candidates.length > 0 && roomInstance.localParticipant) {
-                const pid = String(candidates[0]);
-                try {
-                  console.log('[FLOW] Fallback inferred agent identity:', pid, '- waiting for agent_ready to enable RPC');
-                  setAgentIdentity(pid);
-                  // Do not send DC fallback start; RPC TestPing will handle starting the session.
-                  return;
-                } catch (e) {
-                  console.warn('[FLOW] Fallback bind failed; will retry if attempts remain', e);
-                  // Reset and retry next loop
-                  try { setAgentIdentity(null); } catch {}
-                  agentServiceClientRef.current = null;
-                }
-              }
-            }
-            // Skip DC broadcast fallback; RPC path is authoritative now.
-          } catch (e) {
-            console.warn('[FLOW] Fallback handshake watcher error (non-fatal):', e);
-          }
-        })();
+        // Removed fallback agent identity inference. We rely solely on 'agent_ready'.
         // We wait for the agent_ready signal before setting isConnected to true
     }, [setIsLoading, setConnectionError, setIsAwaitingAIResponse, setShowWaitingPill, thinkingTimeoutRef, thinkingTimeoutMsRef]);
     
@@ -680,9 +648,17 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         payload: { ...(payload as any), trace_id: traceId, _dcId: dcId },
       };
       const bytes = new TextEncoder().encode(JSON.stringify(envelope));
+      // Resolve agent SID if available; some LiveKit client builds expect destination SIDs, not identities.
+      let agentSid: string | undefined;
+      try {
+        const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
+        const agentPart = remVals.find((p: any) => (p?.identity || '') === agentIdentity);
+        agentSid = agentPart?.sid;
+      } catch {}
+      try { console.log('[F2B DC DEST]', { agentIdentity, agentSid }); } catch {}
       // Prefer modern options-object targeted send; fallback to positional signature only if needed.
       const opts: any = {
-        destination: [agentIdentity],
+        destination: agentSid ? [agentSid] : [agentIdentity],
         destinationIdentities: [agentIdentity],
         destinationIdentity: agentIdentity,
         reliable: true,
@@ -705,6 +681,20 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           console.warn('[F2B DC VARIANT] positional send also failed', posErr);
         }
       }
+      // If a browser-bot is present, optionally double-send using the positional API without topic for extra safety
+      try {
+        const DOUBLE = (process.env.NEXT_PUBLIC_LK_DC_DOUBLE_SEND || 'true').toLowerCase() !== 'false';
+        const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
+        const hasBrowser = remVals.some((p: any) => (p?.identity || '').startsWith('browser-bot-'));
+        if (DOUBLE && hasBrowser) {
+          try {
+            await (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity]);
+            console.log('[F2B DC RESEND] positional targeted resend because browser-bot present');
+          } catch (e) {
+            console.warn('[F2B DC RESEND] failed', e);
+          }
+        }
+      } catch {}
       try {
         const PROBE = (process.env.NEXT_PUBLIC_LK_DC_PROBE || '').toLowerCase() === 'true';
         if (PROBE) {
@@ -786,9 +776,13 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       const bytes = new TextEncoder().encode(JSON.stringify(envelope));
       try {
         // Prefer options-object targeted send; fallback to positional; final fallback broadcast.
+        const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
+        const agentPart = remVals.find((p: any) => (p?.identity || '') === agentIdentity);
+        const sid = agentPart?.sid;
+        const o: any = { destination: sid ? [sid] : [agentIdentity], destinationIdentities: [agentIdentity], reliable: true };
         roomInstance.localParticipant
-          .publishData(bytes, { destination: [agentIdentity], destinationIdentities: [agentIdentity], reliable: true } as any)
-          .then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: options targeted'); } catch {} })
+          .publishData(bytes, o)
+          .then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: options targeted', { agentSid: sid }); } catch {} })
           .catch(() => (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity])
             .then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: positional targeted'); } catch {} })
             .catch(() => roomInstance.localParticipant.publishData(bytes).then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: broadcast fallback'); } catch {} }).catch(() => {}))
