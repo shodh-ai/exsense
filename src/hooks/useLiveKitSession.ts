@@ -539,7 +539,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
                 const envelope = { type: 'agent_task', taskName: t.name, payload: { ...(t.payload || {}), trace_id: traceId } };
                 const bytes = new TextEncoder().encode(JSON.stringify(envelope));
                 try {
-                  await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [advertisedAgent], reliable: true } as any);
+                  const opts: any = { destination: [advertisedAgent], reliable: true, topic: 'agent_task' };
+                  await roomInstance.localParticipant.publishData(bytes, opts);
                 } catch (e) {
                   console.warn('[FLOW] Failed to flush queued task to agent:', e);
                 }
@@ -569,6 +570,19 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           const spk = (typeof data.speaker === 'string' && data.speaker.trim().length > 0) ? data.speaker : (participant?.identity || 'Student');
           const line = `${spk}: ${data.text}`;
           setTranscriptionMessages((prev) => [...prev.slice(-19), line]);
+          // Also buffer into PTT when active or in linger window, if speaker is local student or unknown
+          try {
+            const now = Date.now();
+            const accept = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
+            const localId = roomInstance?.localParticipant?.identity || '';
+            const isAgentLike = typeof spk === 'string' && spk.startsWith('simulated-agent-');
+            const isBrowserBot = typeof spk === 'string' && spk.startsWith('browser-bot-');
+            const isStudentLike = (!isAgentLike && !isBrowserBot) && (!!spk);
+            if (accept && (spk === localId || isStudentLike)) {
+              const t = String(data.text || '').trim();
+              if (t) pttBufferRef.current.push(t);
+            }
+          } catch {}
           return;
         }
 
@@ -659,7 +673,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         payload: { ...(payload as any), trace_id: traceId, _dcId: dcId },
       };
       const bytes = new TextEncoder().encode(JSON.stringify(envelope));
-      await roomInstance.localParticipant.publishData(bytes, { destinationIdentities: [agentIdentity], reliable: true } as any);
+      const opts: any = { destination: [agentIdentity], reliable: true, topic: 'agent_task' };
+      try { console.log(`[F2B DC OPTS]`, opts); } catch {}
+      await roomInstance.localParticipant.publishData(bytes, opts);
       console.log(`%c[F2B DC SUCCESS] ID: ${dcId}`, 'color: green;');
     } catch (e) {
       console.error(`%c[F2B DC FAIL] ID: ${dcId}`, 'color: red;', `Failed to send '${taskName}' to agent='${agentIdentity}':`, e);
@@ -672,6 +688,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     roomInstance,
     agentAudioElsRef,
     pttBufferRef,
+    pttAcceptUntilTsRef,
     thinkingTimeoutRef,
     thinkingTimeoutMsRef,
     setIsPushToTalkActive,

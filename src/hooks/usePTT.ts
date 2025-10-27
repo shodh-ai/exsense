@@ -6,6 +6,7 @@ interface UsePTTDeps {
   roomInstance: Room;
   agentAudioElsRef: React.MutableRefObject<HTMLAudioElement[]>;
   pttBufferRef: React.MutableRefObject<string[]>;
+  pttAcceptUntilTsRef: React.MutableRefObject<number>;
   thinkingTimeoutRef: React.MutableRefObject<number | null>;
   thinkingTimeoutMsRef: React.MutableRefObject<number>;
   setIsPushToTalkActive: (v: boolean) => void;
@@ -20,6 +21,7 @@ export function usePTT(deps: UsePTTDeps) {
     roomInstance,
     agentAudioElsRef,
     pttBufferRef,
+    pttAcceptUntilTsRef,
     thinkingTimeoutRef,
     thinkingTimeoutMsRef,
     setIsPushToTalkActive,
@@ -35,6 +37,7 @@ export function usePTT(deps: UsePTTDeps) {
       setIsPushToTalkActive(true);
       setIsMicEnabled(true);
       pttBufferRef.current = [];
+      try { pttAcceptUntilTsRef.current = Date.now() + 60000; } catch {}
       if (roomInstance?.localParticipant) {
         await roomInstance.localParticipant.setMicrophoneEnabled(true);
       }
@@ -44,7 +47,7 @@ export function usePTT(deps: UsePTTDeps) {
     } catch (e) {
       console.error('[PTT] startPushToTalk failed:', e);
     }
-  }, [roomInstance, agentAudioElsRef, pttBufferRef, thinkingTimeoutRef, setIsPushToTalkActive, setIsMicEnabled, setIsAwaitingAIResponse, setShowWaitingPill]);
+  }, [roomInstance, agentAudioElsRef, pttBufferRef, pttAcceptUntilTsRef, thinkingTimeoutRef, setIsPushToTalkActive, setIsMicEnabled, setIsAwaitingAIResponse, setShowWaitingPill]);
 
   const stopPushToTalk = useCallback(async () => {
     try {
@@ -54,8 +57,12 @@ export function usePTT(deps: UsePTTDeps) {
       try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 1; } catch {} }); } catch {}
       setIsPushToTalkActive(false);
       setIsMicEnabled(false);
+      // Linger to accept late STT segments
+      try { pttAcceptUntilTsRef.current = Date.now() + 800; } catch {}
+      try { await new Promise(r => setTimeout(r, 850)); } catch {}
       const text = (pttBufferRef.current || []).join(' ').trim();
       pttBufferRef.current = [];
+      try { pttAcceptUntilTsRef.current = 0; } catch {}
       // Diagnostics: log transcript and decision
       console.log(`[PTT] stopPushToTalk triggered. Final transcript: "${text}"`);
       if (text && text.length > 0) {
@@ -81,7 +88,7 @@ export function usePTT(deps: UsePTTDeps) {
     } catch (e) {
       console.error('[PTT] stopPushToTalk failed:', e);
     }
-  }, [roomInstance, agentAudioElsRef, setIsPushToTalkActive, setIsMicEnabled, pttBufferRef, startTask, setIsAwaitingAIResponse, thinkingTimeoutRef, thinkingTimeoutMsRef, setShowWaitingPill]);
+  }, [roomInstance, agentAudioElsRef, setIsPushToTalkActive, setIsMicEnabled, pttBufferRef, pttAcceptUntilTsRef, startTask, setIsAwaitingAIResponse, thinkingTimeoutRef, thinkingTimeoutMsRef, setShowWaitingPill]);
 
   return { startPushToTalk, stopPushToTalk };
 }
