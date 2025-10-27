@@ -648,39 +648,67 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         payload: { ...(payload as any), trace_id: traceId, _dcId: dcId },
       };
       const bytes = new TextEncoder().encode(JSON.stringify(envelope));
-      // Resolve agent SID if available; some LiveKit client builds expect destination SIDs, not identities.
-      let agentSid: string | undefined;
-      try {
-        const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
-        const agentPart = remVals.find((p: any) => (p?.identity || '') === agentIdentity);
-        agentSid = agentPart?.sid;
-      } catch {}
-      try { console.log('[F2B DC DEST]', { agentIdentity, agentSid }); } catch {}
-      // Prefer modern options-object targeted send; fallback to positional signature only if needed.
-      const opts: any = {
-        destination: agentSid ? [agentSid] : [agentIdentity],
-        destinationIdentities: [agentIdentity],
-        destinationIdentity: agentIdentity,
-        reliable: true,
-        topic: 'agent_task',
-      };
+      // Primary: legacy positional targeted send (broadest compatibility)
       let sent = false;
-      try { console.log(`[F2B DC OPTS]`, opts); } catch {}
       try {
-        await roomInstance.localParticipant.publishData(bytes, opts);
+        await (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity]);
         sent = true;
-      } catch (optErr) {
-        console.warn('[F2B DC VARIANT] options-object send failed, trying positional', optErr);
+        try { console.log('[F2B DC VARIANT] primary=positional'); } catch {}
+      } catch (posErr) {
+        console.warn('[F2B DC VARIANT] positional failed, trying identity options', posErr);
       }
       if (!sent) {
+        // Secondary: identity options (destinationIdentities)
+        const optsId: any = { destinationIdentities: [agentIdentity], reliable: true, topic: 'agent_task' };
+        try { console.log('[F2B DC OPTS][identity]', optsId); } catch {}
         try {
-          await (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity]);
-          try { console.log('[F2B DC VARIANT] direct send: positional reliable+destinationIdentities'); } catch {}
+          await roomInstance.localParticipant.publishData(bytes, optsId);
           sent = true;
-        } catch (posErr) {
-          console.warn('[F2B DC VARIANT] positional send also failed', posErr);
+          try { console.log('[F2B DC VARIANT] secondary=identity options'); } catch {}
+        } catch (optIdErr) {
+          console.warn('[F2B DC VARIANT] identity options failed, trying SID destination', optIdErr);
         }
       }
+      if (!sent) {
+        // Tertiary: destination via SID if available
+        let agentSid: string | undefined;
+        try {
+          const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
+          const part = remVals.find((p: any) => (p?.identity || '') === agentIdentity);
+          agentSid = part?.sid;
+        } catch {}
+        try { console.log('[F2B DC DEST]', { agentIdentity, agentSid }); } catch {}
+        if (agentSid) {
+          const optsSid: any = { destination: [agentSid], reliable: true, topic: 'agent_task' };
+          try { console.log('[F2B DC OPTS][sid]', optsSid); } catch {}
+          try {
+            await roomInstance.localParticipant.publishData(bytes, optsSid);
+            sent = true;
+            try { console.log('[F2B DC VARIANT] tertiary=options SID'); } catch {}
+          } catch (sidErr) {
+            console.warn('[F2B DC VARIANT] options SID failed', sidErr);
+          }
+        }
+      }
+      // Env-gated broadcast duplicate for safety when targeting is flaky
+      try {
+        const BCAST_DUP = (process.env.NEXT_PUBLIC_LK_DC_BCAST_DUP || 'false').toLowerCase() === 'true';
+        if (BCAST_DUP) {
+          try {
+            await roomInstance.localParticipant.publishData(bytes);
+            console.log('[F2B DC DUP] broadcast duplicate sent (env NEXT_PUBLIC_LK_DC_BCAST_DUP=true)');
+          } catch (e) {
+            console.warn('[F2B DC DUP] broadcast duplicate failed', e);
+          }
+        } else if (!sent) {
+          try {
+            await roomInstance.localParticipant.publishData(bytes);
+            console.log('[F2B DC FALLBACK] broadcast fallback sent because all targeted variants failed');
+          } catch (e) {
+            console.warn('[F2B DC FALLBACK] broadcast fallback failed', e);
+          }
+        }
+      } catch {}
       // If a browser-bot is present, optionally double-send using the positional API without topic for extra safety
       try {
         const DOUBLE = (process.env.NEXT_PUBLIC_LK_DC_DOUBLE_SEND || 'true').toLowerCase() !== 'false';
@@ -775,17 +803,23 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       };
       const bytes = new TextEncoder().encode(JSON.stringify(envelope));
       try {
-        // Prefer options-object targeted send; fallback to positional; final fallback broadcast.
-        const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
-        const agentPart = remVals.find((p: any) => (p?.identity || '') === agentIdentity);
-        const sid = agentPart?.sid;
-        const o: any = { destination: sid ? [sid] : [agentIdentity], destinationIdentities: [agentIdentity], reliable: true };
-        roomInstance.localParticipant
-          .publishData(bytes, o)
-          .then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: options targeted', { agentSid: sid }); } catch {} })
-          .catch(() => (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity])
-            .then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: positional targeted'); } catch {} })
-            .catch(() => roomInstance.localParticipant.publishData(bytes).then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: broadcast fallback'); } catch {} }).catch(() => {}))
+        // Primary: positional targeted send
+        (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity])
+          .then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: primary=positional'); } catch {} })
+          .catch(() => roomInstance.localParticipant
+            .publishData(bytes, { destinationIdentities: [agentIdentity], reliable: true, topic: 'agent_task' } as any)
+            .then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: secondary=identity options'); } catch {} })
+            .catch(() => {
+              const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
+              const part = remVals.find((p: any) => (p?.identity || '') === agentIdentity);
+              const sid = part?.sid;
+              if (sid) {
+                return roomInstance.localParticipant.publishData(bytes, { destination: [sid], reliable: true, topic: 'agent_task' } as any)
+                  .then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: tertiary=options SID'); } catch {} })
+                  .catch(() => roomInstance.localParticipant.publishData(bytes).then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: broadcast fallback'); } catch {} }).catch(() => {}));
+              }
+              return roomInstance.localParticipant.publishData(bytes).then(() => { try { console.log('[F2B DC VARIANT] restored_feed_summary: broadcast fallback'); } catch {} }).catch(() => {});
+            })
           );
       } catch {}
       sentSummaryRef.current = true;
