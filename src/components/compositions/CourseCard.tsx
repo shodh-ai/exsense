@@ -3,8 +3,8 @@
 
 import React, { JSX } from "react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/button";
-import { Card, CardContent } from "@/components/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 
 // Interface for Course data (no changes)

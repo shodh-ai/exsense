@@ -4,11 +4,11 @@ import { ChevronDownIcon, SearchIcon, XIcon } from "lucide-react";
 import React, { JSX, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { Button } from "@/components/button";
-import { Input } from "@/components/input";
-import CourseCard, { Course } from "@/components/CourseCard";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import CourseCard, { Course } from "@/components/compositions/CourseCard";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
 import { useCourses } from "@/hooks/useApi";
 
 
@@ -122,3 +122,4 @@ const CoursesPage = (): JSX.Element => {
 };
 
 export default CoursesPage;
+

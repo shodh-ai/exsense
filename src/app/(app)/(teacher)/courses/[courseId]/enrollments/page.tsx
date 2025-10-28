@@ -8,11 +8,11 @@ import Link from "next/link";
 import { useCourseEnrollments } from "@/hooks/useApi"; // <-- USE THE CORRECT HOOK
 
 // --- UI Components ---
-import { Badge } from "@/components/badge";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/Breadcrumb";
-import { Button } from "@/components/button";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+import { Badge } from "@/components/ui/badge";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
 
 const tableHeaders = [
   { label: "Student Name", width: "w-[226px]" },

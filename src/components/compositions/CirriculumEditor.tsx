@@ -1,17 +1,17 @@
 "use client";
 
 import Link from 'next/link';
-import ConfirmationModal from '@/components/ConfirmationModal';
+import ConfirmationModal from '@/components/compositions/ConfirmationModal';
 import { SearchIcon, XIcon, ChevronLeftIcon } from "lucide-react";
 import React, { JSX, useEffect, useState } from "react";
 import { v4 as uuidv4 } from 'uuid';
 import { useRouter } from 'next/navigation';
 
 // --- UI Components & Types ---
-import { Button } from "@/components/button";
-import { Input } from "@/components/input";
-import Sphere from "@/components/Sphere";
-import { CurriculumSection, SectionData } from "@/components/CurriculumSection";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import Sphere from "@/components/compositions/Sphere";
+import { CurriculumSection, SectionData } from "@/components/compositions/CurriculumSection";
 import { toast } from 'sonner';
 
 type CirriculumEditorProps = {
@@ -170,3 +170,4 @@ const CirriculumEditor = ({
 };
 
 export default CirriculumEditor;
+

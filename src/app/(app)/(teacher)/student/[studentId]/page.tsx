@@ -2,12 +2,12 @@
 
 import React, { JSX } from "react";
 
-import { Badge } from "@/components/badge";
-import { Button } from "@/components/button";
-import { Card, CardContent } from "@/components/card";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
-import CourseMap from "@/components/CourseMap";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
+import CourseMap from "@/components/compositions/CourseMap";
 
 // --- Data Definitions ---
 const studentData = [

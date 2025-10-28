@@ -6,7 +6,7 @@ import { useSignIn, useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useState, FormEvent, useEffect } from "react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
-import Sphere from "@/components/Sphere";
+import Sphere from "@/components/compositions/Sphere";
 import { Plus_Jakarta_Sans } from "next/font/google";
 
 // Initialize the font
@@ -221,3 +221,4 @@ export default function Login() {
         </div>
     );
 }
+

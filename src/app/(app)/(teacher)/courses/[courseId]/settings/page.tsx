@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import CourseForm from "@/components/CourseForm"; // Adjust import path
+import CourseForm from "@/components/compositions/CourseForm";
 
 export default function EditCourseSettingsPage() {
     const params = useParams();

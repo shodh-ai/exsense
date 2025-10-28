@@ -9,14 +9,14 @@ import {
   BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbSeparator,
-} from "@/components/Breadcrumb";
-import { Button } from "@/components/button";
-import { Card, CardContent } from "@/components/card";
-import { Input } from "@/components/input";
-import { Label } from "@/components/label";
-import Sphere from "@/components/Sphere";
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import Sphere from "@/components/compositions/Sphere";
 import { useProfileStats } from "@/hooks/useApi";
-import { ProfileStatsSkeleton } from "@/components/ProfileStatsSkeleton";
+import { ProfileStatsSkeleton } from "@/components/utility/ProfileStatsSkeleton";
 
 // --- THIS IS THE FIX ---
 // This constant needs to exist for the form rendering logic to work.
@@ -220,3 +220,6 @@ export default function ProfileDetails(): JSX.Element {
     </div>
   );
 }
+
+
+

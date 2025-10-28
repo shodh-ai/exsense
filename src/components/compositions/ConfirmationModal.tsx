@@ -1,7 +1,7 @@
 "use client";
 
 import React from 'react';
-import { Button } from '@/components/button'; 
+import { Button } from '@/components/ui/button'; 
 import { AlertTriangleIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 

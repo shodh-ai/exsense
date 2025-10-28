@@ -4,17 +4,17 @@ import { Star } from "lucide-react";
 import React, { JSX, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
-import Link from "next/link"; // --- THIS IS THE FIX ---
+import Link from "next/link";
 
 // --- UI Components ---
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/accordion";
-import { Avatar, AvatarImage } from "@/components/avatar";
-import { Badge } from "@/components/badge";
-import { Button } from "@/components/button";
-import CourseMap from "@/components/CourseMap";
-import { Separator } from "@/components/separator";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import CourseMap from "@/components/compositions/CourseMap";
+import { Separator } from "@/components/ui/separator";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
 
 // --- Data Fetching Hooks ---
 import { useCourse, useEnrollInCourse, useMyEnrollments } from "@/hooks/useApi";

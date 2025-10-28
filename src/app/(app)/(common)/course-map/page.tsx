@@ -1,10 +1,10 @@
 "use client";
 import React, { JSX, useState } from "react";
 import Xarrow, { Xwrapper } from "react-xarrows";
-import { Badge } from "@/components/badge";
-import { Card, CardContent } from "@/components/card";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
 
 // Types
 type CourseNode = {
@@ -248,3 +248,4 @@ export default function CourseMap(): JSX.Element {
     </div>
   );
 }
+

@@ -6,7 +6,7 @@ import { useSignUp } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useState, FormEvent } from "react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
-import Sphere from "@/components/Sphere";
+import Sphere from "@/components/compositions/Sphere";
 import { Plus_Jakarta_Sans } from "next/font/google";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -154,3 +154,4 @@ export default function Register() {
         </div>
     );
 }
+

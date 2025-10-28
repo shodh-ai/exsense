@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 // Import the specific buttons we need for the new footer
 
-import { UploadButton } from '@/components/UploadButton';
+import { UploadButton } from '@/components/compositions/UploadButton';
 
 // MODIFICATION: Added Send and RefreshCcw icons
 import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic, ExternalLink, RefreshCcw } from 'lucide-react';
@@ -22,7 +22,7 @@ import SeedInput from '@/components/imprinting/SeedInput';
 import CurriculumEditor from '@/components/imprinting/CurriculumEditor';
 import LoSelector from '@/components/imprinting/LoSelector';
 // --- MODIFICATION: Import the new modal component ---
-import { SendModal } from '@/components/SendModal';
+import { SendModal } from '@/components/compositions/SendModal';
 import { TabManager } from '@/components/session/TabManager';
 
 
@@ -1537,3 +1537,4 @@ export default function TeacherPage() {
         </Suspense>
     );
 }
+

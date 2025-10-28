@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import Footer from '@/components/Footer';
-import { StatusPill } from '@/components/StatusPill';
+import Footer from '@/components/compositions/Footer';
+import { StatusPill } from '@/components/compositions/StatusPill';
 import type { Room } from 'livekit-client';
 
 import NextDynamic from 'next/dynamic';
@@ -13,7 +13,7 @@ import { TabManager } from '@/components/session/TabManager';
 
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Sphere from '@/components/Sphere';
+import Sphere from '@/components/compositions/Sphere';
 import { DemoRoleIndicator } from '@/components/session/DemoRoleIndicator';
 
 // Excalidraw and Mermaid conversion libs are imported dynamically in the effect below
@@ -616,3 +616,4 @@ export default function Session() {
         </>
     )
 }
+

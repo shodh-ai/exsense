@@ -1,6 +1,6 @@
 'use client';
 import React, { JSX } from "react";
-import { Button } from "@/components/button";
+import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 
 const ErrorPage = (): JSX.Element => {

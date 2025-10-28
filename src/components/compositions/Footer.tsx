@@ -1,8 +1,8 @@
 import React from 'react';
-import { MicButton } from '@/components/MicButton';
-import { MusicButton } from '@/components/MusicButton';
-import { UploadButton } from '@/components/UploadButton';
-import { MessageButton } from '@/components/MessageButton';
+import { MicButton } from '@/components/compositions/MicButton';
+import { MusicButton } from '@/components/compositions/MusicButton';
+import { UploadButton } from '@/components/compositions/UploadButton';
+import { MessageButton } from '@/components/compositions/MessageButton';
 import { Room } from 'livekit-client';
 import { useSessionStore } from '@/lib/store';
 
@@ -70,3 +70,4 @@ export default function Footer({
         </footer>
     );
 }
+

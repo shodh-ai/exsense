@@ -5,10 +5,10 @@
 
 import React, { JSX } from "react";
 import { useRouter } from "next/navigation";
-import Button from "@/components/button2";
-import { Card, CardContent } from "@/components/card";
+import Button from "@/components/ui/button2";
+import { Card, CardContent } from "@/components/ui/card";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
-import Sphere from "@/components/Sphere";
+import Sphere from "@/components/compositions/Sphere";
 
 // 1. Import the font
 import { Plus_Jakarta_Sans } from "next/font/google";
@@ -121,3 +121,4 @@ const PasswordChanged = (): JSX.Element => {
 };
 
 export default PasswordChanged;
+

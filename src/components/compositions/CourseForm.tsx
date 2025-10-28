@@ -12,13 +12,13 @@ import { useCourse } from "@/hooks/useApi";
 import { useApiService } from "@/lib/api";
 
 // --- UI Components ---
-import { Button } from "@/components/button";
-import { Card, CardContent } from "@/components/card";
-import { Input } from "@/components/input";
-import { Textarea } from "@/components/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/toggle-group";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
 
 // --- Helper component for dynamic input lists (No changes) ---
 interface DynamicInputListProps {
@@ -275,3 +275,4 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
     </>
   );
 }
+

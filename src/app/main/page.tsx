@@ -3,10 +3,10 @@
 import { LinkedinIcon } from "lucide-react"; // Unused icons removed
 import React, { JSX, useRef, useLayoutEffect, useCallback, useState } from "react";
 
-import { Button } from "@/components/button";
-import { Separator } from "@/components/separator";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 // useSessionStore is no longer needed on this page
-import ConfirmationModal from "@/components/ConfirmationModal";
+import ConfirmationModal from "@/components/compositions/ConfirmationModal";
 
 export default function ShodhAiWebsite(): JSX.Element {
   // Refs for DOM elements
@@ -175,3 +175,4 @@ export default function ShodhAiWebsite(): JSX.Element {
     </main>
   );
 }
+
