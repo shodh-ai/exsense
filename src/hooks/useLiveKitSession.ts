@@ -229,6 +229,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const isPushToTalkActiveRef = useRef<boolean>(false);
   const pttBufferRef = useRef<string[]>([]);
   const pttAcceptUntilTsRef = useRef<number>(0);
+  const pttRecentTextsRef = useRef<string[]>([]);
   const agentAudioElsRef = useRef<HTMLAudioElement[]>([]);
   const thinkingTimeoutRef = useRef<number | null>(null);
   const thinkingTimeoutMsRef = useRef<number>(Number(process.env.NEXT_PUBLIC_AI_THINKING_TIMEOUT_MS) || 8000);
@@ -394,6 +395,21 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       try { setShowWaitingPill(true); } catch {}
     }, [setIsAgentSpeaking, setIsAwaitingAIResponse, setShowWaitingPill]);
 
+    // Helper: append unique transcript text to PTT buffer
+    const appendUniquePTT = useCallback((raw: string) => {
+      try {
+        const norm = String(raw || '').trim();
+        if (!norm) return;
+        const recent = pttRecentTextsRef.current || [];
+        // Simple dedupe: avoid exact repeats within recent window of 10 entries
+        if (recent.includes(norm)) return;
+        pttBufferRef.current.push(norm);
+        recent.push(norm);
+        if (recent.length > 10) recent.shift();
+        pttRecentTextsRef.current = recent;
+      } catch {}
+    }, []);
+
     // Handler for transcription data (LiveKit STT)
     const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant, _publication?: TrackPublication) => {
       if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
@@ -407,10 +423,16 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         const accept = acceptWindow && (isLocal || !isAgentLike || !participant);
         try { console.log('[PTT STT]', { speakerId, isLocal, isAgentLike, acceptWindow, accept, segs: transcriptions.length }); } catch {}
         if (accept) {
-          transcriptions.forEach((seg) => {
+          transcriptions.forEach((seg: any) => {
             const t = seg?.text;
+            const isFinal = seg?.isFinal === true || seg?.final === true || seg?.type === 'final';
             if (typeof t === 'string' && t.trim()) {
-              pttBufferRef.current.push(t.trim());
+              // Prefer final segments when flag exists; if no flag present, still append with dedupe
+              if (('isFinal' in (seg || {})) || ('final' in (seg || {})) || ('type' in (seg || {}))) {
+                if (isFinal) appendUniquePTT(t);
+              } else {
+                appendUniquePTT(t);
+              }
             }
           });
         }
@@ -423,7 +445,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           setTranscriptionMessages((prev) => [...prev.slice(-19), message]);
         }
       });
-    }, [setTranscriptionMessages]);
+    }, [setTranscriptionMessages, appendUniquePTT]);
 
     const handleDataReceived = useCallback(async (payload: Uint8Array, participant?: RemoteParticipant, kind?: any, topic?: string) => {
       if (!participant) return;
@@ -550,7 +572,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             const isStudentLike = (!isAgentLike && !isBrowserBot) && (!!spk);
             if (accept && (spk === localId || isStudentLike)) {
               const t = String(data.text || '').trim();
-              if (t) pttBufferRef.current.push(t);
+              if (t) appendUniquePTT(t);
             }
           } catch {}
           return;

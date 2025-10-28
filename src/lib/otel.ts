@@ -56,11 +56,16 @@ export function initTelemetry(): void {
     const grafanaHeaders = parseHeaders(process.env.NEXT_PUBLIC_GRAFANA_OTLP_HEADERS);
     const genericHeaders = parseHeaders(process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_HEADERS);
 
+    const defaultEndpoint =
+      (typeof window !== 'undefined' && process.env.NODE_ENV === 'production')
+        ? '/api/otlp/v1/traces'
+        : 'http://localhost:4318/v1/traces';
+
     const tracesEndpoint =
       process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ||
       process.env.NEXT_PUBLIC_OTEL_EXPORTER_OTLP_ENDPOINT ||
       grafanaEndpoint ||
-      'http://localhost:4318/v1/traces';
+      defaultEndpoint;
 
     const tracesHeaders = {
       ...grafanaHeaders,
@@ -81,9 +86,15 @@ export function initTelemetry(): void {
     });
 
     // Create exporter
+    const isSameOrigin =
+      tracesEndpoint.startsWith('/') ||
+      (typeof window !== 'undefined' && tracesEndpoint.startsWith(window.location.origin));
+
     const exporter = new OTLPTraceExporter({
       url: tracesEndpoint,
-      headers: Object.keys(tracesHeaders).length > 0 ? tracesHeaders : undefined,
+      headers: isSameOrigin
+        ? undefined
+        : (Object.keys(tracesHeaders).length > 0 ? tracesHeaders : undefined),
     });
 
     // Add span processor
