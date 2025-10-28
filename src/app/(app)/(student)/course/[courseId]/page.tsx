@@ -277,7 +277,7 @@ export default function StudentCoursePage(): JSX.Element {
           <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             <div className="mx-auto flex w-full max-w-[80%] flex-col gap-10 md:gap-12">
               <div className="flex items-center text-sm text-gray-500">
-                <Link href="/" className="hover:underline">Dashboard</Link>
+                <Link href="/student_dashboard" className="hover:underline">Dashboard</Link>
                 <span className="mx-2">·</span>
                 <span className="text-gray-800">{course.title}</span>
               </div>
