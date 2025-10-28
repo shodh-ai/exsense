@@ -399,13 +399,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
       try {
         const now = Date.now();
-        const accept = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
+        const acceptWindow = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
         const speakerId = participant?.identity || '';
         const isLocal = !!participant && !!roomInstance.localParticipant && (speakerId === roomInstance.localParticipant.identity);
         const isAgentLike = typeof speakerId === 'string' && speakerId.startsWith('simulated-agent-');
-        const isBrowserBot = typeof speakerId === 'string' && speakerId.startsWith('browser-bot-');
-        const isStudentLike = (!isAgentLike && !isBrowserBot) && (!!speakerId);
-        if (accept && (isLocal || isStudentLike || !participant)) {
+        // Accept any non-agent (including browser-bot) during PTT window, plus local/unknown
+        const accept = acceptWindow && (isLocal || !isAgentLike || !participant);
+        try { console.log('[PTT STT]', { speakerId, isLocal, isAgentLike, acceptWindow, accept, segs: transcriptions.length }); } catch {}
+        if (accept) {
           transcriptions.forEach((seg) => {
             const t = seg?.text;
             if (typeof t === 'string' && t.trim()) {

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type React from 'react';
 import type { Room } from 'livekit-client';
+import { Track } from 'livekit-client';
 
 interface UsePTTDeps {
   roomInstance: Room;
@@ -40,6 +41,10 @@ export function usePTT(deps: UsePTTDeps) {
       try { pttAcceptUntilTsRef.current = Date.now() + 60000; } catch {}
       if (roomInstance?.localParticipant) {
         await roomInstance.localParticipant.setMicrophoneEnabled(true);
+        try {
+          const pub = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
+          console.log('[PTT DIAG] mic enabled -> hasTrack:', !!pub, 'isMuted:', pub?.isMuted);
+        } catch {}
       }
       try { setIsAwaitingAIResponse(false); } catch {}
       try { if (thinkingTimeoutRef.current) { clearTimeout(thinkingTimeoutRef.current); thinkingTimeoutRef.current = null; } } catch {}
@@ -52,14 +57,20 @@ export function usePTT(deps: UsePTTDeps) {
   const stopPushToTalk = useCallback(async () => {
     try {
       if (roomInstance?.localParticipant) {
-        try { await roomInstance.localParticipant.setMicrophoneEnabled(false); } catch {}
+        try {
+          await roomInstance.localParticipant.setMicrophoneEnabled(false);
+          try {
+            const pub = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
+            console.log('[PTT DIAG] mic disabled -> hasTrack:', !!pub, 'isMuted:', pub?.isMuted);
+          } catch {}
+        } catch {}
       }
       try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 1; } catch {} }); } catch {}
       setIsPushToTalkActive(false);
       setIsMicEnabled(false);
       // Linger to accept late STT segments
-      try { pttAcceptUntilTsRef.current = Date.now() + 800; } catch {}
-      try { await new Promise(r => setTimeout(r, 850)); } catch {}
+      try { pttAcceptUntilTsRef.current = Date.now() + 1800; } catch {}
+      try { await new Promise(r => setTimeout(r, 1850)); } catch {}
       const text = (pttBufferRef.current || []).join(' ').trim();
       pttBufferRef.current = [];
       try { pttAcceptUntilTsRef.current = 0; } catch {}
