@@ -253,14 +253,12 @@ export default function Session() {
     const addBlock = useSessionStore((s) => s.addBlock);
     const updateBlock = useSessionStore((s) => s.updateBlock);
 
-    const [isIntroActive, setIsIntroActive] = useState(true);
     const [wbSessionId, setWbSessionId] = useState<string | null>(null);
     // Centralized diagramDefinition and generation state from store
     const diagramDefinition = useSessionStore((s) => s.diagramDefinition);
     const isGenerating = useSessionStore((s) => s.isDiagramGenerating);
     const SESSION_DEBUG = false;
 
-    const handleIntroComplete = () => setIsIntroActive(false);
     // Guard to prevent re-applying same diagram
     const lastAppliedDiagramRef = useRef<string | null>(null);
     const apiService = useApiService();
@@ -558,14 +556,12 @@ export default function Session() {
 
     // No dynamic session creation required on view change.
 
+    // MODIFIED PART: Use IntroPage as the loading indicator
     if (!isLoaded || isLoading) {
-        return <div className="w-full h-full flex items-center justify-center text-white">Initializing Session...</div>;
+        return <IntroPage />;
     }
     if (connectionError) {
         return <div className="w-full h-full flex items-center justify-center text-red-400">Connection Error: {connectionError}</div>;
-    }
-    if (isIntroActive) {
-        return <IntroPage onAnimationComplete={handleIntroComplete} />;
     }
 
     return (
@@ -616,4 +612,3 @@ export default function Session() {
         </>
     )
 }
-
