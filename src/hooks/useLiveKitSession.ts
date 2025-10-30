@@ -477,6 +477,41 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           return;
         }
 
+        // --- Handle backend-emitted tab events ---
+        if (data?.type === 'tab_opened' && typeof data.tab_id === 'string') {
+          try {
+            const tab = { id: data.tab_id, name: data.name || 'New Tab', url: data.url || 'about:blank' };
+            addTab(tab);
+            console.log('[Tabs] tab_opened registered:', tab);
+          } catch (e) {
+            console.warn('[Tabs] Failed to process tab_opened:', e);
+          }
+          return;
+        }
+
+        if (data?.type === 'tab_switched' && typeof data.tab_id === 'string') {
+          try {
+            setActiveTabIdInStore(data.tab_id);
+            console.log('[Tabs] tab_switched ->', data.tab_id);
+          } catch (e) {
+            console.warn('[Tabs] Failed to process tab_switched:', e);
+          }
+          return;
+        }
+
+        if (data?.type === 'tab_closed' && typeof data.closed_tab_id === 'string') {
+          try {
+            removeTab(data.closed_tab_id);
+            if (typeof data.active_tab_id === 'string' && data.active_tab_id) {
+              setActiveTabIdInStore(data.active_tab_id);
+            }
+            console.log('[Tabs] tab_closed ->', data.closed_tab_id, 'active now ->', data.active_tab_id);
+          } catch (e) {
+            console.warn('[Tabs] Failed to process tab_closed:', e);
+          }
+          return;
+        }
+
         // --- Handle AI debrief question relayed by the browser pod ---
         if (data?.type === 'ai_debrief_question' && typeof data?.text === 'string' && data.text.length > 0) {
           console.log('[FLOW] Received AI debrief question from pod:', data.text);
