@@ -424,7 +424,6 @@ export default function Session() {
     const userName = shouldInitializeLiveKit ? (user.emailAddresses[0]?.emailAddress || `user-${user.id}`) : '';
 
     const {
-
         room,
         isConnected,
         isLoading,
@@ -442,6 +441,7 @@ export default function Session() {
         switchTab,
         closeTab,
         sessionManagerSessionId,
+        latestTranscriptWindowed,
     } = useLiveKitSession(
         shouldInitializeLiveKit ? roomName : '',
         shouldInitializeLiveKit ? userName : '',
@@ -454,26 +454,20 @@ export default function Session() {
     const isPushToTalkActive = useSessionStore((s) => s.isPushToTalkActive);
     const showWaitingPill = useSessionStore((s) => s.showWaitingPill);
 
-    // Extract the latest transcript for the avatar bubble
+    // Extract the latest transcript for the avatar bubble (plain last message text) with 5s clear rule
     const [latestTranscript, setLatestTranscript] = useState("");
-
     useEffect(() => {
-        // When the array of messages changes, get the last one.
         if (transcriptionMessages.length > 0) {
-            // The message is formatted as "speaker: text". We just want the text.
             const lastMessage = transcriptionMessages[transcriptionMessages.length - 1];
             const colonIndex = lastMessage.indexOf(':');
             const transcriptText = colonIndex >= 0 ? lastMessage.substring(colonIndex + 1).trim() : lastMessage.trim();
             setLatestTranscript(transcriptText);
-            
-            // Clear the bubble after 5 seconds of no new transcripts
-            const timer = setTimeout(() => {
-                setLatestTranscript("");
-            }, 5000);
-            
+            const timer = setTimeout(() => { setLatestTranscript(""); }, 5000);
             return () => clearTimeout(timer);
         }
     }, [transcriptionMessages]);
+
+    // Transcript is also provided centrally by the hook as a rolling 10-word window
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -574,7 +568,7 @@ export default function Session() {
                   <StatusPill message="Waiting for your input..." type="ai" />
                 ) : null)}
 
-                <Sphere transcript={latestTranscript} />
+                <Sphere transcript={latestTranscriptWindowed} />
 
                 <div className='flex flex-col w-full h-full items-center justify-between'>
                     <SessionContent

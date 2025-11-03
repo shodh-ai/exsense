@@ -161,6 +161,8 @@ export interface UseLiveKitSessionReturn {
   // --- Push To Talk helpers ---
   startPushToTalk: () => Promise<void>;
   stopPushToTalk: () => Promise<void>;
+  // --- Derived UI values ---
+  latestTranscriptWindowed: string;
 }
 
 export interface LiveKitSpawnOptions {
@@ -222,7 +224,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // New state for UI display
   const [transcriptionMessages, setTranscriptionMessages] = useState<string[]>([]);
   const [statusMessages, setStatusMessages] = useState<string[]>([]);
-  
+  const [latestTranscriptWindowed, setLatestTranscriptWindowed] = useState<string>('');
+
   const agentServiceClientRef = useRef<any | null>(null); // deprecated RPC client (unused; DataChannel is used now)
   const pendingTasksRef = useRef<{ name: string; payload: any }[]>([]);
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
@@ -236,6 +239,28 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const testPingSentRef = useRef<boolean>(false);
   // Track whether we've registered the RPC handler to avoid duplicate registrations under StrictMode/HMR
   // RPC handler is deprecated; UI actions come over DataChannel now
+  // Rolling 10-word window and auto-clear timer for transcript bubble
+  const rollingWordsRef = useRef<string[]>([]);
+  const latestClearTimerRef = useRef<number | null>(null);
+
+  const updateTranscriptWindow = useCallback((text: string) => {
+    try {
+      const newWords = String(text || '').trim().split(/\s+/).filter(Boolean);
+      if (newWords.length === 0) return;
+      const next = [...rollingWordsRef.current, ...newWords].slice(-10);
+      rollingWordsRef.current = next;
+      setLatestTranscriptWindowed(next.join(' '));
+      if (latestClearTimerRef.current) {
+        clearTimeout(latestClearTimerRef.current);
+        latestClearTimerRef.current = null;
+      }
+      latestClearTimerRef.current = window.setTimeout(() => {
+        rollingWordsRef.current = [];
+        setLatestTranscriptWindowed('');
+        latestClearTimerRef.current = null;
+      }, 5000);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     isPushToTalkActiveRef.current = isPushToTalkActive;
@@ -398,6 +423,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant, _publication?: TrackPublication) => {
       if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
       try {
+
         const now = Date.now();
         const acceptWindow = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
         const speakerId = participant?.identity || '';
@@ -421,9 +447,11 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           const speaker = participant?.identity || 'Unknown';
           const message = `${speaker}: ${text}`;
           setTranscriptionMessages((prev) => [...prev.slice(-19), message]);
+          // Update rolling 10-word window for UI bubble
+          updateTranscriptWindow(text);
         }
       });
-    }, [setTranscriptionMessages]);
+    }, [setTranscriptionMessages, updateTranscriptWindow]);
 
     const handleDataReceived = useCallback(async (payload: Uint8Array, participant?: RemoteParticipant, kind?: any, topic?: string) => {
       if (!participant) return;
@@ -540,9 +568,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           const spk = (typeof data.speaker === 'string' && data.speaker.trim().length > 0) ? data.speaker : (participant?.identity || 'Student');
           const line = `${spk}: ${data.text}`;
           setTranscriptionMessages((prev) => [...prev.slice(-19), line]);
+          // Update rolling 10-word window for UI bubble
+          try { updateTranscriptWindow(String(data.text)); } catch {}
           // Also buffer into PTT when active or in linger window, if speaker is local student or unknown
           try {
             const now = Date.now();
+
             const accept = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
             const localId = roomInstance?.localParticipant?.identity || '';
             const isAgentLike = typeof spk === 'string' && spk.startsWith('simulated-agent-');
@@ -610,7 +641,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       } catch (error) {
         console.error('Failed to parse agent data packet:', error);
       }
-    }, [addTab, setActiveTabIdInStore, executeBrowserAction, visualizerBaseUrl, setTranscriptionMessages, setSuggestedResponses, setAgentIdentity, setIsConnected]);
+    }, [addTab, setActiveTabIdInStore, executeBrowserAction, visualizerBaseUrl, setTranscriptionMessages, setSuggestedResponses, setAgentIdentity, setIsConnected, updateTranscriptWindow]);
     
     // Wire LiveKit events via shared hook
     useLiveKitEvents(roomInstance, {
@@ -957,5 +988,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     // ptt
     startPushToTalk,
     stopPushToTalk,
+    latestTranscriptWindowed,
   };
 }
