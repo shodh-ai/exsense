@@ -52,6 +52,7 @@ export async function conversationalTurn(payload: {
   latest_expert_response: string;
   current_lo?: string;
   in_response_to_question?: string;
+  imprinting_environment: string,
 }) {
   const response = await fetch(`${IMPRINTER_URL}/session/turn`, {
     method: 'POST',
@@ -70,6 +71,7 @@ export async function conversationalTurnAudio(payload: {
   latest_expert_audio_b64: string;
   current_lo?: string;
   in_response_to_question?: string;
+  imprinting_environment?: string;
 }) {
   // Always post to /session/turn with audio fields; backend accepts latest_expert_audio_b64 or audio_b64
   const body = JSON.stringify({
@@ -89,12 +91,14 @@ export async function stageAsset(payload: {
   expert_id: string;
   session_id: string;
   curriculum_id?: string;
+  imprinting_environment?: string;
   file: File;
 }) {
   const formData = new FormData();
   formData.append('expert_id', payload.expert_id);
   formData.append('session_id', payload.session_id);
   if (payload.curriculum_id) formData.append('curriculum_id', payload.curriculum_id);
+  if (payload.imprinting_environment) formData.append('imprinting_environment', payload.imprinting_environment);
   formData.append('file', payload.file);
 
   // Try namespaced endpoint first
