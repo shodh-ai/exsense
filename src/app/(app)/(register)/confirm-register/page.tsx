@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
-import Sphere from "@/components/Sphere";
+import Sphere from "@/components/compositions/Sphere";
 import { useUser } from "@clerk/nextjs";
 
 export default function ConfirmRegister() {
@@ -101,3 +101,4 @@ export default function ConfirmRegister() {
         </div>
     );
 }
+

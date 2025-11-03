@@ -2,12 +2,12 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import CirriculumEditor from "@/components/CirriculumEditor";
-import { SectionData } from "@/components/CurriculumSection";
+import CirriculumEditor from "@/components/compositions/CirriculumEditor";
+import { SectionData } from "@/components/compositions/CurriculumSection";
 import { useApiService } from "@/lib/api";
 import { useCourse, useLessons } from "@/hooks/useApi";
 import { useQueryClient } from "@tanstack/react-query";
-import Footer from "@/components/Footer";
+import Footer from "@/components/compositions/Footer";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from 'uuid';
 

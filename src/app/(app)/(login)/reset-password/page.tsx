@@ -1,12 +1,12 @@
 "use client";
 
 import React, { JSX, useState } from "react";
-import Button from "@/components/button2";
-import { Card, CardContent } from "@/components/card";
+import Button from "@/components/ui/button2";
+import { Card, CardContent } from "@/components/ui/card";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
-import { Input } from "@/components/input";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import Sphere from "@/components/Sphere";
+import Sphere from "@/components/compositions/Sphere";
 
 export default function PasswordReset(): JSX.Element {
 
@@ -141,3 +141,4 @@ export default function PasswordReset(): JSX.Element {
         </div>
     );
 }
+

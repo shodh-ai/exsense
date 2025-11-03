@@ -4,17 +4,17 @@ import { Star } from "lucide-react";
 import React, { JSX, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
-import Link from "next/link"; // --- THIS IS THE FIX ---
+import Link from "next/link";
 
 // --- UI Components ---
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/accordion";
-import { Avatar, AvatarImage } from "@/components/avatar";
-import { Badge } from "@/components/badge";
-import { Button } from "@/components/button";
-import CourseMap from "@/components/CourseMap";
-import { Separator } from "@/components/separator";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import CourseMap from "@/components/compositions/CourseMap";
+import { Separator } from "@/components/ui/separator";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
 
 // --- Data Fetching Hooks ---
 import { useCourse, useEnrollInCourse, useMyEnrollments } from "@/hooks/useApi";
@@ -277,7 +277,7 @@ export default function StudentCoursePage(): JSX.Element {
           <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             <div className="mx-auto flex w-full max-w-[80%] flex-col gap-10 md:gap-12">
               <div className="flex items-center text-sm text-gray-500">
-                <Link href="/" className="hover:underline">Dashboard</Link>
+                <Link href="/student_dashboard" className="hover:underline">Dashboard</Link>
                 <span className="mx-2">·</span>
                 <span className="text-gray-800">{course.title}</span>
               </div>

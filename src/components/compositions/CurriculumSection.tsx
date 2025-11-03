@@ -2,9 +2,9 @@
 
 import React, { JSX, useState, useRef, useEffect } from "react";
 import { v4 as uuidv4 } from 'uuid';
-import { Button } from "@/components/button";
-import { Input } from "@/components/input";
-import { Textarea } from "@/components/textarea";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { PlusIcon, Trash2Icon, ChevronDown, EditIcon } from "lucide-react"; 
 import Link from "next/link";
 

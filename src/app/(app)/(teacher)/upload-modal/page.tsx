@@ -10,12 +10,12 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-} from "@/components/card";
-import { Input } from "@/components/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/tabs";
-import { Button } from "@/components/button";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
 
 // --- (No changes to constants and helper functions) ---
 const TRAINING_FILE_MIMES = [
@@ -209,3 +209,4 @@ function UploadResources(): JSX.Element {
 }
 
 export default UploadResources;
+

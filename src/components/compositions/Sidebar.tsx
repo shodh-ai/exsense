@@ -50,7 +50,7 @@ export function Sidebar() {
   }, [showProfileMenu]);
   const navLinks = [
     { href: dashboardPath, label: 'Dashboard', icon: '/Dashboard.svg' },
-    { href: '/session', label: 'Live Session', icon: '/CourseMap.svg' },
+    { href: '/sessionpage', label: 'Live Session', icon: '/CourseMap.svg' },
     { href: '/chat', label: 'Messages', icon: '/Chat.svg' },
     { href: '/notifications', label: 'Notifications', icon: '/Notification.svg' },
     { href: '/logout', label: 'Sign Out', icon: '/account.svg' },

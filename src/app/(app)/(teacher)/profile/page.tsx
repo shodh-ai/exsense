@@ -6,14 +6,14 @@ import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 
 // --- UI Components ---
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/Breadcrumb";
-import { Button } from "@/components/button";
-import { Card, CardContent } from "@/components/card";
-import { Input } from "@/components/input";
-import { Label } from "@/components/label";
-import { Textarea } from "@/components/textarea";
-import Sphere from "@/components/Sphere";
-import { ProfileStatsSkeleton } from "@/components/ProfileStatsSkeleton";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import Sphere from "@/components/compositions/Sphere";
+import { ProfileStatsSkeleton } from "@/components/utility/ProfileStatsSkeleton";
 
 // --- Hooks ---
 import { useProfileStats } from "@/hooks/useApi";
@@ -212,3 +212,6 @@ export default function TeacherProfilePage(): JSX.Element {
     </div>
   );
 }
+
+
+

@@ -2,10 +2,10 @@
 
 import { PlusIcon } from "lucide-react";
 import React, { JSX, useMemo, useState } from "react";
-import { Button } from "@/components/button";
-import { Card, CardContent } from "@/components/card";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTeacherCourses, useTeacherAnalytics } from "@/hooks/useApi";
@@ -168,3 +168,4 @@ const TeacherDashboard = (): JSX.Element => {
   );
 };
 export default TeacherDashboard;
+

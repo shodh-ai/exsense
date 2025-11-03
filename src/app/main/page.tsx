@@ -3,10 +3,10 @@
 import { LinkedinIcon } from "lucide-react"; // Unused icons removed
 import React, { JSX, useRef, useLayoutEffect, useCallback, useState } from "react";
 
-import { Button } from "@/components/button";
-import { Separator } from "@/components/separator";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 // useSessionStore is no longer needed on this page
-import ConfirmationModal from "@/components/ConfirmationModal";
+import ConfirmationModal from "@/components/compositions/ConfirmationModal";
 
 export default function ShodhAiWebsite(): JSX.Element {
   // Refs for DOM elements
@@ -93,10 +93,10 @@ export default function ShodhAiWebsite(): JSX.Element {
           <div className="flex justify-between items-center">
             <img className="w-[100px] h-auto sm:w-[150px] sm:h-[36px] lg:w-[190px] lg:h-[45px]" alt="Shodh AI Logo" src="/Frame1.svg" />
             <div className="flex items-center gap-x-2 sm:gap-x-3">
-              <Button 
+              {/*<Button 
                 onClick={handleDemoClick}
                 className="bg-transparent text-[#566FE9] rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px] border-[#566FE9] border-[1px]"
-              >
+              >*/}
                 Demo
               </Button>
               <Button className="bg-[#566FE9] text-white rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px]" asChild>
@@ -175,3 +175,4 @@ export default function ShodhAiWebsite(): JSX.Element {
     </main>
   );
 }
+
