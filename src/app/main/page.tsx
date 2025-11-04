@@ -96,9 +96,9 @@ export default function ShodhAiWebsite(): JSX.Element {
               {/*<Button 
                 onClick={handleDemoClick}
                 className="bg-transparent text-[#566FE9] rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px] border-[#566FE9] border-[1px]"
-              >*/}
+              >
                 Demo
-              </Button>
+              </Button>*/}
               <Button className="bg-[#566FE9] text-white rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px]" asChild>
                 <a href="/login">Login</a>
               </Button>
