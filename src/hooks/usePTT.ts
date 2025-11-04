@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import type React from 'react';
 import type { Room } from 'livekit-client';
 import { Track } from 'livekit-client';
@@ -32,12 +32,17 @@ export function usePTT(deps: UsePTTDeps) {
     startTask,
   } = deps;
 
+  const sentThisPTTRef = useRef<boolean>(false);
+  const lastSentTranscriptRef = useRef<string>('');
+  const lastSentAtRef = useRef<number>(0);
+
   const startPushToTalk = useCallback(async () => {
     try {
       try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 0; } catch {} }); } catch {}
       setIsPushToTalkActive(true);
       setIsMicEnabled(true);
       pttBufferRef.current = [];
+      sentThisPTTRef.current = false;
       try { pttAcceptUntilTsRef.current = Date.now() + 60000; } catch {}
       if (roomInstance?.localParticipant) {
         await roomInstance.localParticipant.setMicrophoneEnabled(true);
@@ -76,9 +81,25 @@ export function usePTT(deps: UsePTTDeps) {
       try { pttAcceptUntilTsRef.current = 0; } catch {}
       // Diagnostics: log transcript and decision
       console.log(`[PTT] stopPushToTalk triggered. Final transcript: "${text}"`);
+      // Per-press guard: ensure we send at most once for this PTT cycle
+      if (sentThisPTTRef.current) {
+        console.log('[PTT] Duplicate stop ignored (already sent for this press).');
+        return;
+      }
+      sentThisPTTRef.current = true;
+      const now = Date.now();
       if (text && text.length > 0) {
+        // Short-window dedupe across presses in case something triggers an immediate resend
+        const norm = text.trim();
+        const lastNorm = (lastSentTranscriptRef.current || '').trim();
+        if (lastNorm && norm === lastNorm && (now - (lastSentAtRef.current || 0)) < 120000) {
+          console.log('[PTT] Suppressing duplicate transcript resend within window.');
+          return;
+        }
         console.log('[PTT] Transcript is not empty. Sending "student_spoke_or_acted".');
         await startTask('student_spoke_or_acted', { transcript: text });
+        lastSentTranscriptRef.current = norm;
+        lastSentAtRef.current = now;
       } else {
         console.log('[PTT] Transcript is empty. Sending "student_stopped_listening".');
         await startTask('student_stopped_listening', {});

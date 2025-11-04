@@ -232,9 +232,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const isPushToTalkActiveRef = useRef<boolean>(false);
   const pttBufferRef = useRef<string[]>([]);
   const pttAcceptUntilTsRef = useRef<number>(0);
+  const pttRecentTextsRef = useRef<string[]>([]);
   const agentAudioElsRef = useRef<HTMLAudioElement[]>([]);
   const thinkingTimeoutRef = useRef<number | null>(null);
   const thinkingTimeoutMsRef = useRef<number>(Number(process.env.NEXT_PUBLIC_AI_THINKING_TIMEOUT_MS) || 8000);
+  // Dedupe guard for startTask student_spoke_or_acted
+  const lastSentTaskNameRef = useRef<string>('');
+  const lastSentTranscriptRef = useRef<string>('');
+  const lastSentAtMsRef = useRef<number>(0);
   // Ensure we only issue one RPC TestPing per session
   const testPingSentRef = useRef<boolean>(false);
   // Track whether we've registered the RPC handler to avoid duplicate registrations under StrictMode/HMR
@@ -419,6 +424,21 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       try { setShowWaitingPill(true); } catch {}
     }, [setIsAgentSpeaking, setIsAwaitingAIResponse, setShowWaitingPill]);
 
+    // Helper: append unique transcript text to PTT buffer
+    const appendUniquePTT = useCallback((raw: string) => {
+      try {
+        const norm = String(raw || '').trim();
+        if (!norm) return;
+        const recent = pttRecentTextsRef.current || [];
+        // Simple dedupe: avoid exact repeats within recent window of 10 entries
+        if (recent.includes(norm)) return;
+        pttBufferRef.current.push(norm);
+        recent.push(norm);
+        if (recent.length > 10) recent.shift();
+        pttRecentTextsRef.current = recent;
+      } catch {}
+    }, []);
+
     // Handler for transcription data (LiveKit STT)
     const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant, _publication?: TrackPublication) => {
       if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
@@ -429,14 +449,21 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         const speakerId = participant?.identity || '';
         const isLocal = !!participant && !!roomInstance.localParticipant && (speakerId === roomInstance.localParticipant.identity);
         const isAgentLike = typeof speakerId === 'string' && speakerId.startsWith('simulated-agent-');
+        const isAgentById = !!agentIdentity && speakerId === agentIdentity;
         // Accept any non-agent (including browser-bot) during PTT window, plus local/unknown
-        const accept = acceptWindow && (isLocal || !isAgentLike || !participant);
-        try { console.log('[PTT STT]', { speakerId, isLocal, isAgentLike, acceptWindow, accept, segs: transcriptions.length }); } catch {}
+        const accept = acceptWindow && (isLocal || (!isAgentLike && !isAgentById) || !participant);
+        try { console.log('[PTT STT]', { speakerId, isLocal, isAgentLike, isAgentById, acceptWindow, accept, segs: transcriptions.length }); } catch {}
         if (accept) {
-          transcriptions.forEach((seg) => {
+          transcriptions.forEach((seg: any) => {
             const t = seg?.text;
+            const isFinal = seg?.isFinal === true || seg?.final === true || seg?.type === 'final';
             if (typeof t === 'string' && t.trim()) {
-              pttBufferRef.current.push(t.trim());
+              // Prefer final segments when flag exists; if no flag present, still append with dedupe
+              if (('isFinal' in (seg || {})) || ('final' in (seg || {})) || ('type' in (seg || {}))) {
+                if (isFinal) appendUniquePTT(t);
+              } else {
+                appendUniquePTT(t);
+              }
             }
           });
         }
@@ -474,6 +501,41 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             console.log('[Tabs] Registered initial tab in store:', tab);
           } catch (e) {
             console.warn('[Tabs] Failed to register initial tab:', e);
+          }
+          return;
+        }
+
+        // --- Handle backend-emitted tab events ---
+        if (data?.type === 'tab_opened' && typeof data.tab_id === 'string') {
+          try {
+            const tab = { id: data.tab_id, name: data.name || 'New Tab', url: data.url || 'about:blank' };
+            addTab(tab);
+            console.log('[Tabs] tab_opened registered:', tab);
+          } catch (e) {
+            console.warn('[Tabs] Failed to process tab_opened:', e);
+          }
+          return;
+        }
+
+        if (data?.type === 'tab_switched' && typeof data.tab_id === 'string') {
+          try {
+            setActiveTabIdInStore(data.tab_id);
+            console.log('[Tabs] tab_switched ->', data.tab_id);
+          } catch (e) {
+            console.warn('[Tabs] Failed to process tab_switched:', e);
+          }
+          return;
+        }
+
+        if (data?.type === 'tab_closed' && typeof data.closed_tab_id === 'string') {
+          try {
+            removeTab(data.closed_tab_id);
+            if (typeof data.active_tab_id === 'string' && data.active_tab_id) {
+              setActiveTabIdInStore(data.active_tab_id);
+            }
+            console.log('[Tabs] tab_closed ->', data.closed_tab_id, 'active now ->', data.active_tab_id);
+          } catch (e) {
+            console.warn('[Tabs] Failed to process tab_closed:', e);
           }
           return;
         }
@@ -577,11 +639,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             const accept = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
             const localId = roomInstance?.localParticipant?.identity || '';
             const isAgentLike = typeof spk === 'string' && spk.startsWith('simulated-agent-');
+            const isAgentById = !!agentIdentity && spk === agentIdentity;
             const isBrowserBot = typeof spk === 'string' && spk.startsWith('browser-bot-');
-            const isStudentLike = (!isAgentLike && !isBrowserBot) && (!!spk);
+            const isStudentLike = (!isAgentLike && !isAgentById && !isBrowserBot) && (!!spk);
             if (accept && (spk === localId || isStudentLike)) {
               const t = String(data.text || '').trim();
-              if (t) pttBufferRef.current.push(t);
+              if (t) appendUniquePTT(t);
             }
           } catch {}
           return;
@@ -656,6 +719,20 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // --- API EXPOSED TO THE COMPONENTS ---
   // This is the clean interface your UI components will use to talk to the agent.
   const startTask = useCallback(async (taskName: string, payload: object) => {
+    // Idempotency: suppress identical transcript resends within a short window
+    try {
+      if (taskName === 'student_spoke_or_acted') {
+        const norm = String((payload as any)?.transcript || '').trim();
+        const lastName = lastSentTaskNameRef.current || '';
+        const lastNorm = (lastSentTranscriptRef.current || '').trim();
+        const lastAt = lastSentAtMsRef.current || 0;
+        const now = Date.now();
+        if (norm && lastName === 'student_spoke_or_acted' && lastNorm === norm && (now - lastAt) < 25000) {
+          console.log('[F2B DC] Suppressing duplicate student_spoke_or_acted within window');
+          return;
+        }
+      }
+    } catch {}
     const dcId = `dc_${uuidv4()}`;
     console.log(`%c[F2B DC PREP] ID: ${dcId}`, 'color: orange;', `Task: ${taskName}`, { roomState: roomInstance.state, agentIdentity });
     if (!agentIdentity || agentIdentity.startsWith('browser-bot-')) {
@@ -741,9 +818,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           }
         }
       } catch {}
-      // If a browser-bot is present, optionally double-send using the positional API without topic for extra safety
+      // If a browser-bot is present, optionally double-send using the positional API without topic for extra safety (opt-in)
       try {
-        const DOUBLE = (process.env.NEXT_PUBLIC_LK_DC_DOUBLE_SEND || 'true').toLowerCase() !== 'false';
+        const DOUBLE = (process.env.NEXT_PUBLIC_LK_DC_DOUBLE_SEND || 'false').toLowerCase() === 'true';
         const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
         const hasBrowser = remVals.some((p: any) => (p?.identity || '').startsWith('browser-bot-'));
         if (DOUBLE && hasBrowser) {
@@ -764,6 +841,13 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         }
       } catch {}
       console.log(`%c[F2B DC SUCCESS] ID: ${dcId}`, 'color: green;');
+      try {
+        if (taskName === 'student_spoke_or_acted') {
+          lastSentTaskNameRef.current = taskName;
+          lastSentTranscriptRef.current = String((payload as any)?.transcript || '').trim();
+          lastSentAtMsRef.current = Date.now();
+        }
+      } catch {}
     } catch (e) {
       console.error(`%c[F2B DC FAIL] ID: ${dcId}`, 'color: red;', `Failed to send '${taskName}' to agent='${agentIdentity}':`, e);
       setConnectionError(`Failed to start task: ${e instanceof Error ? e.message : String(e)}`);

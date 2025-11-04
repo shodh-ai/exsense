@@ -96,7 +96,7 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
       };
       if (roomToJoin) requestBody.room_name = roomToJoin;
 
-      const response = await fetch(`${tokenServiceUrl}/api/generate-room`, {
+      const response = await fetch(`${tokenServiceUrl}/api/webrtc/generate-room`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -189,7 +189,7 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
               try {
                 const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string;
                 const bearer = await getToken();
-                const joinResp = await fetch(`${tokenServiceUrl}/api/generate-room`, {
+                const joinResp = await fetch(`${tokenServiceUrl}/api/webrtc/generate-room`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
@@ -254,7 +254,7 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
                   } catch {}
                   const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string;
                   const bearer = await getToken();
-                  const devResp = await fetch(`${tokenServiceUrl}/api/dev/token-for-room`, {
+                  const devResp = await fetch(`${tokenServiceUrl}/api/webrtc/dev/token-for-room`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',

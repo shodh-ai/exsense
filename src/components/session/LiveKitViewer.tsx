@@ -106,11 +106,31 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
         if (obj && typeof obj === 'object') {
           // Handle remote clipboard content
           if (obj.type === 'clipboard_content' && typeof obj.content === 'string') {
+            const text = obj.content;
             try {
-              await navigator.clipboard.writeText(obj.content);
+              await navigator.clipboard.writeText(text);
               console.log('[LK][viewer] Copied from remote to local clipboard.');
             } catch (err) {
-              console.error('[LK][viewer] Failed to write to local clipboard:', err);
+              // Fallback: hidden textarea + execCommand('copy')
+              try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                const ok = document.execCommand && document.execCommand('copy');
+                document.body.removeChild(ta);
+                if (ok) {
+                  console.log('[LK][viewer] Copied via execCommand fallback.');
+                } else {
+                  console.error('[LK][viewer] execCommand fallback failed.');
+                }
+              } catch (fallbackErr) {
+                console.error('[LK][viewer] Clipboard write failed with fallback:', fallbackErr);
+              }
             }
           }
           // Handle capture metadata
@@ -463,13 +483,18 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
 
   const handleScroll = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
-    publishOrQueue({ action: 'scroll', dx: event.deltaX, dy: event.deltaY });
+    const coords = calculateCoords(event as any);
+    if (coords) {
+      publishOrQueue({ action: 'scroll', dx: event.deltaX, dy: event.deltaY, x: coords.x, y: coords.y });
+    } else {
+      publishOrQueue({ action: 'scroll', dx: event.deltaX, dy: event.deltaY });
+    }
   };
 
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-black rounded shadow-lg cursor-crosshair"
+      className="w-full h-full bg-black rounded shadow-lg cursor-default"
       style={{ outline: 'none', userSelect: 'none', WebkitUserSelect: 'none' }} // Hide focus ring & prevent selection
       onClick={handleClick}
       onContextMenu={handleContextMenu}
