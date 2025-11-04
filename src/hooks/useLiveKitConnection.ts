@@ -20,6 +20,7 @@ export interface UseLiveKitConnectionArgs {
   getToken: () => Promise<string | null>;
   roomName: string;
   userName: string;
+  userId?: string;
   courseId?: string;
   options?: { spawnAgent?: boolean; spawnBrowser?: boolean };
   setIsLoading: (v: boolean) => void;
@@ -48,6 +49,7 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
       getToken,
       roomName,
       userName,
+      userId,
       courseId,
       options,
       setIsLoading,
@@ -89,12 +91,40 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
       const urlParams = new URLSearchParams(window.location.search);
       const roomToJoin = urlParams.get('joinRoom');
 
+      // Server-authoritative session creation: request backend to create/find stable session id
+      let stableRoomName: string | null = null;
+      try {
+        if (!roomToJoin && courseId) {
+          const createResp = await fetch('/api/sessions/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${clerkToken}`,
+            },
+            body: JSON.stringify({ courseId }),
+          });
+          if (createResp.ok) {
+            const createData = await createResp.json();
+            if (createData && typeof createData.sessionId === 'string') {
+              stableRoomName = createData.sessionId;
+            }
+          }
+        }
+      } catch (e) {
+        // swallow; fallback below
+      }
+
       const requestBody: any = {
         curriculum_id: courseId,
-        spawn_agent: options?.spawnAgent !== false,
-        spawn_browser: options?.spawnBrowser !== false,
+        // When joining an existing (server-created) session, skip spawning from WebRTC service
+        spawn_agent: false,
+        spawn_browser: false,
       };
-      if (roomToJoin) requestBody.room_name = roomToJoin;
+      if (roomToJoin) {
+        requestBody.room_name = roomToJoin;
+      } else if (stableRoomName) {
+        requestBody.room_name = stableRoomName;
+      }
 
       const response = await fetch(`${tokenServiceUrl}/api/webrtc/generate-room`, {
         method: 'POST',

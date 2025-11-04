@@ -242,6 +242,11 @@ export class ApiService {
   async getUserProgress(userId: string): Promise<any> { return this.client.get(`/api/reports/progress/${userId}`); }
   async healthCheck(): Promise<{ status: string; timestamp: string; service: string }> { return this.client.get('/health'); }
 
+  // --- Sessions / Templates ---
+  async publishCourseTemplate(courseId: string, sessionId: string): Promise<{ success: boolean; message?: string }>{
+    return this.client.post('/api/sessions/publish-template', { courseId, sessionId } as any);
+  }
+
   // --- Admin API ---
   async getAdminUsers(): Promise<any[]> { return this.client.get('/api/admin/users'); }
   async enableUser(userId: string): Promise<{ id: string; isDisabled: boolean }> { return this.client.patch(`/api/admin/users/${userId}/enable`, {} as any); }

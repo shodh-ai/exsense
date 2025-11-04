@@ -170,7 +170,7 @@ export interface LiveKitSpawnOptions {
 
 export function useLiveKitSession(roomName: string, userName: string, courseId?: string, options?: LiveKitSpawnOptions): UseLiveKitSessionReturn {
   // --- CLERK AUTHENTICATION ---
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, userId } = useAuth();
   const visualizerBaseUrl = process.env.NEXT_PUBLIC_VISUALIZER_URL;
   const [browserIdentity, setBrowserIdentity] = useState<string | null>(null);
   const { executeBrowserAction } = useBrowserActionExecutor(roomInstance, browserIdentity || undefined);
@@ -256,6 +256,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     getToken,
     roomName,
     userName,
+    userId: userId || undefined,
     courseId,
     options,
     setIsLoading,
@@ -278,57 +279,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // --- EVENT & DATA CHANNEL HANDLERS ---
 
     const onConnected = useCallback(async () => {
-        // LOG 6: The final goal - did the event fire?
         console.log('[DIAGNOSTIC] 6. The onConnected event handler has FIRED!');
         console.log('[FLOW] LiveKit Connected');
         setIsLoading(false);
-        
-        // RPC registration removed; UI actions handled via DataChannel
-        // Set up microphone but keep it disabled by default
-        // ⭐ CRITICAL: Skip microphone setup for viewers - they cannot publish
-        const currentUserRole = useSessionStore.getState().userRole;
-        if (currentUserRole === 'viewer') {
-            console.log('[useLiveKitSession] Viewer mode: skipping microphone setup');
-        } else {
-            try {
-                if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Setting up microphone...');
-                
-                if (roomInstance.localParticipant) {
-                    // Enable microphone to set up the track
-                    if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Enabling microphone to create track...');
-                    await roomInstance.localParticipant.setMicrophoneEnabled(true);
-                    
-                    // Wait a moment for the track to be properly created
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    
-                    // Now disable it so user can't be heard by default
-                    if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Disabling microphone - user should not be heard by default');
-                    await roomInstance.localParticipant.setMicrophoneEnabled(false);
-                    
-                    // Verify the actual state after disabling
-                    const micTrack = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
-                    const actualMicEnabled = micTrack ? !micTrack.isMuted : false;
-                    if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Microphone setup complete - LiveKit mic state:', {
-                        hasTrack: !!micTrack,
-                        isMuted: micTrack?.isMuted,
-                        actualMicEnabled: actualMicEnabled
-                    });
-                }
-            } catch (error: any) {
-                console.error('[useLiveKitSession] Failed to setup microphone:', error);
-                
-                // Provide specific error messages based on the error type
-                if (error.name === 'NotAllowedError' || error.message?.includes('Permission dismissed')) {
-                    setConnectionError('Microphone access denied. Please click the microphone icon in your browser\'s address bar and allow microphone permissions, then refresh the page.');
-                } else if (error.name === 'NotFoundError') {
-                    setConnectionError('No microphone found. Please connect a microphone and refresh the page.');
-                } else if (error.name === 'NotReadableError') {
-                    setConnectionError('Microphone is being used by another application. Please close other apps using the microphone and refresh.');
-                } else {
-                    setConnectionError(`Failed to access microphone: ${error.message || 'Unknown error'}. Please check your microphone settings and refresh the page.`);
-                }
-            }
-        }
         // On first connect: start in 'AI is Thinking...' until first TTS or timeout
         try {
           setIsAwaitingAIResponse(true);
@@ -340,10 +293,9 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             thinkingTimeoutRef.current = null;
           }, thinkingTimeoutMsRef.current);
         } catch {}
-
         // Removed fallback agent identity inference. We rely solely on 'agent_ready'.
         // We wait for the agent_ready signal before setting isConnected to true
-    }, [setIsLoading, setConnectionError, setIsAwaitingAIResponse, setShowWaitingPill, thinkingTimeoutRef, thinkingTimeoutMsRef]);
+    }, [setIsLoading, setIsAwaitingAIResponse, setShowWaitingPill, thinkingTimeoutRef, thinkingTimeoutMsRef]);
     
     const onDisconnected = useCallback(() => {
       console.log('[FLOW] LiveKit Disconnected');

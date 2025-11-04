@@ -254,6 +254,8 @@ export default function Session() {
     const updateBlock = useSessionStore((s) => s.updateBlock);
 
     const [isIntroActive, setIsIntroActive] = useState(true);
+    const [n8nKeyInput, setN8nKeyInput] = useState<string>("");
+    const [n8nKeyStatus, setN8nKeyStatus] = useState<string>("");
     const [wbSessionId, setWbSessionId] = useState<string | null>(null);
     // Centralized diagramDefinition and generation state from store
     const diagramDefinition = useSessionStore((s) => s.diagramDefinition);
@@ -581,6 +583,35 @@ export default function Session() {
                 <Sphere transcript={latestTranscript} />
 
                 <div className='flex flex-col w-full h-full items-center justify-between'>
+                    <div className="fixed top-4 right-4 z-30 flex items-center gap-2 bg-white/10 backdrop-blur px-3 py-2 rounded-lg border border-white/20">
+                        <input
+                          type="text"
+                          value={n8nKeyInput}
+                          onChange={(e) => setN8nKeyInput(e.target.value)}
+                          placeholder="Enter n8n API key"
+                          className="w-72 px-2 py-1 rounded bg-white/20 text-white placeholder-gray-300 focus:outline-none"
+                        />
+                        <button
+                          onClick={async () => {
+                            try {
+                              const key = (n8nKeyInput || '').trim();
+                              if (!key) return;
+                              await sendBrowserInteraction({ action: 'set_n8n_config', parameters: { N8N_API_KEY: key } });
+                              setN8nKeyStatus('Saved');
+                              setTimeout(() => setN8nKeyStatus(''), 2000);
+                            } catch (e) {
+                              setN8nKeyStatus('Failed');
+                              setTimeout(() => setN8nKeyStatus(''), 3000);
+                            }
+                          }}
+                          className="px-3 py-1 rounded bg-[#566FE9] text-white"
+                        >
+                          Apply
+                        </button>
+                        {n8nKeyStatus ? (
+                          <span className="text-sm text-gray-200">{n8nKeyStatus}</span>
+                        ) : null}
+                    </div>
                     <SessionContent
                         activeView={activeView}
                         setActiveView={setActiveView}

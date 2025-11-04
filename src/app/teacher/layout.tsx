@@ -4,6 +4,7 @@ import { PageContentManager } from "@/components/PageContentManager";
 import { NavigationEvents } from "@/components/NavigationEvents";
 import SidebarContainer from "@/components/SidebarContainer"; // Use container to conditionally hide sidebar
 import React, { Suspense } from "react";
+import TeacherLayoutControls from "@/components/teacher/TeacherLayoutControls";
 
 export default function AppLayout({
   children,
@@ -25,6 +26,11 @@ export default function AppLayout({
 
       {/* Main Content Area */}
       <div className="absolute top-0 left-0 h-screen w-screen z-[1] flex flex-col items-center justify-start">
+        <div className="absolute top-0 right-0 p-4 z-[2]">
+          <Suspense fallback={null}>
+            <TeacherLayoutControls />
+          </Suspense>
+        </div>
         {/* 
           KEY CHANGE: The `pl-20` padding has been REMOVED from this line, 
           as the sidebar is now hidden by default and should not affect the content layout.
