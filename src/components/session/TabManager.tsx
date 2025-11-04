@@ -62,14 +62,14 @@ export const TabManager = ({ onSwitchTab, onOpenNewTab, onCloseTab }: { onSwitch
   
   return (
     <>
-      <nav className="flex w-full max-w-full items-center gap-3 pl-2 pr-1 py-1 bg-[#e9ebfd] rounded-lg">
+      <nav className="flex w-full max-w-full items-center gap-1 pl-2 pr-1 py-1 bg-[#e9ebfd] rounded-lg">
         {/* Navigation Buttons */}
-        <div className="relative flex-[0_0_auto] inline-flex items-center">
+        <div className="relative flex-[0_0_auto] inline-flex items-center pr-[12px]">
           <button className="h-auto gap-2.5 p-2 flex-[0_0_auto] bg-[#e9ebfd] hover:bg-[#d9dbf0] rounded-[100px]">
-            <ChevronLeft className="w-4 h-4 text-[#566fe9]" />
+            <ChevronLeft className="w-5 h-5 text-[#566fe9]" />
           </button>
           <button className="h-auto gap-2.5 p-2 flex-[0_0_auto] bg-[#e9ebfd] hover:bg-[#d9dbf0] rounded-[100px]">
-            <ChevronRight className="w-4 h-4 text-[#566fe9]" />
+            <ChevronRight className="w-5 h-5 text-[#566fe9]" />
           </button>
           <button className="h-auto gap-2.5 p-2 flex-[0_0_auto] bg-[#e9ebfd] hover:bg-[#d9dbf0] rounded-[100px]">
             <RotateCwIcon className="w-4 h-4 text-[#566fe9]" />
@@ -107,7 +107,7 @@ export const TabManager = ({ onSwitchTab, onOpenNewTab, onCloseTab }: { onSwitch
         {/* Add New Tab Button */}
         <button
           onClick={() => setIsDialogOpen(true)}
-          className="h-auto inline-flex p-2 flex-[0_0_auto] bg-white hover:bg-[#f5f6ff] items-center gap-2 rounded-[100px]"
+          className="h-auto inline-flex p-2 flex-[0_0_auto] bg-white hover:bg-[#f5f6ff] items-center gap-1 rounded-[100px]"
         >
           <PlusIcon className="w-4 h-4 text-[#566fe9]" />
         </button>

@@ -440,26 +440,29 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }, []);
 
     // Handler for transcription data (LiveKit STT)
-    const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant, _publication?: TrackPublication) => {
+    // ============================= FIX START ==============================
+    const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant) => {
+      if (!transcriptions || transcriptions.length === 0) return;
+  
       if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
+  
+      // --- PTT Buffer Logic (for sending user speech to agent) ---
+      // This part buffers your own speech when Push-To-Talk is active.
       try {
-
         const now = Date.now();
         const acceptWindow = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
         const speakerId = participant?.identity || '';
         const isLocal = !!participant && !!roomInstance.localParticipant && (speakerId === roomInstance.localParticipant.identity);
         const isAgentLike = typeof speakerId === 'string' && speakerId.startsWith('simulated-agent-');
         const isAgentById = !!agentIdentity && speakerId === agentIdentity;
-        // Accept any non-agent (including browser-bot) during PTT window, plus local/unknown
         const accept = acceptWindow && (isLocal || (!isAgentLike && !isAgentById) || !participant);
-        try { console.log('[PTT STT]', { speakerId, isLocal, isAgentLike, isAgentById, acceptWindow, accept, segs: transcriptions.length }); } catch {}
+  
         if (accept) {
-          transcriptions.forEach((seg: any) => {
+          transcriptions.forEach((seg) => {
             const t = seg?.text;
-            const isFinal = seg?.isFinal === true || seg?.final === true || seg?.type === 'final';
+            const isFinal = seg?.final === true || (seg as any)?.isFinal === true || (seg as any)?.type === 'final';
             if (typeof t === 'string' && t.trim()) {
-              // Prefer final segments when flag exists; if no flag present, still append with dedupe
-              if (('isFinal' in (seg || {})) || ('final' in (seg || {})) || ('type' in (seg || {}))) {
+              if (("final" in (seg || {})) || ("isFinal" in (seg || {})) || ("type" in (seg || {}))) {
                 if (isFinal) appendUniquePTT(t);
               } else {
                 appendUniquePTT(t);
@@ -467,18 +470,32 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             }
           });
         }
-      } catch {}
-      transcriptions.forEach((segment) => {
-        const text = segment.text?.trim();
-        if (text) {
-          const speaker = participant?.identity || 'Unknown';
-          const message = `${speaker}: ${text}`;
-          setTranscriptionMessages((prev) => [...prev.slice(-19), message]);
-          // Update rolling 10-word window for UI bubble
-          updateTranscriptWindow(text);
-        }
-      });
-    }, [setTranscriptionMessages, updateTranscriptWindow]);
+      } catch (e) {
+        console.warn('PTT buffering failed:', e);
+      }
+  
+      // --- UI Display Logic (to fix the "flash") ---
+  
+      // 1. Find the most complete text from the current batch of segments.
+      // The final segment is the most accurate, so we prefer its text.
+      const finalSegment = transcriptions.find(seg => seg.final);
+      const fullText = (finalSegment?.text || transcriptions.map(s => s.text).join('')).trim();
+  
+      if (!fullText) return;
+  
+      // 2. ALWAYS update the live, animated transcript window.
+      // This will show both interim and final results for a smooth animation.
+      updateTranscriptWindow(fullText);
+  
+      // 3. ONLY update the persistent "chat history" IF the transcript is final.
+      // This prevents the full sentence from flashing on the screen prematurely.
+      if (finalSegment) {
+        const speaker = participant?.identity || 'Unknown';
+        const message = `${speaker}: ${fullText}`;
+        setTranscriptionMessages((prev) => [...prev.slice(-19), message]);
+      }
+    }, [agentIdentity, appendUniquePTT, setTranscriptionMessages, updateTranscriptWindow]);
+    // ============================= FIX END ================================
 
     const handleDataReceived = useCallback(async (payload: Uint8Array, participant?: RemoteParticipant, kind?: any, topic?: string) => {
       if (!participant) return;
@@ -704,7 +721,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       } catch (error) {
         console.error('Failed to parse agent data packet:', error);
       }
-    }, [addTab, setActiveTabIdInStore, executeBrowserAction, visualizerBaseUrl, setTranscriptionMessages, setSuggestedResponses, setAgentIdentity, setIsConnected, updateTranscriptWindow]);
+    }, [addTab, setActiveTabIdInStore, executeBrowserAction, visualizerBaseUrl, setTranscriptionMessages, setSuggestedResponses, setAgentIdentity, setIsConnected, updateTranscriptWindow, appendUniquePTT, agentIdentity]);
     
     // Wire LiveKit events via shared hook
     useLiveKitEvents(roomInstance, {

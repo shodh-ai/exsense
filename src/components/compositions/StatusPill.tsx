@@ -28,7 +28,7 @@ const getIconForState = (message: string, type: 'ai' | 'notification') => {
     if (lowerCaseMessage === 'waiting for your input...') {
         return (
             <img 
-                src="/listen.svg" 
+                src="/general.svg" 
                 alt="Waiting for input" 
                 className={iconClasses} 
             />
@@ -38,7 +38,7 @@ const getIconForState = (message: string, type: 'ai' | 'notification') => {
     // Condition 3: Rest all cases for the AI
     return (
         <img 
-            src="/general.svg" 
+            src="/listen.svg" 
             alt="AI is Thinking" 
             className={`${iconClasses} animate-pulse`} 
         />
