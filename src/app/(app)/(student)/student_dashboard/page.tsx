@@ -110,7 +110,7 @@ const StudentDashboard = (): JSX.Element => {
                       <CardContent className="p-0">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
                           <img
-                            className="w-full h-40 object-cover sm:w-[88px] sm:h-[88px] sm:flex-shrink-0 sm:m-4"
+                            className="w-full h-40 rounded-lg object-cover sm:w-[88px] sm:h-[88px] sm:flex-shrink-0 sm:m-4"
                             alt={enrollment.course.title || "Course image"}
                             src={enrollment.course.imageUrl || "/1.png"}
                           />

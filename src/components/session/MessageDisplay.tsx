@@ -41,8 +41,7 @@ export default function MessageDisplay({ transcriptionMessages, statusMessages }
           </div>
         </div>
 
-        {/* Transcription panel intentionally removed. Transcripts are displayed on the avatar bubble via TranscriptEventEmitter. */}
-      </div>
+         </div>
     </div>
   );
 }
