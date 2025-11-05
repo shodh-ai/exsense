@@ -35,11 +35,18 @@ export interface UseLiveKitConnectionArgs {
   sessionStatusUrlRef: React.MutableRefObject<string | null>;
 }
 
+let lastGuardKey: string | null = null;
+
 export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
   const hasConnectStartedRef = useRef(false);
 
   const resetConnectGuard = useCallback(() => {
     hasConnectStartedRef.current = false;
+    try {
+      if (typeof window !== 'undefined' && lastGuardKey) {
+        sessionStorage.removeItem(lastGuardKey);
+      }
+    } catch {}
   }, []);
 
   const connectToRoom = useCallback(async () => {
@@ -64,17 +71,37 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
       sessionStatusUrlRef,
     } = args;
 
-    if (!roomName || !userName || !courseId) {
+    if (!userName || !courseId) {
+      try { console.warn('[LK_CONNECT] skip: missing basics', { hasRoomName: !!roomName, hasUserName: !!userName, hasCourseId: !!courseId }); } catch {}
       setIsLoading(false);
       if (!courseId) setConnectionError('Missing courseId. Please provide a valid courseId in the URL.');
       return;
     }
     if (room.state === ConnectionState.Connected || room.state === ConnectionState.Connecting) {
+      try { console.log('[LK_CONNECT] skip: already connecting/connected'); } catch {}
       return;
     }
     if (hasConnectStartedRef.current) {
+      try { console.log('[LK_CONNECT] skip: connect already started'); } catch {}
       return;
     }
+
+    // Cross-remount guard (TTL-based): prevent duplicate connects under Strict Mode/HMR
+    try {
+      if (typeof window !== 'undefined') {
+        const keyBase = `${courseId || 'na'}_${userId || userName || 'anon'}`;
+        const guardKey = `lk_connect_started_until_${keyBase}`;
+        lastGuardKey = guardKey;
+        const now = Date.now();
+        const until = parseInt(sessionStorage.getItem(guardKey) || '0', 10) || 0;
+        if (now < until) {
+          try { console.log('[LK_CONNECT] skip: TTL guard active', { guardKey, until, now }); } catch {}
+          return;
+        }
+        // Set a short TTL (10s) to dampen duplicate attempts
+        sessionStorage.setItem(guardKey, String(now + 10000));
+      }
+    } catch {}
 
     setIsLoading(true);
     setConnectionError(null);
@@ -95,12 +122,25 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
       let stableRoomName: string | null = null;
       try {
         if (!roomToJoin && courseId) {
-          const backendUrl = process.env.NEXT_PUBLIC_ONE_BACKEND_URL as string | undefined;
+          try {
+            if (typeof window !== 'undefined') {
+              const key = `lk_sess_create_until_${courseId}_${userId || userName || 'anon'}`;
+              const now = Date.now();
+              const until = parseInt(sessionStorage.getItem(key) || '0', 10) || 0;
+              if (now < until) {
+                throw new Error('Session creation throttled; please wait.');
+              }
+              sessionStorage.setItem(key, String(now + 15000));
+            }
+          } catch {}
+          const backendUrl = process.env.NEXT_PUBLIC_API_BASE_URL as string | undefined;
           if (!backendUrl) {
-            throw new Error('Configuration error: NEXT_PUBLIC_ONE_BACKEND_URL is not set.');
+            throw new Error('Configuration error: NEXT_PUBLIC_API_BASE_URL is not set.');
           }
 
-          const createResp = await fetch(`${backendUrl}/api/sessions/create`, {
+          const createUrl = `${backendUrl}/api/sessions/create`;
+          try { console.log('[LK_CREATE] POST', createUrl, { courseId }); } catch {}
+          const createResp = await fetch(createUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -115,8 +155,10 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
           }
 
           const createData = await createResp.json();
+          try { console.log('[LK_CREATE] status', createResp.status, 'data keys', Object.keys(createData || {})); } catch {}
           if (createData && typeof createData.sessionId === 'string') {
             stableRoomName = createData.sessionId;
+            try { console.log('[LK_CREATE] sessionId', stableRoomName); } catch {}
           } else {
             throw new Error('Backend did not return a valid sessionId.');
           }

@@ -271,9 +271,16 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     sessionStatusUrlRef,
   });
 
+  const connectToRoomRef = useRef(connectToRoom);
   useEffect(() => {
-    connectToRoom();
+    connectToRoomRef.current = connectToRoom;
   }, [connectToRoom]);
+  const readyToConnect = !!userName && !!courseId;
+  useEffect(() => {
+    if (readyToConnect) {
+      connectToRoomRef.current();
+    }
+  }, [readyToConnect]);
 
 
   // --- EVENT & DATA CHANNEL HANDLERS ---
