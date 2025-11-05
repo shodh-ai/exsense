@@ -24,6 +24,7 @@ import LoSelector from '@/components/imprinting/LoSelector';
 // --- MODIFICATION: Import the new modal component ---
 import { SendModal } from '@/components/compositions/SendModal';
 import { TabManager } from '@/components/session/TabManager';
+import { getBackendValue } from '@/config/environments';
 
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
@@ -530,8 +531,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     const handleIntroComplete = () => setIsIntroActive(false);
     const { user, isSignedIn, isLoaded } = useUser();
     const router = useRouter();
-    // --- NEW: Track active environment for recording/imprinting ---
-    const [imprintingEnvironment, setImprintingEnvironment] = useState<'browser' | 'vscode'>('browser');
+
     const SESSION_DEBUG = false;
     const DEV_BYPASS = true;
     // Disable legacy VNC session management; we use LiveKit data channel to control the browser pod
@@ -540,6 +540,13 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     const courseTitle = searchParams.get('title');
     const lessonId = searchParams.get('lessonId');
     const lessonTitle = searchParams.get('lessonTitle');
+    const lessonEnvironment = searchParams.get('environment');
+
+    // --- NEW: Track active environment for recording/imprinting ---
+    // Use centralized environment config for mapping display names to backend values
+    const [imprintingEnvironment, setImprintingEnvironment] = useState<string>(() =>
+        getBackendValue(lessonEnvironment)
+    );
 
 
     // --- MODIFICATION: Add state for the finish and finalize confirmation modals ---
@@ -547,8 +554,9 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false);
 
 
+
+    console.log('[TeacherPage] URL params:', { courseId, courseTitle, lessonId, lessonTitle, lessonEnvironment });
     
-    if (SESSION_DEBUG) console.log('Session page - Course details:', { courseId, courseTitle, lessonId, lessonTitle });
 
     // If a specific lessonId is provided, auto-start live imprinting for that LO
     useEffect(() => {
@@ -559,6 +567,16 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lessonId, lessonTitle]);
+
+    // Update imprinting environment when lesson environment changes from URL
+    useEffect(() => {
+        if (lessonEnvironment) {
+            const mappedEnv = getBackendValue(lessonEnvironment);
+            setImprintingEnvironment(mappedEnv);
+            console.log('[TeacherPage] Set imprinting environment from URL:', { lessonEnvironment, mappedEnv });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [lessonEnvironment]);
 
     // NOTE: Do not early-return here to avoid conditional hook calls. We will render a fallback later.
     
@@ -784,6 +802,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                         imprinting_mode: 'DEBRIEF_CONCEPTUAL',
                         latest_expert_audio_b64: audio_b64,
                         current_lo: currentLO || undefined,
+                        imprinting_environment: imprintingEnvironment,
                     });
                     const aiText = resp?.text || 'Got it. Let\'s continue.';
                     
@@ -1025,7 +1044,9 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                     session_id: roomName,
                     imprinting_mode: 'DEBRIEF_CONCEPTUAL',
                     latest_expert_response: msg,
-                    current_lo: currentLO || undefined
+                    current_lo: currentLO || undefined,
+                     imprinting_environment: imprintingEnvironment,
+                    
                 });
                 const aiText = resp?.text || 'Got it. Let\'s continue.';
                 
@@ -1180,6 +1201,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                         expert_id: user.id,
                         session_id: roomName,
                         curriculum_id: String(curriculumId),
+                        imprinting_environment: imprintingEnvironment,
                         file: audioFile,
                     });
                     audioAssetId = assetInfo.asset_id;
@@ -1308,7 +1330,13 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         
         try {
             setStatusMessage('Uploading asset...');
-            const assetInfo = await stageAsset({ expert_id: user.id, session_id: roomName, curriculum_id: String(curriculumId), file });
+            const assetInfo = await stageAsset({
+                expert_id: user.id,
+                session_id: roomName,
+                curriculum_id: String(curriculumId),
+                imprinting_environment: imprintingEnvironment,
+                file
+            });
             const item = { filename: assetInfo.filename || file.name, role: role, asset_id: assetInfo.asset_id };
             setStagedAssets(prev => [...prev, item]);
             
