@@ -6,14 +6,14 @@ import Link from "next/link";
 import { useUser } from "@clerk/nextjs"; // --- MODIFICATION: Import useUser hook ---
 
 // --- UI Components ---
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/accordion";
-import { Avatar, AvatarImage } from "@/components/avatar";
-import { Badge } from "@/components/badge";
-import { Button } from "@/components/button";
-import CourseMap from "@/components/CourseMap";
-import { Separator } from "@/components/separator";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import CourseMap from "@/components/compositions/CourseMap";
+import { Separator } from "@/components/ui/separator";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
 
 // --- State Management ---
 import { useNewCourseStore } from "@/lib/newCourseStore";
@@ -229,3 +229,4 @@ export default function NewCoursePreviewPage(): JSX.Element {
     </>
   );
 }
+

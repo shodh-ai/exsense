@@ -1,9 +1,9 @@
 // components/CourseMap.tsx
 "use client";
 import React from "react";
-import { Card } from "@/components/card";
+import { Card } from "@/components/ui/card";
 import Link from "next/link";
-import { Badge } from "./badge";
+import { Badge } from "@/components/ui/badge";
 
 // --- Data for the MOBILE course stages (Unchanged) ---
 const mobileCourseStages = [

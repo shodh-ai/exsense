@@ -1,8 +1,8 @@
-import ToasterClient from "@/components/ToasterClient";
-import QueryProvider from "@/components/QueryProvider";
-import { PageContentManager } from "@/components/PageContentManager";
-import { NavigationEvents } from "@/components/NavigationEvents";
-import SidebarContainer from "@/components/SidebarContainer"; // Use container to conditionally hide sidebar
+import ToasterClient from "@/components/providers/ToasterClient";
+import QueryProvider from "@/components/providers/QueryProvider";
+import { PageContentManager } from "@/components/utility/PageContentManager";
+import { NavigationEvents } from "@/components/utility/NavigationEvents";
+import SidebarContainer from "@/components/utility/SidebarContainer"; // Use container to conditionally hide sidebar
 import React, { Suspense } from "react";
 import TeacherLayoutControls from "@/components/teacher/TeacherLayoutControls";
 

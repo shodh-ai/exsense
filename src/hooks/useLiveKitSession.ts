@@ -161,6 +161,8 @@ export interface UseLiveKitSessionReturn {
   // --- Push To Talk helpers ---
   startPushToTalk: () => Promise<void>;
   stopPushToTalk: () => Promise<void>;
+  // --- Derived UI values ---
+  latestTranscriptWindowed: string;
 }
 
 export interface LiveKitSpawnOptions {
@@ -222,7 +224,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // New state for UI display
   const [transcriptionMessages, setTranscriptionMessages] = useState<string[]>([]);
   const [statusMessages, setStatusMessages] = useState<string[]>([]);
-  
+  const [latestTranscriptWindowed, setLatestTranscriptWindowed] = useState<string>('');
+
   const agentServiceClientRef = useRef<any | null>(null); // deprecated RPC client (unused; DataChannel is used now)
   const pendingTasksRef = useRef<{ name: string; payload: any }[]>([]);
   const microphoneTrackRef = useRef<AudioTrack | null>(null);
@@ -241,6 +244,28 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const testPingSentRef = useRef<boolean>(false);
   // Track whether we've registered the RPC handler to avoid duplicate registrations under StrictMode/HMR
   // RPC handler is deprecated; UI actions come over DataChannel now
+  // Rolling 10-word window and auto-clear timer for transcript bubble
+  const rollingWordsRef = useRef<string[]>([]);
+  const latestClearTimerRef = useRef<number | null>(null);
+
+  const updateTranscriptWindow = useCallback((text: string) => {
+    try {
+      const newWords = String(text || '').trim().split(/\s+/).filter(Boolean);
+      if (newWords.length === 0) return;
+      const next = [...rollingWordsRef.current, ...newWords].slice(-10);
+      rollingWordsRef.current = next;
+      setLatestTranscriptWindowed(next.join(' '));
+      if (latestClearTimerRef.current) {
+        clearTimeout(latestClearTimerRef.current);
+        latestClearTimerRef.current = null;
+      }
+      latestClearTimerRef.current = window.setTimeout(() => {
+        rollingWordsRef.current = [];
+        setLatestTranscriptWindowed('');
+        latestClearTimerRef.current = null;
+      }, 5000);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     isPushToTalkActiveRef.current = isPushToTalkActive;
@@ -374,8 +399,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }, []);
 
     // Handler for transcription data (LiveKit STT)
-    const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant, _publication?: TrackPublication) => {
+    // ============================= FIX START ==============================
+    const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant) => {
+      if (!transcriptions || transcriptions.length === 0) return;
+  
       if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
+  
+      // --- PTT Buffer Logic (for sending user speech to agent) ---
+      // This part buffers your own speech when Push-To-Talk is active.
       try {
         const now = Date.now();
         const acceptWindow = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
@@ -383,16 +414,14 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         const isLocal = !!participant && !!roomInstance.localParticipant && (speakerId === roomInstance.localParticipant.identity);
         const isAgentLike = typeof speakerId === 'string' && speakerId.startsWith('simulated-agent-');
         const isAgentById = !!agentIdentity && speakerId === agentIdentity;
-        // Accept any non-agent (including browser-bot) during PTT window, plus local/unknown
         const accept = acceptWindow && (isLocal || (!isAgentLike && !isAgentById) || !participant);
-        try { console.log('[PTT STT]', { speakerId, isLocal, isAgentLike, isAgentById, acceptWindow, accept, segs: transcriptions.length }); } catch {}
+  
         if (accept) {
-          transcriptions.forEach((seg: any) => {
+          transcriptions.forEach((seg) => {
             const t = seg?.text;
-            const isFinal = seg?.isFinal === true || seg?.final === true || seg?.type === 'final';
+            const isFinal = seg?.final === true || (seg as any)?.isFinal === true || (seg as any)?.type === 'final';
             if (typeof t === 'string' && t.trim()) {
-              // Prefer final segments when flag exists; if no flag present, still append with dedupe
-              if (('isFinal' in (seg || {})) || ('final' in (seg || {})) || ('type' in (seg || {}))) {
+              if (("final" in (seg || {})) || ("isFinal" in (seg || {})) || ("type" in (seg || {}))) {
                 if (isFinal) appendUniquePTT(t);
               } else {
                 appendUniquePTT(t);
@@ -400,16 +429,32 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             }
           });
         }
-      } catch {}
-      transcriptions.forEach((segment) => {
-        const text = segment.text?.trim();
-        if (text) {
-          const speaker = participant?.identity || 'Unknown';
-          const message = `${speaker}: ${text}`;
-          setTranscriptionMessages((prev) => [...prev.slice(-19), message]);
-        }
-      });
-    }, [setTranscriptionMessages, appendUniquePTT, agentIdentity]);
+      } catch (e) {
+        console.warn('PTT buffering failed:', e);
+      }
+  
+      // --- UI Display Logic (to fix the "flash") ---
+  
+      // 1. Find the most complete text from the current batch of segments.
+      // The final segment is the most accurate, so we prefer its text.
+      const finalSegment = transcriptions.find(seg => seg.final);
+      const fullText = (finalSegment?.text || transcriptions.map(s => s.text).join('')).trim();
+  
+      if (!fullText) return;
+  
+      // 2. ALWAYS update the live, animated transcript window.
+      // This will show both interim and final results for a smooth animation.
+      updateTranscriptWindow(fullText);
+  
+      // 3. ONLY update the persistent "chat history" IF the transcript is final.
+      // This prevents the full sentence from flashing on the screen prematurely.
+      if (finalSegment) {
+        const speaker = participant?.identity || 'Unknown';
+        const message = `${speaker}: ${fullText}`;
+        setTranscriptionMessages((prev) => [...prev.slice(-19), message]);
+      }
+    }, [agentIdentity, appendUniquePTT, setTranscriptionMessages, updateTranscriptWindow]);
+    // ============================= FIX END ================================
 
     const handleDataReceived = useCallback(async (payload: Uint8Array, participant?: RemoteParticipant, kind?: any, topic?: string) => {
       if (!participant) return;
@@ -561,9 +606,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
           const spk = (typeof data.speaker === 'string' && data.speaker.trim().length > 0) ? data.speaker : (participant?.identity || 'Student');
           const line = `${spk}: ${data.text}`;
           setTranscriptionMessages((prev) => [...prev.slice(-19), line]);
+          // Update rolling 10-word window for UI bubble
+          try { updateTranscriptWindow(String(data.text)); } catch {}
           // Also buffer into PTT when active or in linger window, if speaker is local student or unknown
           try {
             const now = Date.now();
+
             const accept = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
             const localId = roomInstance?.localParticipant?.identity || '';
             const isAgentLike = typeof spk === 'string' && spk.startsWith('simulated-agent-');
@@ -632,7 +680,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       } catch (error) {
         console.error('Failed to parse agent data packet:', error);
       }
-    }, [addTab, setActiveTabIdInStore, executeBrowserAction, visualizerBaseUrl, setTranscriptionMessages, setSuggestedResponses, setAgentIdentity, setIsConnected]);
+    }, [addTab, setActiveTabIdInStore, executeBrowserAction, visualizerBaseUrl, setTranscriptionMessages, setSuggestedResponses, setAgentIdentity, setIsConnected, updateTranscriptWindow, appendUniquePTT, agentIdentity]);
     
     // Wire LiveKit events via shared hook
     useLiveKitEvents(roomInstance, {
@@ -1000,5 +1048,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     // ptt
     startPushToTalk,
     stopPushToTalk,
+    latestTranscriptWindowed,
   };
 }

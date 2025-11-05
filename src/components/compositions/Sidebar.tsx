@@ -50,7 +50,7 @@ export function Sidebar() {
   }, [showProfileMenu]);
   const navLinks = [
     { href: dashboardPath, label: 'Dashboard', icon: '/Dashboard.svg' },
-    { href: '/session', label: 'Live Session', icon: '/CourseMap.svg' },
+    { href: '/sessionpage', label: 'Live Session', icon: '/CourseMap.svg' },
     { href: '/chat', label: 'Messages', icon: '/Chat.svg' },
     { href: '/notifications', label: 'Notifications', icon: '/Notification.svg' },
     { href: '/logout', label: 'Sign Out', icon: '/account.svg' },
@@ -77,7 +77,7 @@ export function Sidebar() {
         )}
       >
         <div className="flex-shrink-0">
-          <Image src="/favicon.svg" alt="ShodhAI Logo" width={28.1} height={28} />
+          <Image src="/Favicon.svg" alt="ShodhAI Logo" width={28.1} height={28} />
         </div>
         <div className="flex-1 flex flex-col justify-center">
           <nav className="flex flex-col items-center gap-6">

@@ -2,15 +2,15 @@
 
 import React, { JSX, useState, useRef, useEffect } from "react";
 import { v4 as uuidv4 } from 'uuid';
-import { Button } from "@/components/button";
-import { Input } from "@/components/input";
-import { Textarea } from "@/components/textarea";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { PlusIcon, Trash2Icon, ChevronDown, EditIcon } from "lucide-react"; 
 import Link from "next/link";
+import { ENVIRONMENTS, EnvironmentDisplayName } from "@/config/environments";
 
 // --- Type definitions ---
-const environments = ["VS Code Editor", "Salesforce", "Figma", "Jupyter", "Google Docs"] as const;
-type Environment = typeof environments[number];
+type Environment = EnvironmentDisplayName;
 export type TeachingMode = 'video' | 'text' | 'quiz' | 'document';
 
 // --- MODIFICATION START: The data structure is now flat ---
@@ -61,7 +61,7 @@ const EnvironmentDropdown = ({
       {isOpen && (
         <div className="origin-top-right absolute left-0 mt-2 w-56 rounded-md bg-white z-10">
           <div className="py-1" role="menu">
-            {environments.map((env) => (<a key={env} href="#" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem" onClick={(e) => { e.preventDefault(); handleSelect(env); }}>{env}</a>))}
+            {ENVIRONMENTS.map((env) => (<a key={env.displayName} href="#" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" role="menuitem" onClick={(e) => { e.preventDefault(); handleSelect(env.displayName as Environment); }}>{env.displayName}</a>))}
           </div>
         </div>
       )}
@@ -108,7 +108,7 @@ export const CurriculumSection = ({
             <div className="flex items-center flex-shrink-0">
                 {courseId && (
                     <Button asChild variant="ghost" size="icon" className="text-[#566FE9] hover:text-blue-700 hover:bg-blue-50 w-10 h-10 rounded-[100px]">
-                        <Link href={`/teacher?courseId=${courseId}&lessonId=${section.id}&lessonTitle=${encodeURIComponent(section.title)}`} title={`Teach this lesson: ${section.title}`}>
+  <Link href={`/teacher?courseId=${courseId}&lessonId=${section.id}&lessonTitle=${encodeURIComponent(section.title)}${section.environment ? `&environment=${encodeURIComponent(section.environment)}` : ''}`} title={`Teach this lesson: ${section.title}`}>
                             <EditIcon className="w-5 h-5" />
                         </Link>
                     </Button>

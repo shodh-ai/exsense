@@ -2,10 +2,10 @@
 
 import { SearchIcon } from "lucide-react";
 import React, { JSX } from "react";
-import { Button } from "@/components/button";
-import { Card, CardContent } from "@/components/card";
-import Sphere from "@/components/Sphere";
-import Footer from "@/components/Footer";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import Sphere from "@/components/compositions/Sphere";
+import Footer from "@/components/compositions/Footer";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 // The hook to fetch enrollments for the currently logged-in student
@@ -110,7 +110,7 @@ const StudentDashboard = (): JSX.Element => {
                       <CardContent className="p-0">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
                           <img
-                            className="w-full h-40 object-cover sm:w-[88px] sm:h-[88px] sm:flex-shrink-0 sm:m-4"
+                            className="w-full h-40 rounded-lg object-cover sm:w-[88px] sm:h-[88px] sm:flex-shrink-0 sm:m-4"
                             alt={enrollment.course.title || "Course image"}
                             src={enrollment.course.imageUrl || "/1.png"}
                           />
@@ -168,3 +168,4 @@ const StudentDashboard = (): JSX.Element => {
 };
 
 export default StudentDashboard;
+

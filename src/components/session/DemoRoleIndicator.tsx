@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Users, Copy, Check, X } from 'lucide-react';
 import { useSessionStore } from '@/lib/store';
-import { Button } from '@/components/button';
+import { Button } from '@/components/ui/button';
 
 /**
  * DemoRoleIndicator

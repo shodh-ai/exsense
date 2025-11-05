@@ -2,10 +2,10 @@
 
 import React from "react";
 import { usePathname } from "next/navigation";
-import { Sidebar } from "./Sidebar";
+import { Sidebar } from "@/components/compositions/Sidebar";
 
-// Paths where the sidebar should be hidden (all routes in (login) and (register) groups)
-const HIDDEN_PATH_PREFIXES = [
+// Exported so other modules can reuse it if needed
+export const HIDDEN_PATH_PREFIXES = [
   "/login",
   "/forgot-password",
   "/reset-password",

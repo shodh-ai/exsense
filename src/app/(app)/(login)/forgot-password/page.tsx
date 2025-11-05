@@ -2,11 +2,11 @@
 
 import React, { JSX, useState } from "react";
 import { useRouter } from "next/navigation";
-import Button from '@/components/button2';
-import { Card, CardContent } from "@/components/card";
-import { Input } from "@/components/input";
+import Button from '@/components/ui/button2';
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import ShodhAIHero from "@/components/(auth)/ShodhAIHero";
-import Sphere from "@/components/Sphere";
+import Sphere from "@/components/compositions/Sphere";
 
 // 1. Import the font
 import { Plus_Jakarta_Sans } from "next/font/google";
@@ -114,3 +114,4 @@ export default function ForgotPassword(): JSX.Element {
         </div>
     );
 }
+
