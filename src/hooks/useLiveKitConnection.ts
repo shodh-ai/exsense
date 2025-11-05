@@ -114,16 +114,26 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
         // swallow; fallback below
       }
 
+      const isJoining = !!roomToJoin;
+      // Defaults: presenter spawns; viewer join does not
+      let spawnAgent = !isJoining;
+      let spawnBrowser = !isJoining;
+      // Per-page overrides
+      if (options && typeof options.spawnAgent === 'boolean') {
+        spawnAgent = options.spawnAgent;
+      }
+      if (options && typeof options.spawnBrowser === 'boolean') {
+        spawnBrowser = options.spawnBrowser;
+      }
+
       const requestBody: any = {
         curriculum_id: courseId,
-        // When joining an existing (server-created) session, skip spawning from WebRTC service
-        spawn_agent: false,
-        spawn_browser: false,
+        spawn_agent: spawnAgent,
+        spawn_browser: spawnBrowser,
       };
       if (roomToJoin) {
+        // Only set room_name when explicitly joining an existing room via URL
         requestBody.room_name = roomToJoin;
-      } else if (stableRoomName) {
-        requestBody.room_name = stableRoomName;
       }
 
       const response = await fetch(`${tokenServiceUrl}/api/webrtc/generate-room`, {

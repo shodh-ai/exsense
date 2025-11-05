@@ -24,6 +24,7 @@ import LoSelector from '@/components/imprinting/LoSelector';
 // --- MODIFICATION: Import the new modal component ---
 import { SendModal } from '@/components/SendModal';
 import { TabManager } from '@/components/session/TabManager';
+import { PublishTemplateButton } from '@/components/teacher/PublishTemplateButton';
 
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
@@ -1430,6 +1431,9 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                         ) : (
                             <>
                                 <div className='flex flex-col w-full h-full items-center justify-between'>
+                                    <div className="fixed top-4 right-4 z-30">
+                                        <PublishTemplateButton courseId={String(curriculumId)} variant="compact" />
+                                    </div>
                                     <SessionContent
                                         activeView={activeView}
                                         imprintingMode={imprinting_mode}
