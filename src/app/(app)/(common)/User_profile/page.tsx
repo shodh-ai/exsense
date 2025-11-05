@@ -46,6 +46,7 @@ const StatItem = ({ icon, label, value }: { icon: string; label: string; value: 
 export default function ProfileDetails(): JSX.Element {
   const { isLoaded, isSignedIn, user } = useUser();
   const userRole = useMemo(() => (user?.publicMetadata?.role as string) || 'student', [user]);
+  const normalizedRole = useMemo(() => (userRole === 'expert' ? 'teacher' : userRole === 'learner' ? 'student' : 'student'), [userRole]);
   const { data: profileStats = [], isLoading: statsLoading } = useProfileStats();
   
   const [initialFormData, setInitialFormData] = useState<Record<string, string>>({});
@@ -145,10 +146,10 @@ export default function ProfileDetails(): JSX.Element {
   }
 
   return (
-    <div className="flex min-h-full w-full items-center justify-center bg-transparent p-4">
+    <div className="flex h-[95%] w-full items-center justify-center pt-10 bg-transparent  overflow-y-auto custom-scrollbar">
       <Sphere />
-      <div className="flex min-h-screen w-full items-start justify-center bg-transparent">
-        <main className="flex w-full max-w-4xl flex-col items-start gap-6 py-8 px-4">
+      <div className="flex  w-full items-start justify-center bg-transparent">
+        <main className="flex h-[90%] w-full max-w-4xl flex-col items-start gap-6 py-8 px-4 overflow-y-auto custom-scrollbar">
           <nav className="inline-flex items-center gap-3">
             <Button variant="outline" size="icon" className="h-7 w-7 rounded-full border-0 bg-white transition-colors hover:bg-gray-100">
               <ChevronLeftIcon className="h-6 w-6" />
@@ -156,7 +157,7 @@ export default function ProfileDetails(): JSX.Element {
             <Breadcrumb>
               <BreadcrumbList className="inline-flex items-center gap-2">
                 <BreadcrumbItem>
-                  <BreadcrumbLink href="#" className="font-medium text-[#8187a0] transition-colors hover:text-[#394169]">
+                  <BreadcrumbLink href={normalizedRole === 'teacher' ? '/teacher-dash' : '/student_dashboard'} className="font-medium text-[#8187a0] transition-colors hover:text-[#394169]">
                     Dashboard
                   </BreadcrumbLink>
                 </BreadcrumbItem>
@@ -169,7 +170,7 @@ export default function ProfileDetails(): JSX.Element {
           </nav>
           <section className="flex w-full flex-col items-start gap-6">
             <h1 className="text-3xl font-bold text-[#394169]">
-              {userRole === 'teacher' ? 'Instructor Profile' : 'Profile Details'}
+              {normalizedRole === 'teacher' ? 'Instructor Profile' : 'Student Profile'}
             </h1>
             <form onSubmit={handleSubmit} className="w-full">
               <Card className="w-full rounded-xl border border-solid border-[#c7ccf8] p-4">
