@@ -1,5 +1,5 @@
 "use client";
-import { XIcon, Star } from "lucide-react";
+import { XIcon, Star, ChevronLeftIcon } from "lucide-react";
 import React, { JSX } from "react";
 import {
   Accordion,
@@ -14,6 +14,14 @@ import CourseMap from "@/components/compositions/CourseMap";
 import { Separator } from "@/components/ui/separator";
 import Sphere from "@/components/compositions/Sphere";
 import Footer from "@/components/compositions/Footer";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
 
 // --- TYPE DEFINITIONS ---
 type CourseDetail = {
@@ -398,36 +406,34 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
   </section>
 );
 
-const Breadcrumb = () => (
-    <div className="flex items-center text-sm text-gray-500">
-      <a href="#" className="flex items-center hover:underline">
-        <svg
-          className="w-5 h-5 mr-2"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M15 19l-7-7 7-7"
-          ></path>
-        </svg>
+const BreadcrumbNav = () => (
+  <nav className="flex items-center gap-3 mb-6">
+    <Button variant="outline" size="icon" className="h-7 w-7 rounded-full border-0 bg-white transition-colors hover:bg-gray-100" asChild>
+      <a href="/student_dashboard">
+        <ChevronLeftIcon className="h-6 w-6" />
       </a>
-      <a href="/student_dashboard" className="hover:underline">
-        Dashboard
-      </a>
-      
-      <span className="mx-2">·</span>
-      <a href="/course-listing" className="hover:underline">
-        Explore Courses
-      </a>
-      <span className="mx-2">·</span>
-      <span className="text-gray-800">Course Overview</span>
-    </div>
-  );
+    </Button>
+    <Breadcrumb>
+      <BreadcrumbList className="inline-flex items-center gap-2">
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/student_dashboard" className="font-medium text-[#8187a0] transition-colors hover:text-[#394169]">
+            Dashboard
+          </BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator>·</BreadcrumbSeparator>
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/course-listing" className="font-medium text-[#8187a0] transition-colors hover:text-[#394169]">
+            Explore Courses
+          </BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator>·</BreadcrumbSeparator>
+        <BreadcrumbItem>
+          <BreadcrumbPage className="font-medium text-[#394169]">Course Overview</BreadcrumbPage>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
+  </nav>
+);
 
 // --- MAIN PAGE COMPONENT ---
 export default function MyCoursesPage(): JSX.Element {
@@ -460,7 +466,7 @@ export default function MyCoursesPage(): JSX.Element {
         <main className="flex-grow overflow-y-auto">
           <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             <div className="mx-auto flex w-full max-w-[80%] flex-col gap-10 md:gap-12">
-              <Breadcrumb />
+              <BreadcrumbNav />
               <div className="flex flex-col gap-6">
                 <CourseHeader />
                 <CourseBanner />

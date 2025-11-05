@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDownIcon, SearchIcon } from "lucide-react";
+import { ChevronDownIcon, SearchIcon, ChevronLeftIcon } from "lucide-react";
 import React, { JSX, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "next/font/google";
@@ -10,24 +10,19 @@ import CourseCard, { Course } from "@/components/compositions/CourseCard";
 import Sphere from "@/components/compositions/Sphere";
 import Footer from "@/components/compositions/Footer";
 import { useCourses } from "@/hooks/useApi";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
 
-const Breadcrumb = () => (
-  <div className="flex items-center text-sm text-gray-500 mb-4">
-    <a href="/student_dashboard" className="flex items-center hover:underline">
-      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path>
-      </svg>
-    </a>
-    <a href="/student_dashboard" className="hover:underline">Dashboard</a>
-    <span className="mx-2">·</span>
-    <span className="text-gray-800">Explore Courses</span>
-  </div>
-);
 
 const CoursesPage = (): JSX.Element => {
   const { data, isLoading, error } = useCourses();
@@ -79,7 +74,26 @@ const CoursesPage = (): JSX.Element => {
       <div className={`h-full w-full bg-transparent flex flex-col px-4 pt-4 pb-4 ${plusJakartaSans.className}`}>
         <main className="relative w-full h-[90%] max-w-4xl self-center rounded-3xl p-6 md:p-8 z-10 flex flex-col mt-0 overflow-hidden custom-scrollbar pr-2">
           <div className="sticky top-0 bg-transparent z-20 pb-6">
-            <Breadcrumb />
+            <nav className="flex items-center gap-3 mb-4">
+              <Button variant="outline" size="icon" className="h-7 w-7 rounded-full border-0 bg-white transition-colors hover:bg-gray-100" asChild>
+                <a href="/student_dashboard">
+                  <ChevronLeftIcon className="h-6 w-6" />
+                </a>
+              </Button>
+              <Breadcrumb>
+                <BreadcrumbList className="inline-flex items-center gap-2">
+                  <BreadcrumbItem>
+                    <BreadcrumbLink href="/student_dashboard" className="font-medium text-[#8187a0] transition-colors hover:text-[#394169]">
+                      Dashboard
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator>·</BreadcrumbSeparator>
+                  <BreadcrumbItem>
+                    <span className="font-medium text-[#394169]">Explore Courses</span>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+            </nav>
             <div className="w-full flex justify-between items-center mb-8">
               <h1 className="font-semibold text-black text-xl md:text-2xl">
                 Our Interactive Session
