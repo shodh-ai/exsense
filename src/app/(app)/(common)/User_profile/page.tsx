@@ -18,8 +18,23 @@ import Sphere from "@/components/compositions/Sphere";
 import { useProfileStats } from "@/hooks/useApi";
 import { ProfileStatsSkeleton } from "@/components/utility/ProfileStatsSkeleton";
 
-// --- THIS IS THE FIX ---
-// This constant needs to exist for the form rendering logic to work.
+// A custom hook for debouncing a value
+const useDebounce = (value: any, delay: number) => {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+};
+
 const formFieldsTemplate = [
   { id: "first-name", label: "First Name" },
   { id: "last-name", label: "Last Name" },
@@ -48,11 +63,14 @@ export default function ProfileDetails(): JSX.Element {
   const userRole = useMemo(() => (user?.publicMetadata?.role as string) || 'student', [user]);
   const normalizedRole = useMemo(() => (userRole === 'expert' ? 'teacher' : userRole === 'learner' ? 'student' : 'student'), [userRole]);
   const { data: profileStats = [], isLoading: statsLoading } = useProfileStats();
-  
+
   const [initialFormData, setInitialFormData] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"Saving..." | "All changes saved" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const debouncedFormData = useDebounce(formData, 1000); // 1-second debounce delay
 
   useEffect(() => {
     if (isLoaded && isSignedIn && user) {
@@ -74,32 +92,40 @@ export default function ProfileDetails(): JSX.Element {
     setFormData((prevData) => ({ ...prevData, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!user || !isFormDirty) return;
-    setIsSaving(true);
-    try {
-      await user.update({
-        firstName: formData["first-name"],
-        lastName: formData["last-name"],
-        unsafeMetadata: {
-          ...user.unsafeMetadata,
-          education: formData["education"],
-          country: formData["country"],
-        }
-      });
-      setInitialFormData(formData);
-      console.log("Profile updated successfully!");
-    } catch (error) {
-      console.error("Error updating profile:", error);
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const isFormDirty = useMemo(() => {
+    return JSON.stringify(formData) !== JSON.stringify(initialFormData);
+  }, [formData, initialFormData]);
 
-  const handleCancel = () => {
-    setFormData(initialFormData);
-  };
+  useEffect(() => {
+    const autoSave = async () => {
+      if (isFormDirty && user) {
+        setIsSaving(true);
+        setSaveStatus("Saving...");
+        try {
+          await user.update({
+            firstName: debouncedFormData["first-name"],
+            lastName: debouncedFormData["last-name"],
+            unsafeMetadata: {
+              ...user.unsafeMetadata,
+              education: debouncedFormData["education"],
+              country: debouncedFormData["country"],
+            }
+          });
+          setInitialFormData(debouncedFormData);
+          setSaveStatus("All changes saved");
+        } catch (error) {
+          console.error("Error updating profile:", error);
+          // Optionally, set an error status
+        } finally {
+          setIsSaving(false);
+          setTimeout(() => setSaveStatus(null), 2000); // Clear status after 2 seconds
+        }
+      }
+    };
+
+    autoSave();
+  }, [debouncedFormData, user, isFormDirty]);
+
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -112,10 +138,6 @@ export default function ProfileDetails(): JSX.Element {
       }
     }
   };
-
-  const isFormDirty = useMemo(() => {
-    return JSON.stringify(formData) !== JSON.stringify(initialFormData);
-  }, [formData, initialFormData]);
 
   const dynamicProfileStats = useMemo(() => {
     const fullName = `${formData["first-name"] || ""} ${formData["last-name"] || ""}`.trim();
@@ -172,7 +194,7 @@ export default function ProfileDetails(): JSX.Element {
             <h1 className="text-3xl font-bold text-[#394169]">
               {normalizedRole === 'teacher' ? 'Instructor Profile' : 'Student Profile'}
             </h1>
-            <form onSubmit={handleSubmit} className="w-full">
+            <form className="w-full">
               <Card className="w-full rounded-xl border border-solid border-[#c7ccf8] p-4">
                 <CardContent className="w-full p-0">
                   <div className="mb-5 flex flex-col items-center gap-6 md:flex-row md:items-center">
@@ -209,8 +231,7 @@ export default function ProfileDetails(): JSX.Element {
                     ))}
                   </div>
                   <div className="mt-6 flex justify-end gap-4">
-                    <Button type="button" variant="outline" onClick={handleCancel} disabled={!isFormDirty || isSaving}>Cancel</Button>
-                    <Button type="submit" disabled={!isFormDirty || isSaving}>{isSaving ? "Saving..." : "Save"}</Button>
+                    {saveStatus && <span className="text-gray-500">{saveStatus}</span>}
                   </div>
                 </CardContent>
               </Card>
@@ -221,6 +242,3 @@ export default function ProfileDetails(): JSX.Element {
     </div>
   );
 }
-
-
-
