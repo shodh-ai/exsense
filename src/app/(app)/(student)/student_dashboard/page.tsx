@@ -134,7 +134,7 @@ const StudentDashboard = (): JSX.Element => {
                                   </div>
                                 </div>
                               )}
-                              <div className="mt-1">
+                              {/* <div className="mt-1">
                                 <Button
                                   className="w-fit rounded-[30px] h-[32px] bg-[#566fe9] px-4 py-2 text-white text-sm"
                                   onClick={(e) => {
@@ -144,7 +144,7 @@ const StudentDashboard = (): JSX.Element => {
                                 >
                                   Start Session
                                 </Button>
-                              </div>
+                              </div> */}
                             </div>
                           </div>
                         </div>

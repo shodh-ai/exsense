@@ -36,3 +36,5 @@ body {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #4359c6; /* Color of the thumb on hover */
 }
+
+/* removed profile-specific scrollbar styles */

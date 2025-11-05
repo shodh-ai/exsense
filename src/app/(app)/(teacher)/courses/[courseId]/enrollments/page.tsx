@@ -53,7 +53,7 @@ export default function EnrolledStudentsPage(): JSX.Element {
     <>
       <Sphere/>
       <div className="w-full h-full flex flex-col bg-transparent">
-        <main className="flex-grow w-full overflow-y-auto">
+        <main className="flex-grow w-full overflow-y-auto custom-scrollbar">
           <div className="max-w-[850px] mx-auto pt-11 px-6 pb-20">
             <nav className="flex items-center gap-3 mb-6">
               <Button variant="ghost" size="sm" className="h-auto p-0.5 bg-white rounded-[30px]" onClick={() => router.back()}>

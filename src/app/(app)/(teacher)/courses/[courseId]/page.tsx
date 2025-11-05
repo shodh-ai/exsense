@@ -1,6 +1,6 @@
 "use client";
 
-import { Star } from "lucide-react";
+import { Star, ChevronLeftIcon } from "lucide-react";
 import React, { JSX, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -18,6 +18,13 @@ import CourseMap from "@/components/compositions/CourseMap";
 import { Separator } from "@/components/ui/separator";
 import Sphere from "@/components/compositions/Sphere";
 import Footer from "@/components/compositions/Footer";
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 // --- Type Definitions ---
 type CourseDetail = { icon: string; label: string; value: string; };
@@ -97,8 +104,27 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
   <section className="flex flex-col gap-6"><h2 className="text-xl font-bold text-[#394169]">FAQs</h2><Accordion type="single" collapsible className="w-full">{faqs.map((faq, index) => (<AccordionItem key={faq.id} value={`faq-${index}`} className="border-b border-solid border-gray-200 "><AccordionTrigger className="py-4 text-left text-base font-semibold text-[#394169]">{faq.question}</AccordionTrigger><AccordionContent className="pb-4 text-base text-[#8187a0]">{faq.answer}</AccordionContent></AccordionItem>))} </Accordion>
   </section>
 );
-const Breadcrumb = ({ courseTitle }: { courseTitle?: string }) => (
-  <div className="flex items-center text-sm text-gray-500"><a href="/teacher-dash" className="flex items-center hover:underline"><svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>Dashboard</a><span className="mx-1">·</span><span className="text-gray-800">{courseTitle || 'Course Overview'}</span></div>
+const BreadcrumbNav = ({ courseTitle }: { courseTitle?: string }) => (
+  <nav className="flex items-center gap-3 mb-6">
+    <Button variant="outline" size="icon" className="h-7 w-7 rounded-full border-0 bg-white transition-colors hover:bg-gray-100" asChild>
+      <a href="/teacher-dash">
+        <ChevronLeftIcon className="h-6 w-6" />
+      </a>
+    </Button>
+    <Breadcrumb>
+      <BreadcrumbList className="inline-flex items-center gap-2">
+        <BreadcrumbItem>
+          <BreadcrumbLink href="/teacher-dash" className="font-medium text-[#8187a0] transition-colors hover:text-[#394169]">
+            Dashboard
+          </BreadcrumbLink>
+        </BreadcrumbItem>
+        <BreadcrumbSeparator>·</BreadcrumbSeparator>
+        <BreadcrumbItem>
+          <span className="font-medium text-[#394169]">{courseTitle || 'Course Overview'}</span>
+        </BreadcrumbItem>
+      </BreadcrumbList>
+    </Breadcrumb>
+  </nav>
 );
 
 // --- MAIN PAGE COMPONENT ---
@@ -177,12 +203,12 @@ export default function TeacherCoursePage(): JSX.Element {
   return (
     <>
       <Sphere />
-      <div className="flex h-full w-full flex-col font-sans text-gray-900">
-        <main className="flex-grow overflow-y-auto">
+      <div className="flex h-full w-full flex-col font-sans text-gray-900 ">
+        <main className="flex-grow overflow-y-auto custom-scrollbar">
           <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             <div className="mx-auto flex w-full max-w-[80%] flex-col gap-24 md:gap-12">
               <div className="flex flex-col gap-6">
-                <Breadcrumb courseTitle={course.title} />
+                <BreadcrumbNav courseTitle={course.title} />
                 <CourseHeader courseId={course.id} status={course.status} onStatusChange={handleStatusChange} />
                 <CourseBanner imageUrl={course.imageUrl} />
               </div>
