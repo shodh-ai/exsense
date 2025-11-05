@@ -571,6 +571,7 @@ export default function Session() {
                 <Sphere transcript={latestTranscriptWindowed} />
 
                 <div className='flex flex-col w-full h-full items-center justify-between'>
+                    {/* n8n API key overlay removed as requested */}
                     <SessionContent
                         activeView={activeView}
                         setActiveView={setActiveView}
