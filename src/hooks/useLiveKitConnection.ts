@@ -95,7 +95,12 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
       let stableRoomName: string | null = null;
       try {
         if (!roomToJoin && courseId) {
-          const createResp = await fetch('/api/sessions/create', {
+          const backendUrl = process.env.NEXT_PUBLIC_ONE_BACKEND_URL as string | undefined;
+          if (!backendUrl) {
+            throw new Error('Configuration error: NEXT_PUBLIC_ONE_BACKEND_URL is not set.');
+          }
+
+          const createResp = await fetch(`${backendUrl}/api/sessions/create`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -103,15 +108,25 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
             },
             body: JSON.stringify({ courseId }),
           });
-          if (createResp.ok) {
-            const createData = await createResp.json();
-            if (createData && typeof createData.sessionId === 'string') {
-              stableRoomName = createData.sessionId;
-            }
+
+          if (!createResp.ok) {
+            const errorText = await createResp.text();
+            throw new Error(`Failed to create session on backend: ${createResp.status} ${errorText}`);
+          }
+
+          const createData = await createResp.json();
+          if (createData && typeof createData.sessionId === 'string') {
+            stableRoomName = createData.sessionId;
+          } else {
+            throw new Error('Backend did not return a valid sessionId.');
           }
         }
-      } catch (e) {
-        // swallow; fallback below
+      } catch (e: any) {
+        console.error('The server-authoritative session creation flow failed:', e);
+        setConnectionError(`Failed to create a session: ${e?.message || String(e)}`);
+        setIsLoading(false);
+        hasConnectStartedRef.current = false;
+        return;
       }
 
       const isJoining = !!roomToJoin;
@@ -134,6 +149,9 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
       if (roomToJoin) {
         // Only set room_name when explicitly joining an existing room via URL
         requestBody.room_name = roomToJoin;
+      } else if (stableRoomName) {
+        // Use server-authoritative stable room for token generation
+        requestBody.room_name = stableRoomName;
       }
 
       const response = await fetch(`${tokenServiceUrl}/api/webrtc/generate-room`, {
