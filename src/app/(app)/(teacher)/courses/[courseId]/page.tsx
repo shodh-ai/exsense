@@ -177,8 +177,8 @@ export default function TeacherCoursePage(): JSX.Element {
   return (
     <>
       <Sphere />
-      <div className="flex h-full w-full flex-col font-sans text-gray-900">
-        <main className="flex-grow overflow-y-auto">
+      <div className="flex h-full w-full flex-col font-sans text-gray-900 ">
+        <main className="flex-grow overflow-y-auto custom-scrollbar">
           <div className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             <div className="mx-auto flex w-full max-w-[80%] flex-col gap-24 md:gap-12">
               <div className="flex flex-col gap-6">
