@@ -83,7 +83,7 @@ export default function ShodhAiWebsite(): JSX.Element {
   ];
 
   return (
-    <main className="bg-[#f7f9ff] min-h-full w-full overflow-x-hidden">
+    <main className="bg-[#f7f9ff] min-h-full w-full overflow-x-hidden custom-scrollbar">
       <div className="relative flex flex-col h-screen w-full max-w-[88%] mx-auto">
         {/* Background elements */}
         <img className="absolute w-[320px] h-[320px] sm:w-[500px] sm:h-[500px] lg:w-[734px] lg:h-[733px] top-[20px] sm:top-[30px] right-0 object-cover opacity-80" alt="Element mash" src="/animation2.svg" />

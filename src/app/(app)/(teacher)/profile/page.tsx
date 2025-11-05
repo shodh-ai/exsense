@@ -154,7 +154,7 @@ export default function TeacherProfilePage(): JSX.Element {
   return (
     <div className="w-full h-full bg-transparent overflow-y-auto">
       <Sphere />
-      <main className="flex w-full max-w-4xl flex-col items-start gap-6 py-8 px-4 mx-auto">
+      <main className="flex w-full max-w-4xl flex-col items-start gap-6 py-8 px-4 mx-auto custom-scrollbar">
         <nav className="inline-flex items-center gap-3">
           <Link href="/teacher-dash">
             <Button variant="outline" size="icon" className="h-7 w-7 rounded-full border-0 bg-white hover:bg-gray-100">

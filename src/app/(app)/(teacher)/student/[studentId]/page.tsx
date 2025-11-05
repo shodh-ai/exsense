@@ -293,7 +293,7 @@ export default function StudentProfilePage(): JSX.Element {
     <>
       <Sphere />
       <div className="flex h-full w-full flex-col font-['Plus_Jakarta_Sans',_sans-serif] text-gray-900">
-        <main className="flex-grow overflow-y-auto">
+        <main className="flex-grow overflow-y-auto custom-scrollbar">
           <div className="relative z-10 mx-auto w-full max-w-[1440px] px-4 py-8 sm:px-6 md:py-12">
             {/* Central Content Container */}
             <div className="mx-auto flex w-full max-w-[850px] flex-col items-start gap-15 ">
