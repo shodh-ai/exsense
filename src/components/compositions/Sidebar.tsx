@@ -77,7 +77,7 @@ export function Sidebar() {
         )}
       >
         <div className="flex-shrink-0">
-          <Image src="/favicon.svg" alt="ShodhAI Logo" width={28.1} height={28} />
+          <Image src="/Favicon.svg" alt="ShodhAI Logo" width={28.1} height={28} />
         </div>
         <div className="flex-1 flex flex-col justify-center">
           <nav className="flex flex-col items-center gap-6">
