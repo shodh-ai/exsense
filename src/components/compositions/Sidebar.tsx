@@ -1,12 +1,13 @@
 "use client";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { cn } from '@/lib/utils';
-import ConfirmationModal from './ConfirmationModal';
-import { LogOut, User } from 'lucide-react'; // Make sure you have lucide-react installed
+import ConfirmationModal from './ConfirmationModal'; // Adjust path if necessary
+import { LogOut, User } from 'lucide-react';
+
 export function Sidebar() {
   const pathname = usePathname();
   const { isLoaded, user } = useUser();
@@ -17,22 +18,21 @@ export function Sidebar() {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [dashboardPath, setDashboardPath] = useState('');
-  // NEW: State for dynamic profile path based on role
   const [profilePath, setProfilePath] = useState('');
   const profileMenuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (isLoaded && user) {
       const role = user.publicMetadata.role;
-      if (role === 'expert') { // If the user is a teacher
+      if (role === 'expert') {
         setDashboardPath('/teacher-dash');
-        setProfilePath('/teacher_profile'); // Teacher profile page path
-      } else { // If the user is a student (or any other role)
+      } else {
         setDashboardPath('/student_dashboard');
-        setProfilePath('/student_profile'); // Student profile page path
       }
+      setProfilePath('/User_profile');
     }
   }, [isLoaded, user]);
-  // Effect to close the profile menu when clicking outside
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
@@ -48,20 +48,28 @@ export function Sidebar() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showProfileMenu]);
-  const navLinks = [
-    { href: dashboardPath, label: 'Dashboard', icon: '/Dashboard.svg' },
+
+  const navLinks = useMemo(() => [
+    { href: dashboardPath || '', label: 'Dashboard', icon: '/Dashboard.svg' },
     { href: '/sessionpage', label: 'Live Session', icon: '/CourseMap.svg' },
     { href: '/chat', label: 'Messages', icon: '/Chat.svg' },
     { href: '/notifications', label: 'Notifications', icon: '/Notification.svg' },
     { href: '/logout', label: 'Sign Out', icon: '/account.svg' },
-  ];
+  ], [dashboardPath]);
+
   useEffect(() => {
     setActiveLink(pathname);
   }, [pathname]);
+
   const handleConfirmSignOut = async () => {
     setIsLogoutModalOpen(false);
     await signOut({ redirectUrl: '/login' });
   };
+
+  if (!isLoaded || (!dashboardPath && !profilePath)) {
+    return null;
+  }
+
   return (
     <>
       <div
@@ -82,9 +90,13 @@ export function Sidebar() {
         <div className="flex-1 flex flex-col justify-center">
           <nav className="flex flex-col items-center gap-6">
             {navLinks.map((link, index) => {
+              // Skip rendering dashboard link if dashboardPath is not set yet
+              if (link.label === 'Dashboard' && !dashboardPath) return null;
+
               const isActive = activeLink.startsWith(link.href);
               const isHovered = hoveredLink === link.href;
               const isLogoutButton = index === navLinks.length - 1;
+
               if (isLogoutButton) {
                 return (
                   <div key={link.href} className="relative" ref={profileMenuRef}>
@@ -101,8 +113,7 @@ export function Sidebar() {
                         "bg-white rounded-lg shadow-xl py-2 w-48 text-sm",
                         "border border-gray-200/80 backdrop-blur-md"
                       )}>
-                        {/* THIS IS THE KEY CHANGE: Link to profilePath */}
-                        <Link href={profilePath} className="flex items-center gap-2 px-4 py-2 hover:bg-gray-100/70 cursor-pointer">
+                        <Link href={profilePath} className="flex items-center gap-2 px-4 py-2 hover:bg-gray-100/70 cursor-pointer" onClick={() => setShowProfileMenu(false)}>
                           <User className="w-4 h-4 text-gray-600" />
                           <span>Profile Details</span>
                         </Link>
@@ -124,11 +135,11 @@ export function Sidebar() {
               return (
                 <Link
                   key={link.href}
-                  href={link.href}
+                  href={link.href} // This should be safe now that dashboardPath is handled
                   aria-label={link.label}
                   onClick={() => {
                     setActiveLink(link.href);
-                    setShowProfileMenu(false); // Close popover if navigating to another link
+                    setShowProfileMenu(false);
                   }}
                   onMouseEnter={() => setHoveredLink(link.href)}
                   onMouseLeave={() => setHoveredLink(null)}
