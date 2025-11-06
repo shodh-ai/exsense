@@ -197,7 +197,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const removeTab = useSessionStore((s) => s.removeTab);
   const setActiveTabIdInStore = useSessionStore((s) => s.setActiveTabId);
   // Demo mode actions
-  const setUserRole = useSessionStore((s) => s.setUserRole);
   const setCurrentRoomName = useSessionStore((s) => s.setCurrentRoomName);
 
   // --- HOOK'S INTERNAL STATE ---
@@ -288,7 +287,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     setConnectionError,
     setLivekitUrl,
     setLivekitToken,
-    setUserRole,
     setCurrentRoomName,
     setSessionManagerSessionIdState,
     setSessionStatusUrlState,

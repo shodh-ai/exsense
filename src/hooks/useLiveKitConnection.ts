@@ -27,7 +27,6 @@ export interface UseLiveKitConnectionArgs {
   setConnectionError: (msg: string | null) => void;
   setLivekitUrl: (url: string) => void;
   setLivekitToken: (token: string) => void;
-  setUserRole: (role: 'presenter' | 'viewer') => void;
   setCurrentRoomName: (name: string) => void;
   setSessionManagerSessionIdState: (id: string | null) => void;
   setSessionStatusUrlState: (url: string | null) => void;
@@ -63,7 +62,6 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
       setConnectionError,
       setLivekitUrl,
       setLivekitToken,
-      setUserRole,
       setCurrentRoomName,
       setSessionManagerSessionIdState,
       setSessionStatusUrlState,
@@ -112,16 +110,15 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
       const clerkToken = await getToken();
       if (!clerkToken) throw new Error('Failed to get authentication token from Clerk.');
 
-      const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL;
-      if (!tokenServiceUrl) throw new Error('Missing NEXT_PUBLIC_WEBRTC_TOKEN_URL');
+      const backendUrl = process.env.NEXT_PUBLIC_API_BASE_URL as string | undefined;
+      if (!backendUrl) throw new Error('Backend URL is not configured (NEXT_PUBLIC_API_BASE_URL)');
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const roomToJoin = urlParams.get('joinRoom');
+      // Strict single-user model: no viewer join via URL params.
 
-      // Server-authoritative session creation: request backend to create/find stable session id
+      // Server-authoritative session creation: request backend to create/find stable session id for presenters
       let stableRoomName: string | null = null;
       try {
-        if (!roomToJoin && courseId) {
+        if (courseId) {
           try {
             if (typeof window !== 'undefined') {
               const key = `lk_sess_create_until_${courseId}_${userId || userName || 'anon'}`;
@@ -133,11 +130,6 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
               sessionStorage.setItem(key, String(now + 15000));
             }
           } catch {}
-          const backendUrl = process.env.NEXT_PUBLIC_API_BASE_URL as string | undefined;
-          if (!backendUrl) {
-            throw new Error('Configuration error: NEXT_PUBLIC_API_BASE_URL is not set.');
-          }
-
           const createUrl = `${backendUrl}/api/sessions/create`;
           try { console.log('[LK_CREATE] POST', createUrl, { courseId }); } catch {}
           const createResp = await fetch(createUrl, {
@@ -146,7 +138,7 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${clerkToken}`,
             },
-            body: JSON.stringify({ courseId }),
+            body: JSON.stringify({ courseId, spawnAgent: (options && typeof options.spawnAgent === 'boolean') ? options.spawnAgent : true }),
           });
 
           if (!createResp.ok) {
@@ -159,6 +151,11 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
           if (createData && typeof createData.sessionId === 'string') {
             stableRoomName = createData.sessionId;
             try { console.log('[LK_CREATE] sessionId', stableRoomName); } catch {}
+            // Capture session id for state immediately
+            try {
+              sessionIdRef.current = stableRoomName;
+              setSessionManagerSessionIdState(stableRoomName);
+            } catch {}
           } else {
             throw new Error('Backend did not return a valid sessionId.');
           }
@@ -170,59 +167,30 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
         hasConnectStartedRef.current = false;
         return;
       }
+      // Determine the room to join (always the created session)
+      const roomNameForToken = stableRoomName as string;
+      if (!roomNameForToken) throw new Error('No room determined to join');
 
-      const isJoining = !!roomToJoin;
-      // Defaults: presenter spawns; viewer join does not
-      let spawnAgent = !isJoining;
-      let spawnBrowser = !isJoining;
-      // Per-page overrides
-      if (options && typeof options.spawnAgent === 'boolean') {
-        spawnAgent = options.spawnAgent;
-      }
-      if (options && typeof options.spawnBrowser === 'boolean') {
-        spawnBrowser = options.spawnBrowser;
-      }
-
-      const requestBody: any = {
-        curriculum_id: courseId,
-        spawn_agent: spawnAgent,
-        spawn_browser: spawnBrowser,
-      };
-      if (roomToJoin) {
-        // Only set room_name when explicitly joining an existing room via URL
-        requestBody.room_name = roomToJoin;
-      } else if (stableRoomName) {
-        // Use server-authoritative stable room for token generation
-        requestBody.room_name = stableRoomName;
-      }
-
-      const response = await fetch(`${tokenServiceUrl}/api/webrtc/generate-room`, {
+      // Fetch token using new join-room endpoint
+      const tokenResp = await fetch(`${backendUrl}/api/webrtc/join-room`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${clerkToken}`,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({ room_name: roomNameForToken }),
       });
-      if (!response.ok) throw new Error(`Failed to fetch token: ${response.status} ${response.statusText}`);
+      if (!tokenResp.ok) throw new Error(`Failed to get join token: ${tokenResp.status} ${tokenResp.statusText}`);
+      const tokenData = await tokenResp.json();
+      const token = tokenData?.token as string | undefined;
+      const wsUrl = tokenData?.wsUrl as string | undefined;
+      if (!token || !wsUrl) throw new Error('Invalid token response from backend');
 
-      const data = await response.json();
-      if (!data.success) throw new Error('Token generation failed');
+      setCurrentRoomName(roomNameForToken);
 
-      const { studentToken: token, livekitUrl: wsUrl, roomName: actualRoomName } = data;
+      // sessionId already captured for presenters above; viewers use URL param (not a sess- id)
 
-      setUserRole(roomToJoin ? 'viewer' : 'presenter');
-      setCurrentRoomName(actualRoomName);
-
-      try {
-        const sid = (data.sessionId as string | null) || null;
-        if (sid && sid.startsWith('sess-')) {
-          sessionIdRef.current = sid;
-          setSessionManagerSessionIdState(sid);
-        }
-      } catch {}
-
-      const sessionStatusUrl: string | undefined = (data.sessionStatusUrl as string | undefined) || undefined;
+      const sessionStatusUrl: string | undefined = undefined;
       if (sessionStatusUrl) {
         const proxied = toLocalStatusUrl(sessionStatusUrl);
         sessionStatusUrlRef.current = proxied;
@@ -287,25 +255,19 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
                 console.log('[FLOW] Reconnecting to session room discovered by SessionManager:', { from: room.name, to: sessId });
               } catch {}
               try {
-                const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string;
                 const bearer = await getToken();
-                const joinResp = await fetch(`${tokenServiceUrl}/api/webrtc/generate-room`, {
+                const joinResp = await fetch(`${backendUrl}/api/webrtc/join-room`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
                     ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
                   },
-                  body: JSON.stringify({
-                    curriculum_id: (typeof ("" + ("")) === 'string') ? (undefined) : undefined, // placeholder (ignored by server when joining)
-                    room_name: sessId,
-                    spawn_agent: false,
-                    spawn_browser: false,
-                  }),
+                  body: JSON.stringify({ room_name: sessId }),
                 });
                 if (joinResp.ok) {
                   const joinData = await joinResp.json();
-                  const newToken = joinData?.studentToken as string | undefined;
-                  const newUrl = joinData?.livekitUrl as string | undefined;
+                  const newToken = joinData?.token as string | undefined;
+                  const newUrl = joinData?.wsUrl as string | undefined;
                   if (newToken && newUrl) {
                     try { await room.disconnect(); } catch {}
                     hasConnectStartedRef.current = false;
@@ -314,10 +276,10 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
                     await room.connect(newUrl, newToken);
                     try { console.log('[FLOW] Reconnected to session room:', sessId); } catch {}
                   } else {
-                    console.warn('[FLOW] generate-room join response missing token/url');
+                    console.warn('[FLOW] join-room response missing token/url');
                   }
                 } else {
-                  console.warn('[FLOW] generate-room join failed:', joinResp.status, joinResp.statusText);
+                  console.warn('[FLOW] join-room failed:', joinResp.status, joinResp.statusText);
                 }
               } catch (err) {
                 console.warn('[FLOW] Failed to reconnect to session room:', err);
@@ -352,9 +314,8 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
                     });
                     if (anyVideo) break;
                   } catch {}
-                  const tokenServiceUrl = process.env.NEXT_PUBLIC_WEBRTC_TOKEN_URL as string;
                   const bearer = await getToken();
-                  const devResp = await fetch(`${tokenServiceUrl}/api/webrtc/dev/token-for-room`, {
+                  const devResp = await fetch(`${backendUrl}/api/webrtc/dev/token-for-room`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
