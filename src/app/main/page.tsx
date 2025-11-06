@@ -1,6 +1,6 @@
 "use client";
 
-import { LinkedinIcon } from "lucide-react"; // Unused icons removed
+import { Link, LinkedinIcon } from "lucide-react"; // Unused icons removed
 import React, { JSX, useRef, useLayoutEffect, useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -100,7 +100,7 @@ export default function ShodhAiWebsite(): JSX.Element {
                 Demo
               </Button> */}
               <Button className="bg-[#566FE9] text-white rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px]" asChild>
-                <a href="/login">Login</a>
+                <Link href="/login">Login</Link>
               </Button>
             </div>
           </div>

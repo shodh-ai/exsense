@@ -107,9 +107,9 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
 const BreadcrumbNav = ({ courseTitle }: { courseTitle?: string }) => (
   <nav className="flex items-center gap-3 mb-6">
     <Button variant="outline" size="icon" className="h-7 w-7 rounded-full border-0 bg-white transition-colors hover:bg-gray-100" asChild>
-      <a href="/teacher-dash">
+      <Link href="/teacher-dash">
         <ChevronLeftIcon className="h-6 w-6" />
-      </a>
+      </Link>
     </Button>
     <Breadcrumb>
       <BreadcrumbList className="inline-flex items-center gap-2">

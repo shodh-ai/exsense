@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import { SectionData } from '@/components/CurriculumSection'; // Adjust this import path if needed
+import { SectionData } from '@/components/compositions/CurriculumSection'; // Adjust this import path if needed
 
 // Define the shape of the data for a new course
 interface NewCourseState {

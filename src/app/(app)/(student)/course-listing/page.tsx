@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDownIcon, SearchIcon, ChevronLeftIcon } from "lucide-react";
+import { ChevronDownIcon, SearchIcon, ChevronLeftIcon, Link } from "lucide-react";
 import React, { JSX, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "next/font/google";
@@ -76,9 +76,9 @@ const CoursesPage = (): JSX.Element => {
           <div className="sticky top-0 bg-transparent z-20 pb-6">
             <nav className="flex items-center gap-3 mb-4">
               <Button variant="outline" size="icon" className="h-7 w-7 rounded-full border-0 bg-white transition-colors hover:bg-gray-100" asChild>
-                <a href="/student_dashboard">
+                <Link href="/student_dashboard">
                   <ChevronLeftIcon className="h-6 w-6" />
-                </a>
+                </Link>
               </Button>
               <Breadcrumb>
                 <BreadcrumbList className="inline-flex items-center gap-2">

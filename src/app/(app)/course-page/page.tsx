@@ -1,5 +1,5 @@
 "use client";
-import { XIcon, Star, ChevronLeftIcon } from "lucide-react";
+import { XIcon, Star, ChevronLeftIcon, Link } from "lucide-react";
 import React, { JSX } from "react";
 import {
   Accordion,
@@ -409,9 +409,9 @@ const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
 const BreadcrumbNav = () => (
   <nav className="flex items-center gap-3 mb-6">
     <Button variant="outline" size="icon" className="h-7 w-7 rounded-full border-0 bg-white transition-colors hover:bg-gray-100" asChild>
-      <a href="/student_dashboard">
+      <Link href="/student_dashboard">
         <ChevronLeftIcon className="h-6 w-6" />
-      </a>
+      </Link>
     </Button>
     <Breadcrumb>
       <BreadcrumbList className="inline-flex items-center gap-2">
