@@ -88,10 +88,10 @@ const SphereComponent: React.FC<SphereProps> = ({ className }) => {
 // --- INTRO PAGE COMPONENT (MAIN EXPORT) ---
 // *** MODIFICATION HERE: Added onAnimationComplete prop ***
 interface IntroPageProps {
-  onAnimationComplete?: () => void;
+  onAnimationComplete: () => void;
 }
 
-export default function IntroPage({ onAnimationComplete = () => {} }: IntroPageProps) {
+export default function IntroPage({ onAnimationComplete }: IntroPageProps) {
     const [isIntroAnimating, setIsIntroAnimating] = useState(true);
     const sphereContainerRef = useRef<HTMLDivElement>(null);
     const targetRef = useRef<HTMLDivElement>(null);
