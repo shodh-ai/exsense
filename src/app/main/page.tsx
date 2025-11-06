@@ -1,11 +1,13 @@
 "use client";
 
-import { Link, LinkedinIcon } from "lucide-react"; // Unused icons removed
+// CORRECTION: The 'Link' from lucide-react was conflicting with the routing 'Link'.
+// We remove the lucide 'Link' icon and import the routing 'Link' component (assuming next/link).
+import { LinkedinIcon } from "lucide-react"; 
+import Link from "next/link"; // Assuming this is the Next.js Link component
 import React, { JSX, useRef, useLayoutEffect, useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-// useSessionStore is no longer needed on this page
 import ConfirmationModal from "@/components/compositions/ConfirmationModal";
 
 export default function ShodhAiWebsite(): JSX.Element {
@@ -99,7 +101,11 @@ export default function ShodhAiWebsite(): JSX.Element {
               >
                 Demo
               </Button> */}
-              <Button className="bg-[#566FE9] text-white rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px]" asChild>
+              <Button 
+                className="bg-[#566FE9] text-white rounded-[40px] py-2 sm:py-3 lg:py-5 font-medium text-sm sm:text-base text-center w-[85px] sm:w-[120px] lg:w-[150px]" 
+                asChild
+              >
+                {/* This is now the correct routing Link component */}
                 <Link href="/login">Login</Link>
               </Button>
             </div>
@@ -175,4 +181,3 @@ export default function ShodhAiWebsite(): JSX.Element {
     </main>
   );
 }
-
