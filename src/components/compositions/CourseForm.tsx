@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeftIcon, PlusIcon, Trash2Icon, UploadCloudIcon } from "lucide-react";
+import { ChevronLeftIcon, Trash2Icon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 
 // --- State Management & API Hooks ---
@@ -47,13 +47,15 @@ const DynamicInputList: React.FC<DynamicInputListProps> = ({ label, placeholder,
           <div key={index} className="flex items-center bg-white border border-[#c7ccf8] h-[50px] rounded-full ">
             <span className="flex-1 px-4 text-sm font-semibold text-[#394169]">{item}</span>
             <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full" onClick={() => handleRemoveItem(index)}>
-              <Trash2Icon className="w-5 h-5" />
+              <Trash2Icon className="w-5 h-5 text-[#566fe9]" />
             </Button>
           </div>
         ))}
         <div className="flex items-center bg-white border border-[#c7ccf8] rounded-full ">
           <Input placeholder={placeholder} className="flex-1 h-[50px] border-0 bg-transparent px-4 text-sm font-semibold" value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={handleKeyDown} />
-          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full" onClick={handleAddItem}><PlusIcon className="w-5 h-5" /></Button>
+          <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full" onClick={handleAddItem}>
+            <PlusIcon className="w-5 h-5 text-[#566fe9]" />
+          </Button>
         </div>
       </div>
     </div>
@@ -122,7 +124,9 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
         // and get back a URL to save in the course details.
         await api.updateCourse(cid, formState);
         toast.success("Course updated successfully!");
-        router.push(`/courses/${cid}`);
+        setTimeout(() => {
+          router.push(`/courses/${cid}`);
+        }, 3000);
       } catch (err) {
         toast.error(`Error: Could not update the course. ${(err as Error).message}`);
       } finally {
@@ -162,7 +166,9 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
 
         useNewCourseStore.getState().reset();
 
-        router.push(`/courses/${newCourse.id}/edit`);
+        setTimeout(() => {
+          router.push(`/courses/${newCourse.id}/edit`);
+        }, 3000);
 
       } catch (err) {
         toast.dismiss();
@@ -170,6 +176,14 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
         setIsSaving(false);
       }
     }
+  };
+
+  const handleDelete = async () => {
+    if (isEditMode && courseId) {
+      router.push(`/courses/${courseId}`);
+      return;
+    }
+    router.back();
   };
 
   if (isEditMode && isLoadingCourse) {
@@ -187,17 +201,32 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
               <nav className="flex items-center gap-2 text-sm font-semibold">
                 <Link href="/teacher-dash" className="text-[#8187a0] hover:underline">Dashboard</Link>
                 <span className="text-[#8187a0]">·</span>
-                <span className="text-[#394169]">{isEditMode ? 'Settings' : 'Course Details'}</span>
+                <span className="text-[#8187a0]">{isEditMode ? 'Settings' : 'Course Details'}</span>
               </nav>
             </header>
-            <h1 className="text-xl font-bold text-[#394169] mb-6">{isEditMode ? 'Update Course Details' : 'Add Course Details'}</h1>
+            <h1 className="text-xl font-bold text-[#394169] mb-6">{isEditMode ? 'Update Course Details' : 'Course Details'}</h1>
           </div>
 
           <Card className="border-[#c7ccf8] translate-y-[-1rem] animate-fade-in">
             <CardContent className="p-4 space-y-5">
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-[#394169]">Course Title</label>
-                <Input value={formState.title} onChange={(e) => handleUpdateField('title', e.target.value)} className={`h-[50px] rounded-full border border-[#c7ccf8] bg-white px-4`} placeholder={"Enter course title"} />
+                <div className="flex items-center bg-white border border-[#c7ccf8] rounded-full p-0">
+                  <Input
+                    value={formState.title}
+                    onChange={(e) => handleUpdateField('title', e.target.value)}
+                    className={`flex-1 h-[50px] border-0 bg-transparent px-4`}
+                    placeholder={"Enter course title"}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-auto h-10 rounded-full px-4"
+                    onClick={() => handleUpdateField('title', '')}
+                  >
+                    <img src="/deleteIcon.png" alt="Clear title" className="w-5 h-5 mr-2" />
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-[#394169]">Course Banner</label>
@@ -214,8 +243,7 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
                     className="w-auto h-10 rounded-full px-4"
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    <UploadCloudIcon className="w-5 h-5 mr-2" />
-                    Upload
+                    <img src="/Uploadimage.svg" alt="Upload" className="w-5 h-5 mr-2" />
                   </Button>
                   <input
                     type="file"
@@ -232,40 +260,69 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
                 )}
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-[#394169]">Course Description</label>
-                <Textarea value={formState.description} onChange={(e) => handleUpdateField('description', e.target.value)} className="h-[100px] border-[1px] border-[#c7ccf8] bg-white px- rounded-[12px]" />
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-[#394169]">Course Description</label>
+                  <span className="text-xs font-medium text-[#8187a0]">{(formState.description?.length ?? 0)}/500</span>
+                </div>
+                <Textarea
+                  value={formState.description}
+                  onChange={(e) => handleUpdateField('description', (e.target.value || '').slice(0, 500))}
+                  className="h-[100px] border-[1px] border-[#c7ccf8] bg-white px- rounded-[12px]"
+                />
               </div>
 
-              <DynamicInputList label="Course Highlights (Tags)" placeholder="Add new highlight" items={formState.tags} onItemsChange={(items) => handleUpdateField('tags', items)} />
-              <DynamicInputList label="Learning Outcomes" placeholder="e.g., Learn fundamentals" items={formState.learningOutcomes} onItemsChange={(items) => handleUpdateField('learningOutcomes', items)} />
-              <DynamicInputList label="Course Keywords (Skills)" placeholder="e.g., TensorFlow, NLP" items={formState.skills} onItemsChange={(items) => handleUpdateField('skills', items)} />
+              <DynamicInputList label="Course Highlights" placeholder="Add new highlight" items={formState.tags} onItemsChange={(items) => handleUpdateField('tags', items)} />
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-[#394169]">Select Course Difficulty</label>
-                <div className="bg-white border border-[#c7ccf8] rounded-full">
+                <div className="bg-white border border-[#c7ccf8] rounded-full p-1">
                   <ToggleGroup type="single" value={formState.difficulty} onValueChange={(val) => val && handleUpdateField('difficulty', val)} className="justify-start">
-                    {["Beginner", "Intermediate", "Advanced"].map(level => (
-                      <ToggleGroupItem key={level} value={level} className="w-[150px] h-[50px] rounded-full data-[state=on]:bg-[#e9ebfd] "><span className="text-sm font-semibold text-[#566fe9]">{level}</span></ToggleGroupItem>
+                    {[
+                      { label: "Beginner", icon: "/BeginnerIcon.png" },
+                      { label: "Intermediate", icon: "/IntermediateIcon.png" },
+                      { label: "Expert", icon: "/AdvancedIcon.png" },
+                    ].map(({ label, icon }) => (
+                      <ToggleGroupItem key={label} value={label} className="w-[150px] h-[42px] rounded-full data-[state=on]:bg-[#e9ebfd] ">
+                        <span className="flex items-center justify-center gap-2">
+                          <img src={icon} alt={`${label} icon`} className="w-5 h-5" />
+                          <span className="text-sm font-semibold text-[#566fe9]">{label}</span>
+                        </span>
+                      </ToggleGroupItem>
                     ))}
                   </ToggleGroup>
                 </div>
               </div>
 
+              <DynamicInputList label="Learning Outcomes" placeholder="e.g., Learn fundamentals" items={formState.learningOutcomes} onItemsChange={(items) => handleUpdateField('learningOutcomes', items)} />
+              <DynamicInputList label="Course Keywords (Skills)" placeholder="e.g., TensorFlow, NLP" items={formState.skills} onItemsChange={(items) => handleUpdateField('skills', items)} />
+
             </CardContent>
           </Card>
 
-          <div className="h-full space-y-4 mt-6">
-
-            <Link href="/courses/new/preview" passHref>
-              <Button asChild variant="outline" className="w-full h-auto px-7 py-4 rounded-full border-2 border-[#566fe9] text-[#566fe9] hover:bg-[#e9ebfd] hover:text-[#566fe9] mb-[16px]">
-                <span className="text-sm font-semibold">Preview Course Details</span>
+          <div className="h-full space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Button
+                variant="outline"
+                onClick={handleDelete}
+                className="w-full h-auto px-7 py-4 rounded-full border-1 border-[#566fe9] text-[#566fe9] hover:bg-[#e9ebfd] hover:text-[#566fe9]"
+              >
+                <span className="text-sm font-semibold">Delete Course</span>
               </Button>
-            </Link>
+
+              <Button
+                asChild
+                variant="outline"
+                className="w-full h-auto px-7 py-4 rounded-full border-1 border-[#566fe9] text-[#566fe9] hover:bg-[#e9ebfd] hover:text-[#566fe9]"
+              >
+                <Link href="/courses/new/preview" passHref>
+                  <span className="text-sm font-semibold">Preview Course Details</span>
+                </Link>
+              </Button>
+            </div>
 
             <Button onClick={handleSave} disabled={isSaving} className="w-full h-auto px-7 pt-4 py-4 rounded-full bg-[#566fe9] hover:bg-[#4557d2]">
-              <span className="text-sm font-semibold text-white">{isSaving ? 'Saving...' : (isEditMode ? 'Update Course Details' : 'Save & Continue to Curriculum')}</span>
+              <span className="text-sm font-semibold text-white">{isSaving ? 'Saving...' : (isEditMode ? 'Update Course Details' : 'Update Course Details')}</span>
             </Button>
-
           </div>
 
         </div>
@@ -275,4 +332,3 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
     </>
   );
 }
-

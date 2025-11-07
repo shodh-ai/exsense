@@ -41,15 +41,15 @@ const StudentDashboard = (): JSX.Element => {
     : Math.round(numericProgress.reduce((sum: number, p: number) => sum + p, 0) / numericProgress.length);
 
   const overviewCards = [
-    { title: "Courses in Progress", value: inProgressCount === null ? "—" : String(inProgressCount), positive: true },
-    { title: "Completed Courses", value: completedCount === null ? "—" : String(completedCount), positive: true },
-    { title: "Average Progress", value: averageProgress === null ? "—" : `${averageProgress}%`, positive: averageProgress !== null ? averageProgress >= 50 : true },
+    { title: "Average Score", value: inProgressCount === null ? "—" : `${inProgressCount}%`, positive: true },
+    { title: "Total Time Spent", value: completedCount === null ? "—" : `${completedCount}%`, positive: true },
+    { title: "Completion Rate", value: averageProgress === null ? "—" : `${averageProgress}%`, positive: averageProgress !== null ? averageProgress >= 50 : true },
   ];
 
   return (
     <>
       <Sphere />
-      <div className="relative w-full max-h-[87%] overflow-x-hidden ">
+      <div className="relative w-full max-h-[87%] overflow-x-hidden custom-scrollbar ">
         <div className="flex flex-col w-full max-w-4xl mx-auto pt-16 px-4 sm:px-6 lg:px-8 pb-10 relative z-10">
           
           {/* My Performance Summary section */}
@@ -81,16 +81,16 @@ const StudentDashboard = (): JSX.Element => {
           <section className="flex flex-col gap-5 w-full">
             <div className="flex flex-wrap items-center justify-between w-full gap-2">
               <h2 className="font-bold text-[18px] leading-[22px] text-[#394169]">
-                My Enrolled Courses
+                My Courses
               </h2>
               <Button asChild variant="ghost" className="bg-[#566fe91a] rounded-[40px] text-[#566fe9] hover:bg-[#566fe930] h-[32px] px-4 py-2 flex items-center gap-1">
                 <Link href="/course-listing">
                   <SearchIcon className="w-4 h-4" />
-                  <span className="font-semibold text-[12px] leading-[16px]">Browse</span>
+                  <span className="font-semibold text-[12px] leading-[16px]">Browse Course</span>
                 </Link>
               </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
+            <div className="grid grid-cols-1 gap-4 w-full">
               {/* --- RENDER STATES --- */}
               {isLoading && <p>Loading your enrolled courses...</p>}
               {error && <p className="text-red-500">Error loading your courses.</p>}
@@ -101,36 +101,36 @@ const StudentDashboard = (): JSX.Element => {
                 enrollment.course && (
                   <div key={enrollment.id} className="block">
                     <Card
-                      className="border border-[#566fe966] rounded-xl bg-white overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+                      className="border border-[#E7E8FF] rounded-[12px] bg-white overflow-hidden hover:shadow-md transition-shadow cursor-pointer w-[417px] h-[120px]"
                       onClick={() => router.push(`/course/${enrollment.course!.id}`)}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => { if (e.key === 'Enter') router.push(`/course/${enrollment.course!.id}`); }}
                     >
-                      <CardContent className="p-0">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
+                      <CardContent className="p-4 h-full">
+                        <div className="flex flex-row items-center gap-2.5 h-full">
                           <img
-                            className="w-full h-40 rounded-lg object-cover sm:w-[88px] sm:h-[88px] sm:flex-shrink-0 sm:m-4"
+                            className="rounded-[8px] object-cover w-[88px] h-[88px] flex-shrink-0"
                             alt={enrollment.course.title || "Course image"}
                             src={enrollment.course.imageUrl || "/1.png"}
                           />
-                          <div className="flex flex-col flex-1 gap-3 min-w-0 p-4 sm:p-0 sm:pr-4">
+                          <div className="flex flex-col flex-1 gap-3 min-w-0">
                             <div className="flex flex-col gap-0.5">
-                              <h3 className="font-semibold text-[14px] leading-tight text-[#394169] truncate">
+                              <h3 className="font-semibold text-[16px] leading-[20px] text-[#394169] truncate" style={{ fontFamily: 'Plus Jakarta Sans' }}>
                                 {enrollment.course.title || "Untitled Course"}
                               </h3>
                               <p className="font-semibold text-[12px] leading-[16px] text-[#8187a0]">
-                                {enrollment.course.instructorName || 'Instructor not specified'}
+                                Studied 5 days ago
                               </p>
                             </div>
-                            <div className="flex flex-col gap-2">
+                            <div className="flex flex-col gap-3">
                               {typeof enrollment.progress === 'number' && (
                                 <div>
                                   <p className="font-semibold text-[12px] leading-[16px] text-[#394169] mb-1">
                                     {enrollment.progress}% complete
                                   </p>
-                                  <div className="w-full bg-gray-200 rounded-full h-1.5">
-                                    <div className="bg-[#566fe9] h-1.5 rounded-full" style={{ width: `${enrollment.progress}%` }}></div>
+                                  <div className="w-full bg-[#E7E8FF] rounded-full h-2">
+                                    <div className="bg-[#7C83F3] h-2 rounded-full" style={{ width: `${enrollment.progress}%` }}></div>
                                   </div>
                                 </div>
                               )}
