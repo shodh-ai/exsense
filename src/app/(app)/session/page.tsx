@@ -458,6 +458,7 @@ export default function Session() {
 
     // Extract the latest transcript for the avatar bubble
     const [latestTranscript, setLatestTranscript] = useState("");
+    const transcriptClearTimerRef = useRef<number | null>(null);
 
     useEffect(() => {
         // When the array of messages changes, get the last one.
@@ -467,15 +468,53 @@ export default function Session() {
             const colonIndex = lastMessage.indexOf(':');
             const transcriptText = colonIndex >= 0 ? lastMessage.substring(colonIndex + 1).trim() : lastMessage.trim();
             setLatestTranscript(transcriptText);
-            
-            // Clear the bubble after 5 seconds of no new transcripts
-            const timer = setTimeout(() => {
-                setLatestTranscript("");
-            }, 5000);
-            
-            return () => clearTimeout(timer);
+
+            // If AI is currently speaking, keep transcript visible (no auto-clear)
+            if (isAgentSpeaking) {
+                if (transcriptClearTimerRef.current) {
+                    clearTimeout(transcriptClearTimerRef.current);
+                    transcriptClearTimerRef.current = null;
+                }
+            } else {
+                // If not speaking, clear after 5s of inactivity
+                if (transcriptClearTimerRef.current) {
+                    clearTimeout(transcriptClearTimerRef.current);
+                }
+                transcriptClearTimerRef.current = window.setTimeout(() => {
+                    setLatestTranscript("");
+                    transcriptClearTimerRef.current = null;
+                }, 5000);
+            }
         }
-    }, [transcriptionMessages]);
+        return () => {
+            // Do not clear here; speaking effect manages lifecycle
+        };
+    }, [transcriptionMessages, isAgentSpeaking]);
+
+    // When agent speaking state changes, keep transcript visible during speaking
+    // and schedule a short clear after speaking ends
+    useEffect(() => {
+        if (isAgentSpeaking) {
+            if (transcriptClearTimerRef.current) {
+                clearTimeout(transcriptClearTimerRef.current);
+                transcriptClearTimerRef.current = null;
+            }
+        } else {
+            if (latestTranscript) {
+                if (transcriptClearTimerRef.current) {
+                    clearTimeout(transcriptClearTimerRef.current);
+                }
+                // Clear shortly after TTS finishes
+                transcriptClearTimerRef.current = window.setTimeout(() => {
+                    setLatestTranscript("");
+                    transcriptClearTimerRef.current = null;
+                }, 3000);
+            }
+        }
+        return () => {
+            // no-op cleanup; timers are cleared on re-runs as needed
+        };
+    }, [isAgentSpeaking, latestTranscript]);
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
