@@ -78,6 +78,9 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
     const [isMusicExplicitlyPaused, setIsMusicExplicitlyPaused] = useState(false);
     // Use transcript from props instead of local state
     const transcript = transcriptProp;
+    const isAgentSpeaking = useSessionStore((s) => s.isAgentSpeaking);
+    const [highlightIndex, setHighlightIndex] = useState(0);
+    const highlightTimerRef = useRef<number | null>(null);
 
     // --- Refs for values that don't trigger re-renders ---
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -104,6 +107,7 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
     // --- Sync state to refs to avoid stale closures in callbacks ---
     useEffect(() => { isAudioActiveRef.current = isAudioActive; }, [isAudioActive]);
     useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+
     useEffect(() => { suggestedResponsesRef.current = displaySuggestions || []; }, [displaySuggestions]);
     useEffect(() => { promptRef.current = promptText; }, [promptText]);
 
@@ -113,6 +117,39 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
             console.log("Sphere is mounted. Transcript is now received via props from useLiveKitSession hook.");
         }
     }, []);
+
+    useEffect(() => {
+        const words = String(transcript || '').trim().length ? String(transcript).trim().split(/\s+/) : [] as string[];
+        if (highlightTimerRef.current) {
+            clearInterval(highlightTimerRef.current);
+            highlightTimerRef.current = null;
+        }
+        setHighlightIndex(0);
+        if (isAgentSpeaking && words.length > 0) {
+            const wps = 2.5;
+            const stepMs = Math.max(120, Math.round(1000 / wps));
+            highlightTimerRef.current = window.setInterval(() => {
+                setHighlightIndex((i) => {
+                    if (i >= words.length) {
+                        if (highlightTimerRef.current) {
+                            clearInterval(highlightTimerRef.current);
+                            highlightTimerRef.current = null;
+                        }
+                        return i;
+                    }
+                    return i + 1;
+                });
+            }, stepMs);
+        } else {
+            setHighlightIndex(words.length);
+        }
+        return () => {
+            if (highlightTimerRef.current) {
+                clearInterval(highlightTimerRef.current);
+                highlightTimerRef.current = null;
+            }
+        };
+    }, [transcript, isAgentSpeaking]);
 
     // --- AUDIO INITIALIZATION & CONTROL ---
     const initializeAudio = useCallback(() => {
@@ -255,7 +292,6 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
         };
     }, [currentEmotion, isMusicExplicitlyPaused, isMicEnabled]);
 
-
     // =================================================================
     // --- CORE THREE.JS RENDER LOGIC ---
     // =================================================================
@@ -276,7 +312,6 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
         currentMount.appendChild(renderer.domElement);
         const clock = new THREE.Clock();
         const refractionTextureBackground = new THREE.Color('#e0e5f0');
-
 
         // --- 2. LIGHTS & CONTROLS ---
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
@@ -307,7 +342,6 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
         const shellMaterial = new THREE.ShaderMaterial({ vertexShader: shellVertexShader, fragmentShader: shellFragmentShader, uniforms: { u_time: { value: 0 }, u_frequency: { value: 0 }, u_amplitude: { value: 0 }, u_tide_direction: { value: new THREE.Vector3(1, 0, 0) }, u_scene_texture: { value: renderTargetForShell.texture }, u_refraction_strength: { value: 0.1 }, u_shell_opacity: { value: 0.2 }, u_rim_power: { value: 0 }, u_rim_color: { value: new THREE.Color() }, u_shininess: { value: 60.0 }, u_light_direction: { value: directionalLight.position }, }, transparent: true, });
         const shell = new THREE.Mesh(shellGeometry, shellMaterial);
         blobGroup.add(shell);
-
 
         // --- 4. SIZING AND POSITIONING ---
         const setBlobSizeAndPosition = () => {
@@ -399,33 +433,33 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
 
             // Position transcript/suggestions bubble
             if (bubbleRef.current) {
-                    const blobTopOffset = shellGeometry.parameters.radius * currentScaleRef.current;
-                    const blobTopPosition = new THREE.Vector3(blobGroup.position.x, blobGroup.position.y + blobTopOffset, blobGroup.position.z);
-                    blobTopPosition.project(camera);
-                    const screenX = (blobTopPosition.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
-                    const screenY = (-blobTopPosition.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
-                    const bubbleWidth = bubbleRef.current.offsetWidth;
-                    const bubbleHeight = bubbleRef.current.offsetHeight;
-                    const style = bubbleRef.current.style;
-                    const padding = 8; // viewport padding to avoid clipping at edges
-                    // Desired centered position over the blob top
-                    let left = screenX - bubbleWidth / 2;
-                    // Clamp within the viewport width
-                    left = Math.max(padding, Math.min(renderer.domElement.clientWidth - bubbleWidth - padding, left));
-                    // Prefer above the blob; if not enough space, place below
-                    let top = screenY - bubbleHeight - 15;
-                    if (top < padding) {
-                        top = screenY + 15; // place below if above would clip
-                    }
-                    // Prevent bottom overflow
-                    const maxTop = renderer.domElement.clientHeight - bubbleHeight - padding;
-                    if (top > maxTop) top = maxTop;
-                    style.left = `${left}px`;
-                    style.top = `${top}px`;
-                    style.transform = 'none';
-                    const shouldShow = !!transcriptRef.current || (suggestedResponsesRef.current?.length ?? 0) > 0;
-                    style.opacity = shouldShow ? '1' : '0';
+                const blobTopOffset = shellGeometry.parameters.radius * currentScaleRef.current;
+                const blobTopPosition = new THREE.Vector3(blobGroup.position.x, blobGroup.position.y + blobTopOffset, blobGroup.position.z);
+                blobTopPosition.project(camera);
+                const screenX = (blobTopPosition.x * 0.5 + 0.5) * renderer.domElement.clientWidth;
+                const screenY = (-blobTopPosition.y * 0.5 + 0.5) * renderer.domElement.clientHeight;
+                const bubbleWidth = bubbleRef.current.offsetWidth;
+                const bubbleHeight = bubbleRef.current.offsetHeight;
+                const style = bubbleRef.current.style;
+                const padding = 8; // viewport padding to avoid clipping at edges
+                // Desired centered position over the blob top
+                let left = screenX - bubbleWidth / 2;
+                // Clamp within the viewport width
+                left = Math.max(padding, Math.min(renderer.domElement.clientWidth - bubbleWidth - padding, left));
+                // Prefer above the blob; if not enough space, place below
+                let top = screenY - bubbleHeight - 15;
+                if (top < padding) {
+                    top = screenY + 15; // place below if above would clip
                 }
+                // Prevent bottom overflow
+                const maxTop = renderer.domElement.clientHeight - bubbleHeight - padding;
+                if (top > maxTop) top = maxTop;
+                style.left = `${left}px`;
+                style.top = `${top}px`;
+                style.transform = 'none';
+                const shouldShow = !!transcriptRef.current || (suggestedResponsesRef.current?.length ?? 0) > 0;
+                style.opacity = shouldShow ? '1' : '0';
+            }
 
             // Render passes for refraction effect
             shell.visible = false;
@@ -545,7 +579,16 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
                             </div>
                         </div>
                     ) : (
-                        <p>{transcript}</p>
+                        <p>
+                            {String(transcript || '')
+                                .split(/\s+/)
+                                .filter(Boolean)
+                                .map((w, i, arr) => (
+                                    <span key={i} style={{ opacity: i < highlightIndex ? 1 : 0.45 }}>
+                                        {w}{i < arr.length - 1 ? ' ' : ''}
+                                    </span>
+                                ))}
+                        </p>
                     )}
                 </div>
             )}
