@@ -16,6 +16,7 @@ export async function submitImprintingEpisode(payload: {
   modified_files?: unknown[];
   staged_assets?: unknown[];
   in_response_to_question?: string;
+  imprinting_environment?: string;
 }) {
   const url = `${IMPRINTER_URL}/session/imprint_episode`;
   console.log('[imprinterService] submitImprintingEpisode →', {

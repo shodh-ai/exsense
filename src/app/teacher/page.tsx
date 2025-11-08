@@ -1275,6 +1275,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                             current_lo: currentLO || undefined,
                             staged_assets: stagedAssets,
                             in_response_to_question: (isShowMeRecording && showMeQuestionRef.current) ? showMeQuestionRef.current : undefined,
+                            imprinting_environment: imprintingEnvironment,
                         };
                         const resp = await submitImprintingEpisode(directPayload as any);
                         setSubmitMessage('Submitted directly. Processing on server...');
