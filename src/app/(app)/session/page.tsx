@@ -61,7 +61,8 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
     const hideTimer = useRef<NodeJS.Timeout | null>(null); // Ref to hold the timer
 
     // The vertical distance the content needs to shift down.
-    const contentShiftDistance = '76px';
+    // Converted from '76px' to '4.75rem' for scaling with browser zoom.
+    const contentShiftDistance = '4.75rem';
 
     // --- NEW HOVER LOGIC ---
     const handleMouseEnter = () => {
@@ -135,18 +136,22 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                     className={`
                         absolute top-0 w-full flex justify-center pointer-events-auto
                         transition-all duration-300 ease-in-out
-                        ${isBarVisible ? 'translate-y-5 opacity-100' : '-translate-y-full opacity-0'}
+                        ${isBarVisible ? 'translate-y-[1.25rem] opacity-100' : '-translate-y-full opacity-0'}
+                        // translate-y-5 (20px) replaced with translate-y-[1.25rem]
                     `}
                 >
                     {/* The actual bar with original sizing and styling */}
-                    <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center gap-2 px-1 backdrop-blur-sm border border-white/10">
+                    <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[3.3125rem] bg-[#566FE9]/10 rounded-full flex justify-center items-center gap-2 px-1 backdrop-blur-sm border border-white/10">
+                        {/* h-[53px] replaced with h-[3.3125rem] */}
                         {componentButtons.map(({ key, label, inactiveImagePath, activeImagePath }) => (
                             <button
                                 key={key}
                                 onClick={() => setActiveView(key)}
-                                className={`flex-1 h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
+                                // h-[45px] replaced with h-[2.8125rem]
+                                className={`flex-1 h-[2.8125rem] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
                             >
-                                <img src={activeView === key ? activeImagePath : inactiveImagePath} alt={label} className="w-[20px] h-[20px]" />
+                                {/* w-[20px] h-[20px] replaced with w-5 h-5 */}
+                                <img src={activeView === key ? activeImagePath : inactiveImagePath} alt={label} className="w-5 h-5" />
                                 {label}
                             </button>
                         ))}
@@ -168,7 +173,8 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                     className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full relative overflow-y-auto overflow-x-hidden whiteboard-scroll`}
                     style={{
                         transition: 'padding-top 300ms ease-in-out',
-                        paddingTop: isBarVisible ? contentShiftDistance : '0px'
+                        // Use rem-based contentShiftDistance
+                        paddingTop: isBarVisible ? contentShiftDistance : '0'
                     }}
                     ref={whiteboardScrollRef}
                 >
@@ -222,7 +228,8 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                     transition-transform duration-300 ease-in-out
                 `}
                 style={{
-                    transform: isBarVisible ? `translateY(${contentShiftDistance})` : 'translateY(0px)',
+                    // Use rem-based contentShiftDistance
+                    transform: isBarVisible ? `translateY(${contentShiftDistance})` : 'translateY(0)',
                 }}
                 >
                     {room ? (
@@ -456,26 +463,82 @@ export default function Session() {
     const isPushToTalkActive = useSessionStore((s) => s.isPushToTalkActive);
     const showWaitingPill = useSessionStore((s) => s.showWaitingPill);
 
-    // Extract the latest transcript for the avatar bubble
-    const [latestTranscript, setLatestTranscript] = useState("");
+    // =========================================================================
+    // --- START: NEW REAL-TIME TRANSCRIPT LOGIC ---
+    // =========================================================================
+
+    // State to hold the "window" of words being displayed.
+    const [displayedTranscriptWords, setDisplayedTranscriptWords] = useState<string[]>([]);
+    // Ref to hold the interval timer, allowing us to clear it when new messages arrive.
+    const transcriptIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
-        // When the array of messages changes, get the last one.
-        if (transcriptionMessages.length > 0) {
-            // The message is formatted as "speaker: text". We just want the text.
-            const lastMessage = transcriptionMessages[transcriptionMessages.length - 1];
-            const colonIndex = lastMessage.indexOf(':');
-            const transcriptText = colonIndex >= 0 ? lastMessage.substring(colonIndex + 1).trim() : lastMessage.trim();
-            setLatestTranscript(transcriptText);
-            
-            // Clear the bubble after 5 seconds of no new transcripts
-            const timer = setTimeout(() => {
-                setLatestTranscript("");
-            }, 5000);
-            
-            return () => clearTimeout(timer);
+        // Clear any existing transcript animation when the component unmounts or a new message arrives.
+        const cleanup = () => {
+            if (transcriptIntervalRef.current) {
+                clearInterval(transcriptIntervalRef.current);
+                transcriptIntervalRef.current = null;
+            }
+        };
+
+        // If there are no messages, ensure the display is empty and do nothing.
+        if (transcriptionMessages.length === 0) {
+            setDisplayedTranscriptWords([]);
+            return cleanup;
         }
-    }, [transcriptionMessages]);
+
+        // --- Configuration for the animation ---
+        const WORDS_PER_MINUTE = 180; // Average speaking rate. Adjust for faster/slower speech.
+        const WORD_INTERVAL_MS = (60 / WORDS_PER_MINUTE) * 1000;
+        const DISPLAY_WINDOW_SIZE = 10; // The number of words to show at once.
+        const HIDE_DELAY_MS = 4000; // How long to wait before clearing the transcript after it ends.
+
+        // Get the last message and extract the text part.
+        const lastMessage = transcriptionMessages[transcriptionMessages.length - 1];
+        const colonIndex = lastMessage.indexOf(':');
+        const transcriptText = colonIndex >= 0 ? lastMessage.substring(colonIndex + 1).trim() : lastMessage.trim();
+        const words = transcriptText.split(/\s+/).filter(Boolean); // Split into words and remove empty strings.
+
+        // Start a new animation if there are words to display.
+        if (words.length > 0) {
+            cleanup(); // Stop any previous animation.
+            let currentIndex = 0;
+
+            transcriptIntervalRef.current = setInterval(() => {
+                // When all words have been processed...
+                if (currentIndex >= words.length) {
+                    cleanup();
+                    // Set a final timer to clear the transcript bubble from the UI.
+                    setTimeout(() => setDisplayedTranscriptWords([]), HIDE_DELAY_MS);
+                    return;
+                }
+
+                const nextWord = words[currentIndex];
+
+                // Update the state with the next word.
+                setDisplayedTranscriptWords(prevWords => {
+                    const newWordList = [...prevWords, nextWord];
+                    // If the list is longer than our window, slice it to maintain the size.
+                    if (newWordList.length > DISPLAY_WINDOW_SIZE) {
+                        return newWordList.slice(newWordList.length - DISPLAY_WINDOW_SIZE);
+                    }
+                    return newWordList;
+                });
+
+                currentIndex++;
+            }, WORD_INTERVAL_MS);
+        } else {
+             // If the message is empty, clear the display.
+             setDisplayedTranscriptWords([]);
+        }
+
+        return cleanup; // This cleanup runs when transcriptionMessages changes again.
+
+    }, [transcriptionMessages]); // This effect re-runs ONLY when a new message arrives.
+
+    // =======================================================================
+    // --- END: NEW REAL-TIME TRANSCRIPT LOGIC ---
+    // =======================================================================
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -578,7 +641,7 @@ export default function Session() {
                   <StatusPill message="Waiting for your input..." type="ai" />
                 ) : null)}
 
-                <Sphere transcript={latestTranscript} />
+                <Sphere words={displayedTranscriptWords} />
 
                 <div className='flex flex-col w-full h-full items-center justify-between'>
                     <SessionContent

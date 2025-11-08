@@ -64,20 +64,22 @@ const emotionMusicMap: Record<Emotion, string | null> = { default: null, happy: 
 // --- COMPONENT
 // =================================================================
 
+// --- PROP CHANGE: Now accepts an array of words ---
 interface SphereProps {
-    transcript?: string;
+    words?: string[];
     onSelectSuggestion?: (suggestion: { id: string; text: string; reason?: string }) => void | Promise<void>;
 }
 
-const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSelectSuggestion }) => {
+const Sphere: React.FC<SphereProps> = ({ words = [], onSelectSuggestion }) => {
     // --- STATE & REFS ---
     const mountRef = useRef<HTMLDivElement>(null);
     const bubbleRef = useRef<HTMLDivElement>(null);
     const [isAudioActive, setIsAudioActive] = useState(false);
     const [currentEmotion, setCurrentEmotion] = useState<Emotion>('default');
     const [isMusicExplicitlyPaused, setIsMusicExplicitlyPaused] = useState(false);
-    // Use transcript from props instead of local state
-    const transcript = transcriptProp;
+    
+    // --- PROP CHANGE: Join the incoming words array to create the display string ---
+    const transcript = words.join(' ');
 
     // --- Refs for values that don't trigger re-renders ---
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -103,6 +105,7 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
 
     // --- Sync state to refs to avoid stale closures in callbacks ---
     useEffect(() => { isAudioActiveRef.current = isAudioActive; }, [isAudioActive]);
+    // --- REF CHANGE: The transcript ref now updates based on the derived transcript string ---
     useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
     useEffect(() => { suggestedResponsesRef.current = displaySuggestions || []; }, [displaySuggestions]);
     useEffect(() => { promptRef.current = promptText; }, [promptText]);
