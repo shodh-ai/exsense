@@ -926,6 +926,8 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     sessionIdRef,
     sessionStatusUrlRef,
     sendDeleteNowRef,
+    isConnected,
+    roomName,
   });
 
   // --- Do NOT auto-delete on transient LiveKit disconnects ---

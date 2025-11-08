@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Footer from '@/components/compositions/Footer';
 import { StatusPill } from '@/components/compositions/StatusPill';
 import type { Room } from 'livekit-client';
-
+import { EndSessionButton } from '@/components/ui/EndSessionButton';
 import NextDynamic from 'next/dynamic';
 import { useSessionStore } from '@/lib/store';
 import { useApiService, WhiteboardBlockType } from '@/lib/api';
@@ -52,9 +52,25 @@ interface SessionContentProps {
     openNewTab: (name: string, url: string) => Promise<void>;
     switchTab: (id: string) => Promise<void>;
     closeTab: (id: string) => Promise<void>;
+    // NEW: Pass deleteSessionNow to child component
+    deleteSessionNow: () => Promise<void>;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab }: SessionContentProps) {
+function SessionContent({ 
+    activeView, 
+    setActiveView, 
+    componentButtons, 
+    room, 
+    livekitUrl, 
+    livekitToken, 
+    isConnected, 
+    isDiagramGenerating, 
+    sendBrowserInteraction, 
+    openNewTab, 
+    switchTab, 
+    closeTab,
+    deleteSessionNow // NEW: Receive from parent
+}: SessionContentProps) {
     const whiteboardBlocks = useSessionStore((s) => s.whiteboardBlocks);
     const whiteboardScrollRef = useRef<HTMLDivElement | null>(null);
     const [isBarVisible, setIsBarVisible] = useState(false);
@@ -109,6 +125,7 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
             } catch {}
         });
     }, [whiteboardBlocks?.length]);
+
     return (
         <div className='w-full h-full flex flex-col relative'>
             {/* Hover-activated navigation bar container (non-blocking) */}
@@ -151,6 +168,16 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                             </button>
                         ))}
                     </div>
+
+                    {/* NEW: End Session Button - Positioned to the right of the nav bar */}
+                    <div className="absolute right-4 top-0 h-[53px] flex items-center pointer-events-auto">
+                        <EndSessionButton 
+                            deleteSessionNow={deleteSessionNow}
+                            className="h-[45px] px-6 bg-red-600/90 hover:bg-red-700 text-white rounded-full font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 backdrop-blur-sm border border-red-500/30 shadow-lg hover:shadow-xl"
+                        />
+                    </div>
+                </div>
+
                 {/* Whiteboard scrollbar theming */}
                 <style jsx global>{`
                   .whiteboard-scroll { scrollbar-width: thin; scrollbar-color: #566FE9 transparent; }
@@ -159,7 +186,6 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                   .whiteboard-scroll::-webkit-scrollbar-thumb { background-color: #566FE9; border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box; }
                   .whiteboard-scroll::-webkit-scrollbar-corner { background: transparent; }
                 `}</style>
-                </div>
             </div>
 
             {/* Whiteboard feed view and other views */}
@@ -438,7 +464,7 @@ export default function Session() {
         stopPushToTalk,
         livekitUrl,
         livekitToken,
-        deleteSessionNow,
+        deleteSessionNow, // This is the force delete function we need
         sendBrowserInteraction,
         openNewTab,
         switchTab,
@@ -594,6 +620,7 @@ export default function Session() {
                         openNewTab={openNewTab}
                         switchTab={switchTab}
                         closeTab={closeTab}
+                        deleteSessionNow={deleteSessionNow} // NEW: Pass to child
                     />
 
                     {/* Suggested responses are shown inline with the transcript bubble */}

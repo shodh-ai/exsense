@@ -110,10 +110,8 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
       const clerkToken = await getToken();
       if (!clerkToken) throw new Error('Failed to get authentication token from Clerk.');
 
-      const backendUrl = process.env.NEXT_PUBLIC_API_BASE_URL as string | undefined;
-      if (!backendUrl) throw new Error('Backend URL is not configured (NEXT_PUBLIC_API_BASE_URL)');
-
-      // Strict single-user model: no viewer join via URL params.
+      const sessionManagerUrl = process.env.NEXT_PUBLIC_SESSION_MANAGER_URL as string | undefined;
+      if (!sessionManagerUrl) throw new Error('Session manager URL is not configured (NEXT_PUBLIC_SESSION_MANAGER_URL)');
 
       // Server-authoritative session creation: request backend to create/find stable session id for presenters
       let stableRoomName: string | null = null;
@@ -130,7 +128,7 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
               sessionStorage.setItem(key, String(now + 15000));
             }
           } catch {}
-          const createUrl = `${backendUrl}/api/sessions/create`;
+          const createUrl = `${sessionManagerUrl}/api/sessions/start`;
           try { console.log('[LK_CREATE] POST', createUrl, { courseId }); } catch {}
           const createResp = await fetch(createUrl, {
             method: 'POST',
@@ -138,7 +136,7 @@ export function useLiveKitConnection(args: UseLiveKitConnectionArgs) {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${clerkToken}`,
             },
-            body: JSON.stringify({ courseId, spawnAgent: (options && typeof options.spawnAgent === 'boolean') ? options.spawnAgent : true }),
+            body: JSON.stringify({ livekit_room_name: roomName }),
           });
 
           if (!createResp.ok) {

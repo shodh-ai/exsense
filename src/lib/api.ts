@@ -140,6 +140,7 @@ export interface WhiteboardSessionDTO {
 
 type ApiClientOptions = {
     getToken?: () => Promise<string | null>;
+    baseUrl: string;
 };
 
 export class ApiError extends Error {
@@ -155,14 +156,15 @@ export class ApiError extends Error {
     }
 }
 
-const createApiClient = ({ getToken }: ApiClientOptions) => {
+const createApiClient = ({ getToken, baseUrl }: ApiClientOptions) => {
+
     const request = async (method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: object) => {
         const token = getToken ? await getToken() : null;
         const headers = new Headers({ 'Content-Type': 'application/json' });
         if (token) {
             headers.set('Authorization', `Bearer ${token}`);
         }
-        const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+
         const fullUrl = `${baseUrl.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
         const response = await fetch(fullUrl, { method, headers, body: body ? JSON.stringify(body) : undefined });
         if (!response.ok) {
@@ -188,9 +190,14 @@ const createApiClient = ({ getToken }: ApiClientOptions) => {
 // --- THE MAIN API SERVICE CLASS ---
 export class ApiService {
   private client: ReturnType<typeof createApiClient>;
+  private sessionManagerClient: ReturnType<typeof createApiClient>;
 
   constructor(getToken: () => Promise<string | null>) {
-    this.client = createApiClient({ getToken });
+
+    this.client = createApiClient({ getToken, baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001' });
+
+    this.sessionManagerClient = createApiClient({ getToken, baseUrl: process.env.NEXT_PUBLIC_SESSION_MANAGER_URL || 'http://localhost:8000' });
+
   }
 
   // --- Courses API ---
