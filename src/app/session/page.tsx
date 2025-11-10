@@ -625,7 +625,7 @@ export default function Session() {
                                 <div className="flex-1 flex items-center" style={{ maxWidth: '80%' }}>
                                     {latestTranscript ? (
                                         <div className="w-full pointer-events-none">
-                                            <div className="flex items-center justify-start min-h-[48px] bg-[#E9EBFD] border border-[#E9EBFD] rounded-full px-6 py-3">
+                                            <div className="flex items-center justify-start min-h-[48px] bg-[#E9EBFD/75] border border-[#E9EBFD] rounded-full px-6 py-3 ">
                                                 <p className="text-[#394169] text-base font-medium line-clamp-3">
                                                     {latestTranscript}
                                                 </p>
