@@ -49,9 +49,9 @@ const getIconForState = (message: string, type: 'ai' | 'notification') => {
 export const StatusPill: React.FC<StatusPillProps> = ({ message, type }) => {
     if (!message) return null;
 
-    // Positioning logic remains the same for precise placement above the sphere.
+    // Positioning to align with the buttons on the same x-axis
     const pillPositionStyle: React.CSSProperties = {
-        bottom: 'calc(72px + 22vh)', // raised to sit above suggested responses
+        bottom: '48px', // aligned with button bottom position
         left: '50%',
         transform: 'translateX(-50%)'
     };
