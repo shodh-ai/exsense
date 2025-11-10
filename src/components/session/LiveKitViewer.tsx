@@ -271,23 +271,76 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     }
     try {
       const bytes = new TextEncoder().encode(JSON.stringify(payload));
-      // Target the browser-bot participant if available to avoid broadcasting to the agent
-      let browserId: string | null = null;
+      // Resolve the browser-bot participant (prefer SID for legacy positional API)
+      let browserIdentity: string | null = null;
+      let browserSid: string | null = null;
       try {
         room.remoteParticipants.forEach((p: RemoteParticipant) => {
           const id = String(p.identity || '');
-          if (!browserId && id.startsWith('browser-bot-')) browserId = id;
+          if (!browserIdentity && id.startsWith('browser-bot-')) {
+            browserIdentity = id;
+            try { browserSid = (p as any).sid || null; } catch {}
+          }
         });
       } catch {}
-      try {
-        if (browserId) {
-          await room.localParticipant.publishData(bytes, { destinationIdentities: [browserId], reliable: true } as any);
-        } else {
-          await room.localParticipant.publishData(bytes, { reliable: true } as any);
+
+      // If no target is known yet, queue instead of broadcasting to avoid agent receiving input events
+      if (!browserIdentity && !browserSid) {
+        pendingRef.current.push(payload);
+        if (!flushingRef.current) {
+          flushingRef.current = true;
+          const intervalId = setInterval(async () => {
+            if (room.state === ConnectionState.Connected && pendingRef.current.length > 0) {
+              const p = pendingRef.current.shift();
+              if (p) await publishOrQueue(p);
+            } else if (pendingRef.current.length === 0) {
+              clearInterval(intervalId);
+              flushingRef.current = false;
+            }
+          }, 500);
         }
-      } catch {
-        // Final fallback: broadcast
-        await room.localParticipant.publishData(bytes);
+        return;
+      }
+
+      // Try multiple targeted send variants for broad SDK compatibility, never broadcast
+      let sent = false;
+      // 1) Legacy positional signature with SID array
+      if (!sent && browserSid) {
+        try {
+          await (room.localParticipant.publishData as any)(bytes, true, [browserSid]);
+          sent = true;
+        } catch {}
+      }
+      // 2) Options API with destinationIdentities
+      if (!sent && browserIdentity) {
+        try {
+          await room.localParticipant.publishData(bytes, { destinationIdentities: [browserIdentity], reliable: true } as any);
+          sent = true;
+        } catch {}
+      }
+      // 3) Options API with destination (SIDs)
+      if (!sent && browserSid) {
+        try {
+          await room.localParticipant.publishData(bytes, { destination: [browserSid], reliable: true } as any);
+          sent = true;
+        } catch {}
+      }
+
+      // If still not sent (SDK mismatch), requeue instead of broadcasting
+      if (!sent) {
+        pendingRef.current.push(payload);
+        if (!flushingRef.current) {
+          flushingRef.current = true;
+          const intervalId = setInterval(async () => {
+            if (room.state === ConnectionState.Connected && pendingRef.current.length > 0) {
+              const p = pendingRef.current.shift();
+              if (p) await publishOrQueue(p);
+            } else if (pendingRef.current.length === 0) {
+              clearInterval(intervalId);
+              flushingRef.current = false;
+            }
+          }, 500);
+        }
       }
     } catch (e) {
       console.warn('[Interaction] publishData failed, queuing:', e);

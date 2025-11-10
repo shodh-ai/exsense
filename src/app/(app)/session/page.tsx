@@ -488,9 +488,9 @@ export default function Session() {
         }
 
         // --- Configuration for the animation ---
-        const WORDS_PER_MINUTE = 180; // Average speaking rate. Adjust for faster/slower speech.
+        const WORDS_PER_MINUTE = 200; // Average speaking rate. Adjust for faster/slower speech.
         const WORD_INTERVAL_MS = (60 / WORDS_PER_MINUTE) * 1000;
-        const DISPLAY_WINDOW_SIZE = 10; // The number of words to show at once.
+        const DISPLAY_WINDOW_SIZE = 15; // The number of words to show at once.
         const HIDE_DELAY_MS = 4000; // How long to wait before clearing the transcript after it ends.
 
         // Get the last message and extract the text part.
