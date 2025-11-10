@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { Suspense, useState, useEffect, useRef } from 'react';
 import { MicButton } from '@/components/compositions/MicButton';
 import { MessageButton } from '@/components/compositions/MessageButton';
 import { StatusPill } from '@/components/compositions/StatusPill';
@@ -206,7 +206,7 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
     );
 }
 
-export default function Session() {
+function SessionInner() {
     const activeView = useSessionStore((s) => s.activeView);
     const setActiveView = useSessionStore((s) => s.setActiveView);
     const setVisualizationData = useSessionStore((s) => s.setVisualizationData);
@@ -702,4 +702,12 @@ export default function Session() {
             </SignedOut>
         </>
     )
+}
+
+export default function Session() {
+    return (
+        <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-white">Loading...</div>}>
+            <SessionInner />
+        </Suspense>
+    );
 }
