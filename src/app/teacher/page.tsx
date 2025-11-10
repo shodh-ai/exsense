@@ -141,6 +141,10 @@ interface SessionContentProps {
     onSwitchTab: (id: string) => void | Promise<void>;
     onOpenNewTab: (name: string, url: string) => void | Promise<void>;
     onCloseTab: (id: string) => void | Promise<void>;
+    // Warmup state from backend
+    warmupStarted: boolean;
+    warmupCompleted: boolean;
+    warmupProgress: number;
 }
 
 function SessionContent({
@@ -165,9 +169,13 @@ function SessionContent({
     onSwitchTab,
     onOpenNewTab,
     onCloseTab,
+    // Warmup state from parent (controlled by backend)
+    warmupStarted,
+    warmupCompleted,
+    warmupProgress,
 }: SessionContentProps) {
     const isAwaitingAIResponse = useSessionStore((s: ReturnType<typeof useSessionStore.getState>) => s.isAwaitingAIResponse);
-    
+
     // --- HOVER LOGIC START ---
     const [isBarVisible, setIsBarVisible] = useState(false);
     const hideTimer = useRef<NodeJS.Timeout | null>(null);
@@ -251,7 +259,7 @@ function SessionContent({
 
                 {/* --- CONTENT SHIFT LOGIC APPLIED HERE --- */}
                 <div
-                    className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full transition-transform duration-300 ease-in-out`}
+                    className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full transition-transform duration-300 ease-in-out relative`}
                     style={{
                         transform: isBarVisible ? `translateY(${contentShiftDistance})` : 'translateY(0px)',
                     }}
@@ -281,6 +289,40 @@ function SessionContent({
                             </div>
                         )}
                     </div>
+
+                    {/* WARMUP LOADING OVERLAY - Show only when backend sends warmup_started and not yet completed */}
+                    {warmupStarted && !warmupCompleted && (
+                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md transition-opacity duration-500">
+                            <div className="flex flex-col items-center gap-6 px-8 py-10 bg-gradient-to-br from-[#566FE9]/20 to-purple-600/20 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl max-w-md mx-4">
+                                {/* Animated spinner */}
+                                <div className="relative w-20 h-20">
+                                    <div className="absolute inset-0 border-4 border-[#566FE9]/30 rounded-full"></div>
+                                    <div
+                                        className="absolute inset-0 border-4 border-transparent border-t-[#566FE9] rounded-full animate-spin"
+                                        style={{ animationDuration: '1s' }}
+                                    ></div>
+                                    <div className="absolute inset-2 bg-[#566FE9]/20 rounded-full flex items-center justify-center">
+                                        <span className="text-white text-xs font-semibold">{Math.round(warmupProgress)}%</span>
+                                    </div>
+                                </div>
+
+                                {/* Title */}
+                                <div className="text-center space-y-2">
+                                    <h3 className="text-2xl font-bold text-white font-jakarta-sans">
+                                        Warming Up Session
+                                    </h3>
+                                </div>
+
+                                {/* Progress bar */}
+                                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                                    <div
+                                        className="h-full bg-gradient-to-r from-[#566FE9] to-purple-500 transition-all duration-300 ease-out rounded-full"
+                                        style={{ width: `${warmupProgress}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
                 <div className={`${activeView === 'video' ? 'block' : 'hidden'} w-full h-full`}>
                     <VideoViewer />
@@ -629,6 +671,79 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         // eslint-disable-next-line no-console
         console.log('[TeacherPage] LiveKit connection state changed', { isConnected, hasRoom: !!room });
     }, [isConnected, room]);
+
+    // Warmup state (controlled by backend events)
+    const [warmupStarted, setWarmupStarted] = useState(false);
+    const [warmupCompleted, setWarmupCompleted] = useState(true); // Start as true, only show loading when backend sends warmup_started
+    const [warmupProgress, setWarmupProgress] = useState(0);
+
+    // Listen for warmup events from backend via LiveKit data channel
+    useEffect(() => {
+        if (!room) return;
+
+        const handleDataReceived = (payload: Uint8Array, participant: any) => {
+            try {
+                const decoder = new TextDecoder();
+                const jsonString = decoder.decode(payload);
+                const message = JSON.parse(jsonString);
+
+                console.log('[TeacherPage][Warmup] Received event:', message);
+
+                if (message.type === 'warmup_started') {
+                    console.log('[TeacherPage][Warmup] ✓ Backend warmup started');
+                    setWarmupStarted(true);
+                    setWarmupCompleted(false);
+                    setWarmupProgress(0);
+                } else if (message.type === 'warmup_progress') {
+                    console.log(`[TeacherPage][Warmup] Progress: ${Math.round(message.progress)}%`);
+                    setWarmupProgress(message.progress);
+                } else if (message.type === 'warmup_completed') {
+                    console.log('[TeacherPage][Warmup] ✓ Backend warmup completed!');
+                    setWarmupCompleted(true);
+                    setWarmupProgress(100);
+                }
+            } catch (e) {
+                // Not a warmup event, ignore
+            }
+        };
+
+        room.on('dataReceived', handleDataReceived);
+
+        // Query warmup status when room connects (in case warmup already started)
+        const queryWarmupStatus = async () => {
+            try {
+                console.log('[TeacherPage][Warmup] Querying initial warmup status...');
+                await sendBrowserInteraction({ action: 'get_warmup_status' });
+            } catch (e) {
+                console.warn('[TeacherPage][Warmup] Failed to query warmup status:', e);
+            }
+        };
+
+        // Query status after a short delay to ensure backend is ready
+        const queryTimer = setTimeout(queryWarmupStatus, 1000);
+
+        return () => {
+            room.off('dataReceived', handleDataReceived);
+            clearTimeout(queryTimer);
+        };
+    }, [room, sendBrowserInteraction]);
+
+    // Frontend safety timeout: Always hide warmup screen after 30 seconds, regardless of backend
+    useEffect(() => {
+        if (!warmupStarted || warmupCompleted) return;
+
+        console.log('[TeacherPage][Warmup] Starting frontend 30-second safety timeout...');
+
+        const safetyTimeout = setTimeout(() => {
+            console.log('[TeacherPage][Warmup] ⏱️ Frontend safety timeout reached (30s) - force completing warmup');
+            setWarmupCompleted(true);
+            setWarmupProgress(100);
+        }, 30000); // 30 seconds
+
+        return () => {
+            clearTimeout(safetyTimeout);
+        };
+    }, [warmupStarted, warmupCompleted]);
 
     // VNC session management removed (LiveKit-only)
 
@@ -1483,6 +1598,9 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                                         onSwitchTab={switchTab}
                                         onOpenNewTab={handleOpenNewTabWithCapture}
                                         onCloseTab={closeTab}
+                                        warmupStarted={warmupStarted}
+                                        warmupCompleted={warmupCompleted}
+                                        warmupProgress={warmupProgress}
                                     />
                                     
                                 </div>
