@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import Footer from '@/components/compositions/Footer';
+import { MicButton } from '@/components/compositions/MicButton';
+import { MessageButton } from '@/components/compositions/MessageButton';
 import { StatusPill } from '@/components/compositions/StatusPill';
 import type { Room } from 'livekit-client';
 
@@ -13,7 +14,7 @@ import { TabManager } from '@/components/session/TabManager';
 
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Sphere from '@/components/compositions/Sphere';
+import { DraggableSphereWrapper } from '@/components/session/DraggableSphereWrapper';
 import { DemoRoleIndicator } from '@/components/session/DemoRoleIndicator';
 
 // Excalidraw and Mermaid conversion libs are imported dynamically in the effect below
@@ -111,56 +112,16 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
     }, [whiteboardBlocks?.length]);
     return (
         <div className='w-full h-full flex flex-col relative'>
-            {/* Hover-activated navigation bar container (non-blocking) */}
-            <div
-                className="absolute top-0 left-0 right-0 z-20 h-28 flex justify-center items-start group pointer-events-none"
-            >
-                {/* Thin hitbox to detect hover without blocking content */}
-                <div
-                    className="absolute top-0 left-0 right-0 h-6 pointer-events-auto"
-                    onMouseEnter={handleMouseEnter}
-                    onMouseLeave={handleMouseLeave}
-                />
-                {/* Visual Cue "Handle" - indicates where to hover */}
-                <div
-                    className={`
-                        absolute top-0 w-12 h-1.5 bg-gray-400/70 rounded-b-full
-                        transition-opacity duration-300 ease-in-out
-                        ${isBarVisible ? 'opacity-0' : 'opacity-50 group-hover:opacity-100'}
-                    `}
-                />
-
-                {/* Animated container for the bar */}
-                <div
-                    className={`
-                        absolute top-0 w-full flex justify-center pointer-events-auto
-                        transition-all duration-300 ease-in-out
-                        ${isBarVisible ? 'translate-y-5 opacity-100' : '-translate-y-full opacity-0'}
-                    `}
-                >
-                    {/* The actual bar with original sizing and styling */}
-                    <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center gap-2 px-1 backdrop-blur-sm border border-white/10">
-                        {componentButtons.map(({ key, label, inactiveImagePath, activeImagePath }) => (
-                            <button
-                                key={key}
-                                onClick={() => setActiveView(key)}
-                                className={`flex-1 h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${activeView === key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
-                            >
-                                <img src={activeView === key ? activeImagePath : inactiveImagePath} alt={label} className="w-[20px] h-[20px]" />
-                                {label}
-                            </button>
-                        ))}
-                    </div>
-                {/* Whiteboard scrollbar theming */}
-                <style jsx global>{`
-                  .whiteboard-scroll { scrollbar-width: thin; scrollbar-color: #566FE9 transparent; }
-                  .whiteboard-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
-                  .whiteboard-scroll::-webkit-scrollbar-track { background: transparent; }
-                  .whiteboard-scroll::-webkit-scrollbar-thumb { background-color: #566FE9; border-radius: 9999px; border: 2px solid transparent; background-clip: padding-box; }
-                  .whiteboard-scroll::-webkit-scrollbar-corner { background: transparent; }
-                `}</style>
+            {/* Top hover navigation hidden on this page */}
+            {false && (
+              <div className="absolute top-0 left-0 right-0 z-20 h-28 flex justify-center items-start group pointer-events-none">
+                <div className="absolute top-0 left-0 right-0 h-6 pointer-events-auto" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} />
+                <div className={`absolute top-0 w-12 h-1.5 bg-gray-400/70 rounded-b-full transition-opacity duration-300 ease-in-out ${isBarVisible ? 'opacity-0' : 'opacity-50 group-hover:opacity-100'}`} />
+                <div className={`absolute top-0 w-full flex justify-center pointer-events-auto transition-all duration-300 ease-in-out ${isBarVisible ? 'translate-y-5 opacity-100' : '-translate-y-full opacity-0'}`}>
+                  <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center gap-2 px-1 backdrop-blur-sm border border-white/10" />
                 </div>
-            </div>
+              </div>
+            )}
 
             {/* Whiteboard feed view and other views */}
             <div className="flex-1 w-full overflow-hidden" style={{ minHeight: 0, paddingBottom: '8.5rem' }}>
@@ -467,23 +428,15 @@ export default function Session() {
             const lastMessage = transcriptionMessages[transcriptionMessages.length - 1];
             const colonIndex = lastMessage.indexOf(':');
             const transcriptText = colonIndex >= 0 ? lastMessage.substring(colonIndex + 1).trim() : lastMessage.trim();
-            setLatestTranscript(transcriptText);
-
-            // If AI is currently speaking, keep transcript visible (no auto-clear)
+            
+            // Only show transcript when AI is speaking
             if (isAgentSpeaking) {
+                setLatestTranscript(transcriptText);
+                // Clear any pending timer
                 if (transcriptClearTimerRef.current) {
                     clearTimeout(transcriptClearTimerRef.current);
                     transcriptClearTimerRef.current = null;
                 }
-            } else {
-                // If not speaking, clear after 5s of inactivity
-                if (transcriptClearTimerRef.current) {
-                    clearTimeout(transcriptClearTimerRef.current);
-                }
-                transcriptClearTimerRef.current = window.setTimeout(() => {
-                    setLatestTranscript("");
-                    transcriptClearTimerRef.current = null;
-                }, 5000);
             }
         }
         return () => {
@@ -491,30 +444,24 @@ export default function Session() {
         };
     }, [transcriptionMessages, isAgentSpeaking]);
 
-    // When agent speaking state changes, keep transcript visible during speaking
-    // and schedule a short clear after speaking ends
+    // When agent speaking state changes, clear transcript immediately when AI stops
     useEffect(() => {
-        if (isAgentSpeaking) {
+        if (!isAgentSpeaking) {
+            // Clear transcript immediately when AI stops speaking
             if (transcriptClearTimerRef.current) {
                 clearTimeout(transcriptClearTimerRef.current);
                 transcriptClearTimerRef.current = null;
             }
-        } else {
-            if (latestTranscript) {
-                if (transcriptClearTimerRef.current) {
-                    clearTimeout(transcriptClearTimerRef.current);
-                }
-                // Clear shortly after TTS finishes
-                transcriptClearTimerRef.current = window.setTimeout(() => {
-                    setLatestTranscript("");
-                    transcriptClearTimerRef.current = null;
-                }, 3000);
-            }
+            // Small delay to allow smooth transition
+            transcriptClearTimerRef.current = window.setTimeout(() => {
+                setLatestTranscript("");
+                transcriptClearTimerRef.current = null;
+            }, 500);
         }
         return () => {
             // no-op cleanup; timers are cleared on re-runs as needed
         };
-    }, [isAgentSpeaking, latestTranscript]);
+    }, [isAgentSpeaking]);
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -566,8 +513,18 @@ export default function Session() {
     // No direct VNC interactions; all browser control is over LiveKit data channel now.
 
     const componentButtons: ButtonConfig[] = [
-        { key: 'vnc', label: 'Browser', inactiveImagePath: '/browser-inactive.svg', activeImagePath: '/browser-active.svg' },
-        { key: 'excalidraw', label: 'Whiteboard', inactiveImagePath: '/whiteboard-inactive.svg', activeImagePath: '/whiteboard-active.svg' },
+        {
+            key: 'vnc',
+            inactiveImagePath: '/browser-inactive.svg',
+            activeImagePath: '/browser-active.svg',
+            label: ''
+        },
+        {
+            key: 'excalidraw',
+            inactiveImagePath: '/whiteboard-inactive.svg',
+            activeImagePath: '/whiteboard-active.svg',
+            label: ''
+        }
     ];
 
     // Legacy VNC/session-manager flow removed.
@@ -607,17 +564,33 @@ export default function Session() {
         return <IntroPage onAnimationComplete={handleIntroComplete} />;
     }
 
+    // Calculate initial sphere position to align with mic button's x-axis
+    const calculateInitialSpherePosition = () => {
+        if (typeof window === 'undefined') return { x: 100, y: 100 };
+        
+        const BUTTON_RIGHT = 48; // Same as mic button position
+        const MIC_BUTTON_WIDTH = 56; // MicButton width
+        const minDimension = Math.min(window.innerWidth, window.innerHeight);
+        const sphereSize = minDimension * 0.17 * 1.2; // Match DraggableSphereWrapper calculation
+        
+        // Position sphere to align with mic button's x-axis (right side)
+        // Mic button center x = window.innerWidth - BUTTON_RIGHT - (MIC_BUTTON_WIDTH / 2)
+        // Sphere should be centered on same x, so: sphereX = micButtonCenterX - (sphereSize / 2)
+        const micButtonCenterX = window.innerWidth - BUTTON_RIGHT - (MIC_BUTTON_WIDTH / 2);
+        const sphereX = micButtonCenterX - (sphereSize / 2);
+        
+        // Position at top with some padding
+        const sphereY = 50;
+        
+        return { x: sphereX, y: sphereY };
+    };
+
     return (
         <>
             <SignedIn>
-                {/* Status pill overlay */}
-                {isAwaitingAIResponse ? (
-                  <StatusPill message="AI is Thinking..." type="ai" />
-                ) : (showWaitingPill ? (
-                  <StatusPill message="Waiting for your input..." type="ai" />
-                ) : null)}
-
-                <Sphere transcript={latestTranscript} />
+                <DraggableSphereWrapper 
+                    initialPosition={calculateInitialSpherePosition()}
+                />
 
                 <div className='flex flex-col w-full h-full items-center justify-between'>
                     <SessionContent
@@ -635,10 +608,85 @@ export default function Session() {
                         closeTab={closeTab}
                     />
 
-                    {/* Suggested responses are shown inline with the transcript bubble */}
+                    {/* Bottom Controls Bar - All aligned on same axis */}
+                    {(() => {
+                        const BOTTOM_PADDING = 48;
+                        const SIDE_PADDING = 48;
+                        const BUTTON_GAP = 12;
+                        const NAV_ICON_SIZE = 24;
+                        const NAV_BUTTON_HEIGHT = 56;
+                        
+                        return (
+                            <div
+                                className="fixed w-full flex items-center justify-between px-12"
+                                style={{ bottom: BOTTOM_PADDING, left: 0, right: 0, zIndex: 70 }}
+                            >
+                                {/* Left side: Transcript or Status Pill */}
+                                <div className="flex-1 flex items-center" style={{ maxWidth: '80%' }}>
+                                    {latestTranscript ? (
+                                        <div className="w-full pointer-events-none">
+                                            <div className="flex items-center justify-start min-h-[48px] bg-[#E9EBFD/75] border border-[#E9EBFD] rounded-full px-6 py-3 ">
+                                                <p className="text-[#394169] text-base font-medium line-clamp-3">
+                                                    {latestTranscript}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : isAwaitingAIResponse ? (
+                                        <div className="pointer-events-none">
+                                            <div className="inline-flex items-center h-[48px] bg-[#F6F6FE] border border-[#E9EBFD] rounded-full pl-1 pr-4 gap-[10px]">
+                                                <div className="flex items-center justify-center w-[40px] h-[40px] rounded-full bg-[#566FE9]">
+                                                    <img src="/listen.svg" alt="AI is Thinking" className="w-5 h-5 animate-pulse" />
+                                                </div>
+                                                <span className="font-semibold text-base leading-5 text-[#566FE9] whitespace-nowrap">
+                                                    AI is Thinking...
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ) : showWaitingPill ? (
+                                        <div className="pointer-events-none">
+                                            <div className="inline-flex items-center h-[48px] bg-[#F6F6FE] border border-[#E9EBFD] rounded-full pl-1 pr-4 gap-[10px]">
+                                                <div className="flex items-center justify-center w-[40px] h-[40px] rounded-full bg-[#566FE9]">
+                                                    <img src="/general.svg" alt="Waiting for input" className="w-5 h-5" />
+                                                </div>
+                                                <span className="font-semibold text-base leading-5 text-[#566FE9] whitespace-nowrap">
+                                                    Waiting for your input...
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ) : null}
+                                </div>
 
-                    {/* Re-introduced Footer to restore mic and session controls */}
-                    <Footer room={room} agentIdentity={agentIdentity || undefined} onMicPress={startPushToTalk} onMicRelease={stopPushToTalk} />
+                                {/* Right side: Control Buttons */}
+                                <div className="flex items-center" style={{ gap: BUTTON_GAP }}>
+                                    {/* Compact Nav: Browser / Whiteboard */}
+                                    <div className="hidden md:flex items-center bg-white/80 backdrop-blur-sm border border-white/30 rounded-full px-2 py-2 mr-2 gap-2">
+                                        {componentButtons.map(({ key, label, inactiveImagePath, activeImagePath }) => (
+                                            <button
+                                                key={key}
+                                                onClick={() => setActiveView(key)}
+                                                className={`flex items-center justify-center rounded-full transition-all ${
+                                                    activeView === key ? 'bg-[#566FE9]' : 'bg-transparent hover:bg-[#e9ebfd]/50'
+                                                }`}
+                                                title={label}
+                                                style={{ width: NAV_BUTTON_HEIGHT, height: NAV_BUTTON_HEIGHT }}
+                                            >
+                                                <img
+                                                    src={activeView === key ? activeImagePath : inactiveImagePath}
+                                                    alt={label}
+                                                    className="shrink-0"
+                                                    style={{ width: NAV_ICON_SIZE, height: NAV_ICON_SIZE }}
+                                                />
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <MicButton onPress={startPushToTalk} onRelease={stopPushToTalk} />
+                                    <MessageButton onClick={() => {}} hasNotification={false} />
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </div>
 
                 {/* Status overlay removed */}

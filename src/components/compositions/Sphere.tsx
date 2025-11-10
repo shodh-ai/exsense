@@ -21,7 +21,7 @@ const shellFragmentShader = `uniform sampler2D u_scene_texture; uniform float u_
 // --- CONSTANTS & CONFIGURATION
 // =================================================================
 
-const BLOB_SIZE_PERCENTAGE = 0.17;
+const BLOB_SIZE_PERCENTAGE = 0.50;
 const BLOB_BOTTOM_PADDING_PIXELS = 40;
 const FFT_SIZE = 32;
 const AUDIO_ANALYSIS_BINS = 5;
