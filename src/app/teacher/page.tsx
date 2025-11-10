@@ -292,7 +292,7 @@ function SessionContent({
 
                     {/* WARMUP LOADING OVERLAY - Show only when backend sends warmup_started and not yet completed */}
                     {warmupStarted && !warmupCompleted && (
-                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md transition-opacity duration-500">
+                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-none transition-opacity duration-500">
                             <div className="flex flex-col items-center gap-6 px-8 py-10 bg-gradient-to-br from-[#566FE9]/20 to-purple-600/20 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl max-w-md mx-4">
                                 {/* Animated spinner */}
                                 <div className="relative w-20 h-20">
