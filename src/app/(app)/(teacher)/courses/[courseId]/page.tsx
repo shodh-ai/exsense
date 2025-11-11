@@ -4,7 +4,7 @@ import { Star, ChevronLeftIcon } from "lucide-react";
 import React, { JSX, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCourse, useLessons } from "@/hooks/useApi";
+import { useCourse, useLessons, queryKeys } from "@/hooks/useApi";
 import { useApiService } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -144,7 +144,10 @@ export default function TeacherCoursePage(): JSX.Element {
         await api.updateCourse(courseId, { status: newStatus });
         
         await queryClient.invalidateQueries({ queryKey: ['courses', courseId] });
-        await queryClient.invalidateQueries({ queryKey: ['teacherCourses'] });
+        // Invalidate all variations of teacherCourses (with or without userId)
+        await queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] === 'courses' && query.queryKey[1] === 'teacher' && query.queryKey[2] === 'me'
+        });
         await queryClient.invalidateQueries({ queryKey: ['courses'] }); // Invalidate general course list for student view
         
         toast.dismiss();

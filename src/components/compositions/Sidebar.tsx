@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useClerk, useUser } from '@clerk/nextjs';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import ConfirmationModal from './ConfirmationModal'; // Adjust path if necessary
 import { LogOut, User } from 'lucide-react';
@@ -12,6 +13,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { isLoaded, user } = useUser();
   const { signOut } = useClerk();
+  const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
   const [activeLink, setActiveLink] = useState(pathname);
@@ -63,6 +65,8 @@ export function Sidebar() {
 
   const handleConfirmSignOut = async () => {
     setIsLogoutModalOpen(false);
+    // Clear all React Query cache to prevent data from previous user being shown
+    queryClient.clear();
     await signOut({ redirectUrl: '/login' });
   };
 
