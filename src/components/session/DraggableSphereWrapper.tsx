@@ -6,16 +6,19 @@ import Sphere from '@/components/compositions/Sphere';
 interface DraggableSphereWrapperProps {
     transcript?: string;
     initialPosition?: { x: number; y: number };
+    sizePercentage?: number;
+    containerScale?: number; // This prop is kept to not alter the signature, but is no longer used for sizing.
 }
 
-export const DraggableSphereWrapper: React.FC<DraggableSphereWrapperProps> = ({ transcript = "", initialPosition }) => {
+export const DraggableSphereWrapper: React.FC<DraggableSphereWrapperProps> = ({ transcript = "", initialPosition, sizePercentage = 0.17, containerScale = 1 }) => {
     const [position, setPosition] = useState(initialPosition || { x: 100, y: 100 });
     const [isDragging, setIsDragging] = useState(false);
-    const [sphereSize, setSphereSize] = useState(200);
     const dragStartPos = useRef({ x: 0, y: 0 });
     const sphereRef = useRef<HTMLDivElement>(null);
+    const parentSize = 200; // Parent div is fixed at 200x200px
 
     const handleMouseDown = (e: React.MouseEvent) => {
+        e.preventDefault(); // Prevents text selection during drag
         setIsDragging(true);
         dragStartPos.current = {
             x: e.clientX - position.x,
@@ -23,25 +26,11 @@ export const DraggableSphereWrapper: React.FC<DraggableSphereWrapperProps> = ({ 
         };
     };
 
-    // Calculate sphere size based on viewport (matching Sphere component's BLOB_SIZE_PERCENTAGE = 0.17)
-    useEffect(() => {
-        const updateSphereSize = () => {
-            const minDimension = Math.min(window.innerWidth, window.innerHeight);
-            // Sphere is 17% of viewport, and we add some padding for the shell effects
-            const calculatedSize = minDimension * 0.17 * 1.2; // 1.2 multiplier for shell and effects
-            setSphereSize(calculatedSize);
-        };
-
-        updateSphereSize();
-        window.addEventListener('resize', updateSphereSize);
-        return () => window.removeEventListener('resize', updateSphereSize);
-    }, []);
-
-    // Constrain position when sphere size or window size changes
+    // Constrain position when window size changes
     useEffect(() => {
         const constrainPosition = () => {
-            const maxX = window.innerWidth - sphereSize;
-            const maxY = window.innerHeight - sphereSize;
+            const maxX = window.innerWidth - parentSize;
+            const maxY = window.innerHeight - parentSize;
 
             setPosition(prev => ({
                 x: Math.max(0, Math.min(prev.x, maxX)),
@@ -52,8 +41,9 @@ export const DraggableSphereWrapper: React.FC<DraggableSphereWrapperProps> = ({ 
         constrainPosition();
         window.addEventListener('resize', constrainPosition);
         return () => window.removeEventListener('resize', constrainPosition);
-    }, [sphereSize]);
+    }, []); // No dependency on a dynamic size anymore
 
+    // Handle mouse move and mouse up for dragging
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             if (isDragging) {
@@ -61,9 +51,9 @@ export const DraggableSphereWrapper: React.FC<DraggableSphereWrapperProps> = ({ 
                 let newX = e.clientX - dragStartPos.current.x;
                 let newY = e.clientY - dragStartPos.current.y;
 
-                // Apply boundary constraints to keep sphere within viewport
-                const maxX = window.innerWidth - sphereSize;
-                const maxY = window.innerHeight - sphereSize;
+                // Apply boundary constraints to keep the container within the viewport
+                const maxX = window.innerWidth - parentSize;
+                const maxY = window.innerHeight - parentSize;
 
                 // Clamp position within bounds
                 newX = Math.max(0, Math.min(newX, maxX));
@@ -89,7 +79,7 @@ export const DraggableSphereWrapper: React.FC<DraggableSphereWrapperProps> = ({ 
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [isDragging, sphereSize]);
+    }, [isDragging]);
 
     return (
         <div
@@ -98,21 +88,22 @@ export const DraggableSphereWrapper: React.FC<DraggableSphereWrapperProps> = ({ 
             style={{
                 left: `${position.x}px`,
                 top: `${position.y}px`,
-                width: `${sphereSize}px`,
-                height: `${sphereSize}px`,
-                pointerEvents: 'none'
+                width: `${parentSize}px`,
+                height: `${parentSize}px`,
+                pointerEvents: 'none' // Parent is not interactive, only the child
             }}
         >
-            <div 
-                style={{ 
-                    width: '100%', 
-                    height: '100%',
+            {/* This div is the draggable handle and sizes the sphere to 75% of its parent */}
+            <div
+                style={{
+                    width: '75%',
+                    height: '75%',
                     cursor: isDragging ? 'grabbing' : 'grab',
-                    pointerEvents: 'auto'
+                    pointerEvents: 'auto' // This element is interactive
                 }}
                 onMouseDown={handleMouseDown}
             >
-                <Sphere transcript={transcript} />
+                <Sphere transcript={transcript} sizePercentage={sizePercentage} />
             </div>
         </div>
     );

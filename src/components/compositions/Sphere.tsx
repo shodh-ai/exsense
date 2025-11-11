@@ -21,7 +21,6 @@ const shellFragmentShader = `uniform sampler2D u_scene_texture; uniform float u_
 // --- CONSTANTS & CONFIGURATION
 // =================================================================
 
-const BLOB_SIZE_PERCENTAGE = 0.50;
 const BLOB_BOTTOM_PADDING_PIXELS = 40;
 const FFT_SIZE = 32;
 const AUDIO_ANALYSIS_BINS = 5;
@@ -67,9 +66,10 @@ const emotionMusicMap: Record<Emotion, string | null> = { default: null, happy: 
 interface SphereProps {
     transcript?: string;
     onSelectSuggestion?: (suggestion: { id: string; text: string; reason?: string }) => void | Promise<void>;
+    sizePercentage?: number;
 }
 
-const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSelectSuggestion }) => {
+const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSelectSuggestion, sizePercentage = 0.17 }) => {
     // --- STATE & REFS ---
     const mountRef = useRef<HTMLDivElement>(null);
     const bubbleRef = useRef<HTMLDivElement>(null);
@@ -359,7 +359,7 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
             const visibleWidthAtDistance = visibleHeightAtDistance * aspect;
 
             // Determine the required diameter based on the smaller viewport dimension
-            const requiredWorldDimension = Math.min(visibleWidthAtDistance, visibleHeightAtDistance) * BLOB_SIZE_PERCENTAGE;
+            const requiredWorldDimension = Math.min(visibleWidthAtDistance, visibleHeightAtDistance) * sizePercentage;
 
             const unscaledBlobDiameter = shellGeometry.parameters.radius * 2;
             const newScale = requiredWorldDimension / unscaledBlobDiameter;

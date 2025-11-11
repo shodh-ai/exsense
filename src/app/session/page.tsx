@@ -571,7 +571,7 @@ function SessionInner() {
         const BUTTON_RIGHT = 48; // Same as mic button position
         const MIC_BUTTON_WIDTH = 56; // MicButton width
         const minDimension = Math.min(window.innerWidth, window.innerHeight);
-        const sphereSize = minDimension * 0.17 * 1.2; // Match DraggableSphereWrapper calculation
+        const sphereSize = minDimension * 0.5 * 1.2; // Match DraggableSphereWrapper calculation (sizePercentage=0.25)
         
         // Position sphere to align with mic button's x-axis (right side)
         // Mic button center x = window.innerWidth - BUTTON_RIGHT - (MIC_BUTTON_WIDTH / 2)
@@ -590,6 +590,8 @@ function SessionInner() {
             <SignedIn>
                 <DraggableSphereWrapper 
                     initialPosition={calculateInitialSpherePosition()}
+                    sizePercentage={0.5}
+                    containerScale={1}
                 />
 
                 <div className='flex flex-col w-full h-full items-center justify-between'>
