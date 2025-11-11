@@ -124,7 +124,7 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
             )}
 
             {/* Whiteboard feed view and other views */}
-            <div className="flex-1 w-full overflow-hidden" style={{ minHeight: 0, paddingBottom: '8.5rem' }}>
+            <div className="flex-1 w-full overflow-hidden" style={{ minHeight: 0 }}>
                 <div
                     className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full relative overflow-y-auto overflow-x-hidden whiteboard-scroll`}
                     style={{
