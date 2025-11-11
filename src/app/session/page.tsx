@@ -568,7 +568,7 @@ function SessionInner() {
     const calculateInitialSpherePosition = () => {
         if (typeof window === 'undefined') return { x: 100, y: 100 };
         
-        const BUTTON_RIGHT = 48; // Same as mic button position
+        const BUTTON_RIGHT = 10; // Same as mic button position
         const MIC_BUTTON_WIDTH = 56; // MicButton width
         const minDimension = Math.min(window.innerWidth, window.innerHeight);
         const sphereSize = minDimension * 0.5 * 1.2; // Match DraggableSphereWrapper calculation (sizePercentage=0.25)
@@ -624,10 +624,10 @@ function SessionInner() {
                                 style={{ bottom: BOTTOM_PADDING, left: 0, right: 0, zIndex: 70 }}
                             >
                                 {/* Left side: Transcript or Status Pill */}
-                                <div className="flex-1 flex items-center" style={{ maxWidth: '80%' }}>
+                                <div className="flex-1 flex items-center" style={{ maxWidth: '85%' }}>
                                     {latestTranscript ? (
                                         <div className="w-full pointer-events-none">
-                                            <div className="flex items-center justify-start min-h-[48px] bg-[#E9EBFD/75] border border-[#E9EBFD] rounded-full px-6 py-3 ">
+                                            <div className="flex items-center justify-start min-h-[48px] bg-transparent border border-[#E9EBFD] rounded-full px-6 py-3 ">
                                                 <p className="text-[#394169] text-base font-medium line-clamp-3">
                                                     {latestTranscript}
                                                 </p>
@@ -661,7 +661,7 @@ function SessionInner() {
                                 {/* Right side: Control Buttons */}
                                 <div className="flex items-center" style={{ gap: BUTTON_GAP }}>
                                     {/* Compact Nav: Browser / Whiteboard */}
-                                    <div className="hidden md:flex items-center bg-white/80 backdrop-blur-sm border border-white/30 rounded-full px-2 py-2 mr-2 gap-2">
+                                    <div className="hidden md:flex items-center bg-white/80 backdrop-blur-sm border border-[#c7ccf8] rounded-full px-2 py-2 mr-2 gap-2">
                                         {componentButtons.map(({ key, label, inactiveImagePath, activeImagePath }) => (
                                             <button
                                                 key={key}
@@ -684,7 +684,8 @@ function SessionInner() {
 
                                     {/* Action Buttons */}
                                     <MicButton onPress={startPushToTalk} onRelease={stopPushToTalk} />
-                                    <MessageButton onClick={() => {}} hasNotification={false} />
+                                   
+                                    {/* <MessageButton onClick={() => {}} hasNotification={false} /> */}
                                 </div>
                             </div>
                         );
