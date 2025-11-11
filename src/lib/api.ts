@@ -76,6 +76,7 @@ export interface Lesson {
   description?: string | null;
   content?: string | null;
   scope?: string | null;
+  environment?: string | null;
   order?: number;
   createdAt: string;
   updatedAt?: string;
@@ -225,7 +226,7 @@ export class ApiService {
   // --- Curriculum & Lesson API ---
   async getLessons(courseId: string): Promise<Lesson[]> { return this.client.get(`/api/courses/${courseId}/lessons`); }
   async getLesson(id: string): Promise<Lesson> { return this.client.get(`/api/lessons/${id}`); }
-  async createLesson(courseId: string, data: { title: string; description?: string | null; content?: string | null; scope?: string | null; order?: number }): Promise<Lesson> { return this.client.post(`/api/courses/${courseId}/lessons`, data); }
+  async createLesson(courseId: string, data: { title: string; description?: string | null; content?: string | null; scope?: string | null; environment?: string | null; order?: number }): Promise<Lesson> { return this.client.post(`/api/courses/${courseId}/lessons`, data); }
   async deleteLesson(lessonId: string): Promise<{ success?: boolean }> { return this.client.delete(`/api/lessons/${lessonId}`); }
   async reorderLessons(courseId: string, orderedLessonIds: string[]): Promise<void> { return this.client.patch(`/api/courses/${courseId}/lessons/reorder`, { orderedLessonIds } as any); }
 

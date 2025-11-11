@@ -27,12 +27,14 @@ export default function EditCoursePage() {
     if (!lessonsLoading && course) {
       const formatted: SectionData[] = (lessons || []).map((lesson: any) => {
         let scope = lesson.scope ?? "";
-        let environment = null;
+        // Use the direct environment field from the lesson, with fallback to content JSON
+        let environment = lesson.environment ?? null;
         if (lesson.content) {
             try {
                 const parsed = JSON.parse(lesson.content);
                 scope = parsed?.scope ?? scope;
-                environment = parsed?.environment ?? null;
+                // Only use environment from content if direct field is not available
+                environment = environment ?? parsed?.environment ?? null;
             } catch (_) { /* Keep existing scope */ }
         }
         return {
@@ -79,11 +81,12 @@ export default function EditCoursePage() {
             title: section.title.trim() || `Lesson ${i + 1}`,
             description: section.description?.trim(),
             order: i + 1, // <-- THE FIX IS HERE
-            content: JSON.stringify({ 
-                scope: section.scope ?? "", 
-                environment: section.environment ?? null 
+            content: JSON.stringify({
+                scope: section.scope ?? "",
+                environment: section.environment ?? null
             }),
             scope: section.scope ?? "",
+            environment: section.environment ?? null, // Save environment to direct field
         };
 
         await api.createLesson(courseId, lessonPayload);
@@ -91,8 +94,11 @@ export default function EditCoursePage() {
       }
 
       await queryClient.invalidateQueries({ queryKey: ['courses', courseId] });
-      await queryClient.invalidateQueries({ queryKey: ['lessons', courseId] });
-      await queryClient.invalidateQueries({ queryKey: ['teacherCourses'] });
+      await queryClient.invalidateQueries({ queryKey: ['lessons', 'course', courseId] });
+      // Invalidate all variations of teacherCourses (with or without userId)
+      await queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === 'courses' && query.queryKey[1] === 'teacher' && query.queryKey[2] === 'me'
+      });
       
       toast.dismiss();
       toast.success(isPublishAction ? "Course published successfully!" : "Draft saved successfully!");

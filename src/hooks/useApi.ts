@@ -6,10 +6,10 @@ import { useAuth } from '@clerk/nextjs';
 // Query Keys for React Query
 export const queryKeys = {
   courses: ['courses'] as const,
-  teacherCourses: ['courses', 'teacher', 'me'] as const,
+  teacherCourses: (userId?: string) => userId ? ['courses', 'teacher', 'me', userId] as const : ['courses', 'teacher', 'me'] as const,
   course: (id: string) => ['courses', id] as const,
   enrollments: ['enrollments'] as const,
-  myEnrollments: ['enrollments', 'me'] as const,
+  myEnrollments: (userId?: string) => userId ? ['enrollments', 'me', userId] as const : ['enrollments', 'me'] as const,
   userEnrollments: (userId: string) => ['enrollments', 'user', userId] as const,
   courseEnrollments: (courseId: string) => ['enrollments', 'course', courseId] as const,
   studentProfile: (studentId: string) => ['users', 'profile', studentId] as const,
@@ -20,12 +20,12 @@ export const queryKeys = {
   brumData: ['brum'] as const,
   reports: ['reports'] as const,
   userProgress: (userId: string) => ['reports', 'progress', userId] as const,
-  profileStats: ['profile-stats'] as const,
+  profileStats: (userId?: string) => userId ? ['profile-stats', userId] as const : ['profile-stats'] as const,
   adminUsers: ['admin', 'users'] as const,
   adminCourses: ['admin', 'courses'] as const,
   adminAnalytics: ['admin', 'analytics', 'overview'] as const,
   curriculum: (id: string) => ['curriculums', id] as const,
-  teacherAnalytics: ['teacher', 'me', 'analytics'] as const,
+  teacherAnalytics: (userId?: string) => userId ? ['teacher', 'me', 'analytics', userId] as const : ['teacher', 'me', 'analytics'] as const,
 };
 
 // ===== COURSES HOOKS =====
@@ -43,9 +43,10 @@ export const useCourses = () => {
 
 export const useTeacherAnalytics = () => {
   const apiService = useApiService();
-  
+  const { userId, isSignedIn } = useAuth();
+
   return useQuery({
-    queryKey: queryKeys.teacherAnalytics,
+    queryKey: queryKeys.teacherAnalytics(userId || undefined),
     queryFn: async () => {
       try {
         return await apiService.getTeacherAnalytics();
@@ -57,6 +58,7 @@ export const useTeacherAnalytics = () => {
         throw err;
       }
     },
+    enabled: isSignedIn && !!userId,
     staleTime: 5 * 60 * 1000,
     retry: (failureCount, error: any) => {
       const status = error?.status as number | undefined;
@@ -68,10 +70,12 @@ export const useTeacherAnalytics = () => {
 
 export const useTeacherCourses = () => {
   const apiService = useApiService();
+  const { userId, isSignedIn } = useAuth();
 
   return useQuery({
-    queryKey: queryKeys.teacherCourses,
+    queryKey: queryKeys.teacherCourses(userId || undefined),
     queryFn: () => apiService.getMyCourses(),
+    enabled: isSignedIn && !!userId,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnMount: false,
@@ -124,12 +128,13 @@ export const useCourse = (id: string, options?: { enabled?: boolean }) => {
 export const useCreateCourse = () => {
   const apiService = useApiService();
   const queryClient = useQueryClient();
-  
+  const { userId } = useAuth();
+
   return useMutation({
     mutationFn: (course: Partial<Course>) => apiService.createCourse(course),
-    onSuccess: (newCourse: Course) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.courses });
-      queryClient.invalidateQueries({ queryKey: queryKeys.teacherCourses });
+      queryClient.invalidateQueries({ queryKey: queryKeys.teacherCourses(userId || undefined) });
       toast.success('Course created successfully!');
     },
     onError: (error: Error) => {
@@ -174,11 +179,12 @@ export const useCourseEnrollments = (courseId: string) => {
 export const useEnrollInCourse = () => {
   const apiService = useApiService();
   const queryClient = useQueryClient();
-  
+  const { userId } = useAuth();
+
   return useMutation({
     mutationFn: (courseId: string) => apiService.enrollInCourse(courseId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.myEnrollments });
+      queryClient.invalidateQueries({ queryKey: queryKeys.myEnrollments(userId || undefined) });
       toast.success('Successfully enrolled in course!');
     },
     onError: (error: Error) => {
@@ -193,14 +199,16 @@ export const useEnrollInCourse = () => {
 
 export const useMyEnrollments = (options?: { enabled?: boolean }) => {
   const apiService = useApiService();
+  const { userId, isSignedIn } = useAuth();
+
   return useQuery({
-    queryKey: queryKeys.myEnrollments,
+    queryKey: queryKeys.myEnrollments(userId || undefined),
     queryFn: async () => {
       const res: any = await apiService.getMyEnrollments();
       return Array.isArray(res) ? res : (res?.enrollments ?? []);
     },
     staleTime: 2 * 60 * 1000,
-    enabled: options?.enabled ?? true,
+    enabled: (options?.enabled ?? true) && isSignedIn && !!userId,
   });
 };
 
@@ -390,12 +398,12 @@ export const useUserProgress = (userId: string) => {
 // --- Profile Stats Hook ---
 export const useProfileStats = () => {
   const apiService = useApiService();
-  const { isSignedIn } = useAuth();
+  const { userId, isSignedIn } = useAuth();
 
   return useQuery({
-    queryKey: queryKeys.profileStats,
+    queryKey: queryKeys.profileStats(userId || undefined),
     queryFn: () => apiService.getProfileStats(),
-    enabled: !!isSignedIn,
+    enabled: isSignedIn && !!userId,
     staleTime: 5 * 60 * 1000,
     retry: 2,
   });
