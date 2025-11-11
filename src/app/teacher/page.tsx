@@ -24,8 +24,8 @@ import LoSelector from '@/components/imprinting/LoSelector';
 // --- MODIFICATION: Import the new modal component ---
 import { SendModal } from '@/components/compositions/SendModal';
 import { TabManager } from '@/components/session/TabManager';
-import { PublishTemplateButton } from '@/components/teacher/PublishTemplateButton';
 import { getBackendValue } from '@/config/environments';
+import { useApiService } from '@/lib/api';
 
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
@@ -394,8 +394,8 @@ interface TeacherFooterProps {
     onSubmitEpisode: () => void;
     onShowMeClick?: () => void;
     isShowMeDisabled?: boolean;
-    onFinalizeTopicClick?: () => void;
-    isFinalizeDisabled?: boolean;
+    onPublishTemplateClick?: () => void;
+    isPublishDisabled?: boolean;
 }
 const TeacherFooter = ({ 
     onUploadClick, 
@@ -415,8 +415,8 @@ const TeacherFooter = ({
     onSubmitEpisode,
     onShowMeClick,
     isShowMeDisabled,
-    onFinalizeTopicClick,
-    isFinalizeDisabled,
+    onPublishTemplateClick,
+    isPublishDisabled,
 }: TeacherFooterProps) => {
     const formatTime = (seconds: number) => {
         const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
@@ -506,13 +506,13 @@ const TeacherFooter = ({
                         </div>
                     </div>
                 )}
-                {/* MODIFIED 11th Button (Finalize Topic) */}
+                {/* Publish Template button (replaces Finalize Topic) */}
                 <button
-                    onClick={onFinalizeTopicClick}
-                    disabled={isFinalizeDisabled}
+                    onClick={onPublishTemplateClick}
+                    disabled={isPublishDisabled}
                     className="w-[150px] h-[56px] flex items-center justify-center rounded-[50px] py-4 px-5 bg-[#566FE9] text-white font-semibold text-sm hover:bg-[#4a5fd1] transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
-                    Finalize Topic
+                    Publish Template
                 </button>
             </div>
         </footer>
@@ -531,6 +531,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     const [isIntroActive, setIsIntroActive] = useState(false);
     const handleIntroComplete = () => setIsIntroActive(false);
     const { user, isSignedIn, isLoaded } = useUser();
+    const api = useApiService();
     const router = useRouter();
 
     const SESSION_DEBUG = false;
@@ -553,6 +554,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     // --- MODIFICATION: Add state for the finish and finalize confirmation modals ---
     const [isFinishModalOpen, setIsFinishModalOpen] = useState(false);
     const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false);
+    const [isPublishingTemplate, setIsPublishingTemplate] = useState(false);
 
 
 
@@ -914,8 +916,21 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         }
     };
 
-    const handleFinalizeTopicClick = () => {
-        setIsFinalizeModalOpen(true);
+
+    const handlePublishTemplateClick = async () => {
+        try {
+            if (!user || !courseId) return;
+            setIsPublishingTemplate(true);
+            setStatusMessage('Publishing template...');
+            const sessionId = `session-${user.id}-${courseId}`;
+            const resp = await api.publishCourseTemplate(String(courseId), sessionId);
+            setSubmitMessage(resp?.message || 'Environment published as course template!');
+            setStatusMessage('Template published.');
+        } catch (err: any) {
+            setSubmitError(err?.message || 'Failed to publish template');
+        } finally {
+            setIsPublishingTemplate(false);
+        }
     };
 
     const handleReviewComplete = () => setImprintingPhase('LO_SELECTION');
@@ -1460,9 +1475,6 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                         ) : (
                             <>
                                 <div className='flex flex-col w-full h-full items-center justify-between'>
-                                    <div className="fixed top-4 right-4 z-30">
-                                        <PublishTemplateButton courseId={String(curriculumId)} variant="compact" />
-                                    </div>
                                     <SessionContent
                                         activeView={activeView}
                                         imprintingMode={imprinting_mode}
@@ -1505,8 +1517,8 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                                         onSubmitEpisode={handleSubmitEpisode}
                                         onShowMeClick={handleShowMe}
                                         isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted || isRecording}
-                                        onFinalizeTopicClick={handleFinalizeTopicClick}
-                                        isFinalizeDisabled={!currentLO || isFinalizingLO}
+                                        onPublishTemplateClick={handlePublishTemplateClick}
+                                        isPublishDisabled={!courseId || isPublishingTemplate}
                                     />
                                 )}
                             </>
