@@ -3,8 +3,13 @@
 import React from "react";
 import { useSearchParams } from "next/navigation";
 import { PublishTemplateButton } from "@/components/teacher/PublishTemplateButton";
+import { Room } from "livekit-client";
 
-export default function TeacherLayoutControls() {
+interface TeacherLayoutControlsProps {
+  room?: Room | null;
+}
+
+export default function TeacherLayoutControls({ room }: TeacherLayoutControlsProps) {
   const searchParams = useSearchParams();
   const courseId = searchParams.get("courseId");
 
@@ -12,7 +17,7 @@ export default function TeacherLayoutControls() {
 
   return (
     <div className="flex items-center gap-2">
-      <PublishTemplateButton courseId={courseId} variant="compact" />
+      <PublishTemplateButton courseId={courseId} variant="compact" room={room} />
     </div>
   );
 }

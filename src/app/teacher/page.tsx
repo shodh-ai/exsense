@@ -1036,12 +1036,111 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         try {
             if (!user || !courseId) return;
             setIsPublishingTemplate(true);
+
+            // Step 1: Save current session state to GCS
+            setStatusMessage('Saving session state...');
+
+            if (!room || !room.localParticipant) {
+                throw new Error('LiveKit room is not connected. Please ensure the browser session is active.');
+            }
+
+            try {
+                // Set up promise to listen for save_state response
+                const saveResponsePromise = new Promise<void>((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Save state operation timed out after 10 seconds'));
+                    }, 10000);
+
+                    const handleSaveResponse = (payload: Uint8Array) => {
+                        try {
+                            const decoder = new TextDecoder();
+                            const text = decoder.decode(payload);
+                            const data = JSON.parse(text);
+
+                            console.log('[PublishTemplate] Received response from browser pod:', data);
+
+                            // Check if this is a save_state response
+                            if (data.success && (data.state_saved !== undefined || data.workspace_saved !== undefined)) {
+                                clearTimeout(timeout);
+                                room.off('dataReceived', handleSaveResponse);
+
+                                if (data.success) {
+                                    console.log('[PublishTemplate] Save state completed successfully');
+                                    // Add extra delay to ensure backend has been notified
+                                    setTimeout(() => resolve(), 1000);
+                                } else {
+                                    reject(new Error(data.error || 'Save state failed'));
+                                }
+                            }
+                        } catch (e) {
+                            console.error('[PublishTemplate] Error parsing response:', e);
+                        }
+                    };
+
+                    room.on('dataReceived', handleSaveResponse);
+                });
+
+                // Send save_state command to jup-session browser pod
+                const saveCommand = { action: "save_state" };
+                const payload = JSON.stringify(saveCommand);
+                const bytes = new TextEncoder().encode(payload);
+
+                await room.localParticipant.publishData(bytes, { reliable: true } as any);
+                console.log('[PublishTemplate] save_state command sent to browser pod');
+
+                // Wait for save to complete or timeout
+                await saveResponsePromise;
+                console.log('[PublishTemplate] Save state confirmed');
+
+            } catch (saveError: any) {
+                console.error('[PublishTemplate] Failed to save session state:', saveError);
+                throw new Error(`Failed to save session state: ${saveError.message || 'Unknown error'}`);
+            }
+
+            // Step 2: Publish template (copies teacher's GCS files to course template location)
             setStatusMessage('Publishing template...');
             const sessionId = `session-${user.id}-${courseId}`;
-            const resp = await api.publishCourseTemplate(String(courseId), sessionId);
+
+            console.log('[PublishTemplate] Calling publishCourseTemplate API', { courseId, sessionId });
+
+            // Retry mechanism in case the backend DB hasn't been updated yet
+            let publishResp = null;
+            let lastError = null;
+            const maxRetries = 3;
+
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    console.log(`[PublishTemplate] Attempt ${attempt}/${maxRetries}`);
+                    publishResp = await api.publishCourseTemplate(String(courseId), sessionId);
+                    console.log('[PublishTemplate] Publish successful:', publishResp);
+                    break; // Success, exit retry loop
+                } catch (err: any) {
+                    lastError = err;
+                    console.error(`[PublishTemplate] Attempt ${attempt} failed:`, err);
+
+                    const errorMsg = err?.data?.message || err?.message || '';
+
+                    // If session not found or incomplete, retry after delay
+                    if ((errorMsg.includes('not found') || errorMsg.includes('incomplete')) && attempt < maxRetries) {
+                        console.log(`[PublishTemplate] Waiting 2 seconds before retry...`);
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                    } else {
+                        // Other errors, don't retry
+                        throw err;
+                    }
+                }
+            }
+
+            if (!publishResp) {
+                throw lastError || new Error('Failed to publish after retries');
+            }
+
+            const resp = publishResp;
+
             setSubmitMessage(resp?.message || 'Environment published as course template!');
             setStatusMessage('Template published.');
         } catch (err: any) {
+            console.error('[PublishTemplate] Error:', err);
             setSubmitError(err?.message || 'Failed to publish template');
         } finally {
             setIsPublishingTemplate(false);
