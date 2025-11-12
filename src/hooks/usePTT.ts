@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
 import type React from 'react';
 import type { Room } from 'livekit-client';
-import { Track } from 'livekit-client';
+import { Track, createLocalAudioTrack } from 'livekit-client';
 
 interface UsePTTDeps {
   roomInstance: Room;
@@ -45,10 +45,21 @@ export function usePTT(deps: UsePTTDeps) {
       sentThisPTTRef.current = false;
       try { pttAcceptUntilTsRef.current = Date.now() + 60000; } catch {}
       if (roomInstance?.localParticipant) {
-        await roomInstance.localParticipant.setMicrophoneEnabled(true);
+        let pub = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
+        if (!pub) {
+          try {
+            const mic = await createLocalAudioTrack({ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+            try { await roomInstance.localParticipant.publishTrack(mic); } catch {}
+          } catch {}
+          for (let i = 0; i < 5 && !pub; i++) {
+            await new Promise(r => setTimeout(r, 120));
+            pub = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
+          }
+        }
+        try { await roomInstance.localParticipant.setMicrophoneEnabled(true); } catch {}
         try {
-          const pub = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
-          console.log('[PTT DIAG] mic enabled -> hasTrack:', !!pub, 'isMuted:', pub?.isMuted);
+          const p = roomInstance.localParticipant.getTrackPublication(Track.Source.Microphone);
+          console.log('[PTT DIAG] mic enabled -> hasTrack:', !!p, 'isMuted:', p?.isMuted);
         } catch {}
       }
       try { setIsAwaitingAIResponse(false); } catch {}

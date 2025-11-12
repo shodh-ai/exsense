@@ -323,6 +323,19 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
             thinkingTimeoutRef.current = null;
           }, thinkingTimeoutMsRef.current);
         } catch {}
+        // Proactively try to unlock audio autoplay for WebRTC tracks
+        try { (roomInstance as any)?.startAudio?.(); } catch {}
+        // Best-effort: if any audio elements already attached, try play() and unmute them
+        try {
+          agentAudioElsRef.current.forEach((el) => {
+            try { el.autoplay = true; } catch {}
+            try { (el as any).playsInline = true; } catch {}
+            try { el.muted = true; } catch {}
+            try { el.play?.().catch(() => {}); } catch {}
+            // unmute shortly after ensuring playback has begun
+            try { setTimeout(() => { try { el.muted = false; } catch {} }, 120); } catch {}
+          });
+        } catch {}
         // Removed fallback agent identity inference. We rely solely on 'agent_ready'.
         // We wait for the agent_ready signal before setting isConnected to true
     }, [setIsLoading, setIsAwaitingAIResponse, setShowWaitingPill, thinkingTimeoutRef, thinkingTimeoutMsRef]);
@@ -349,12 +362,17 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       if (track.kind !== Track.Kind.Audio) return;
       const audioTrack = track as AudioTrack;
       const audioElement = audioTrack.attach();
-      audioElement.autoplay = true;
-      audioElement.volume = 1.0;
-      audioElement.muted = false;
-      document.body.appendChild(audioElement);
-      try { agentAudioElsRef.current.push(audioElement); } catch {}
+      // Configure element for maximum autoplay compatibility
+      try { audioElement.autoplay = true; } catch {}
+      try { (audioElement as any).playsInline = true; } catch {}
+      try { audioElement.muted = true; } catch {}
+      try { audioElement.volume = 1.0; } catch {}
+      try { document.body.appendChild(audioElement); } catch {}
+      // Attempt to start audio immediately; then unmute
       try { (roomInstance as any)?.startAudio?.(); } catch {}
+      try { audioElement.play?.().catch(() => {}); } catch {}
+      try { setTimeout(() => { try { audioElement.muted = false; } catch {} }, 120); } catch {}
+      try { agentAudioElsRef.current.push(audioElement); } catch {}
       setIsAgentSpeaking(true);
       try { setIsAwaitingAIResponse(false); } catch {}
       // Clear any pending thinking timeout
