@@ -93,12 +93,16 @@ export const TabManager = ({ onSwitchTab, onOpenNewTab, onCloseTab }: { onSwitch
               </span>
               {/* Show close icon only if it's the active tab and there's more than one tab */}
               {tabs.length > 1 && (
-                <button
+                <div
                     onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id); }}
-                    className="p-0.5 rounded-full"
+                    className="p-0.5 rounded-full cursor-pointer hover:bg-white/20 transition-colors"
+                    role="button"
+                    aria-label="Close tab"
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); onCloseTab(tab.id); } }}
                 >
                     <XIcon className="w-4 h-4" />
-                </button>
+                </div>
               )}
             </button>
           ))}

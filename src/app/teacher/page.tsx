@@ -31,6 +31,7 @@ import { useApiService } from '@/lib/api';
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
 const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
+const Loading = dynamic(() => import('@/app/(app)/loading'));
 
 
 // --- NEW: Type definition for the AI's debrief message ---
@@ -257,35 +258,13 @@ function SessionContent({
 
                     {/* WARMUP LOADING OVERLAY - Show only when backend sends warmup_started and not yet completed */}
                     {warmupStarted && !warmupCompleted && (
-                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-none transition-opacity duration-500">
-                            <div className="flex flex-col items-center gap-6 px-8 py-10 bg-gradient-to-br from-[#566FE9]/20 to-purple-600/20 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl max-w-md mx-4">
-                                {/* Animated spinner */}
-                                <div className="relative w-20 h-20">
-                                    <div className="absolute inset-0 border-4 border-[#566FE9]/30 rounded-full"></div>
-                                    <div
-                                        className="absolute inset-0 border-4 border-transparent border-t-[#566FE9] rounded-full animate-spin"
-                                        style={{ animationDuration: '1s' }}
-                                    ></div>
-                                    <div className="absolute inset-2 bg-[#566FE9]/20 rounded-full flex items-center justify-center">
-                                        <span className="text-white text-xs font-semibold">{Math.round(warmupProgress)}%</span>
-                                    </div>
-                                </div>
-
-                                {/* Title */}
-                                <div className="text-center space-y-2">
-                                    <h3 className="text-2xl font-bold text-white font-jakarta-sans">
-                                        Warming Up Session
-                                    </h3>
-                                </div>
-
-                                {/* Progress bar */}
-                                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                                    <div
-                                        className="h-full bg-gradient-to-r from-[#566FE9] to-purple-500 transition-all duration-300 ease-out rounded-full"
-                                        style={{ width: `${warmupProgress}%` }}
-                                    ></div>
-                                </div>
-                            </div>
+                        <div className="absolute inset-0 z-50">
+                            <Loading
+                                showProgress={true}
+                                customMessage="Building your action plan… stay tuned."
+                                backgroundOpacity="light"
+                                progressDuration={30}
+                            />
                         </div>
                     )}
                 </div>
@@ -1696,14 +1675,7 @@ function TeacherPageWithParams() {
 // Main export with Suspense boundary
 export default function TeacherPage() {
     return (
-        <Suspense fallback={
-            <div className="w-full h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading teacher session...</p>
-                </div>
-            </div>
-        }>
+        <Suspense fallback={<Loading />}>
             <TeacherPageWithParams />
         </Suspense>
     );
