@@ -11,6 +11,7 @@ import { useSessionStore } from '@/lib/store';
 import { useApiService, WhiteboardBlockType } from '@/lib/api';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { TabManager } from '@/components/session/TabManager';
+import Loading from '@/app/(app)/loading';
 
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -555,7 +556,7 @@ function SessionInner() {
     // No dynamic session creation required on view change.
 
     if (!isLoaded || isLoading) {
-        return <div className="w-full h-full flex items-center justify-center text-white">Initializing Session...</div>;
+        return <Loading />;
     }
     if (connectionError) {
         return <div className="w-full h-full flex items-center justify-center text-red-400">Connection Error: {connectionError}</div>;
