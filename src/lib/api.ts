@@ -175,7 +175,25 @@ const createApiClient = ({ getToken }: ApiClientOptions) => {
         }
         // For 204, no body is expected; for 201, servers usually return the created entity
         if (response.status === 204) { return null; }
-        return response.json();
+        
+        // Check if response has content before trying to parse JSON
+        const contentLength = response.headers.get('Content-Length');
+        const contentType = response.headers.get('Content-Type');
+        
+        // If no content or content-length is 0, return null
+        if (contentLength === '0' || (!contentType?.includes('application/json') && !response.body)) {
+            return null;
+        }
+        
+        // Try to parse JSON, but handle empty responses gracefully
+        try {
+            const text = await response.text();
+            return text ? JSON.parse(text) : null;
+        } catch (error) {
+            // If JSON parsing fails but response was successful, return null (for DELETE operations)
+            console.warn('Failed to parse JSON response, but request was successful:', error);
+            return null;
+        }
     };
     return {
         get: (path: string) => request('GET', path),
@@ -199,6 +217,7 @@ export class ApiService {
   async getCourse(id: string): Promise<Course> { return this.client.get(`/api/courses/${id}`); }
   async createCourse(course: Partial<Course>): Promise<Course> { return this.client.post('/api/courses', course); }
   async updateCourse(id: string, course: Partial<Course>): Promise<Course> { return this.client.put(`/api/courses/${id}`, course as any); }
+  async deleteCourse(id: string): Promise<void> { return this.client.delete(`/api/courses/${id}`); }
   async getMyCourses(): Promise<Course[]> { return this.client.get('/api/courses/teacher/me'); }
 
   // --- Enrollments API ---

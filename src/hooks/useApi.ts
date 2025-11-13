@@ -78,7 +78,7 @@ export const useTeacherCourses = () => {
     enabled: isSignedIn && !!userId,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    refetchOnMount: false,
+    refetchOnMount: true,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, error: any) => {
@@ -104,6 +104,7 @@ export const useUpdateCourse = () => {
       apiService.updateCourse(courseId, courseData),
     onSuccess: (updatedCourse) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.course(updatedCourse.id) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.courses });
       toast.success('Course updated successfully!');
     },
     onError: (error: Error) => {
@@ -139,6 +140,25 @@ export const useCreateCourse = () => {
     },
     onError: (error: Error) => {
       toast.error(`Failed to create course: ${error.message}`);
+    },
+  });
+};
+
+export const useDeleteCourse = () => {
+  const apiService = useApiService();
+  const queryClient = useQueryClient();
+  const { userId } = useAuth();
+
+  return useMutation({
+    mutationFn: (courseId: string) => apiService.deleteCourse(courseId),
+    onSuccess: (_data, courseId) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.courses });
+      queryClient.invalidateQueries({ queryKey: queryKeys.teacherCourses(userId || undefined) });
+      queryClient.removeQueries({ queryKey: queryKeys.course(courseId) });
+      toast.success('Course deleted');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to delete course: ${error.message}`);
     },
   });
 };
