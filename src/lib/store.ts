@@ -117,7 +117,7 @@ interface SessionState {
     activeTabId: string | null;
 
     // --- Imprinting / Session Controller State ---
-    imprinting_mode: string;
+    imprinting_mode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL';
     currentLO: string | null;
     // When true, user is in conceptual debrief flow and allowed to "Show Me"
     conceptualStarted: boolean;
@@ -158,7 +158,7 @@ interface SessionState {
     setActiveTabId: (id: string | null) => void;
 
     // --- Imprinting Actions ---
-    setImprintingMode: (mode: string) => void;
+    setImprintingMode: (mode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL') => void;
     setCurrentLO: (lo: string | null) => void;
     setConceptualStarted: (started: boolean) => void;
 
