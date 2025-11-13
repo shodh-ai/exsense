@@ -16,6 +16,7 @@ import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DraggableSphereWrapper } from '@/components/session/DraggableSphereWrapper';
 import { DemoRoleIndicator } from '@/components/session/DemoRoleIndicator';
+import Loading from '../(app)/loading';
 
 // Excalidraw and Mermaid conversion libs are imported dynamically in the effect below
 
@@ -53,9 +54,13 @@ interface SessionContentProps {
     openNewTab: (name: string, url: string) => Promise<void>;
     switchTab: (id: string) => Promise<void>;
     closeTab: (id: string) => Promise<void>;
+    // Warmup state
+    warmupStarted: boolean;
+    warmupCompleted: boolean;
+    warmupProgress: number;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab, warmupStarted, warmupCompleted, warmupProgress }: SessionContentProps) {
     const whiteboardBlocks = useSessionStore((s) => s.whiteboardBlocks);
     const whiteboardScrollRef = useRef<HTMLDivElement | null>(null);
     const [isBarVisible, setIsBarVisible] = useState(false);
@@ -180,7 +185,7 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                 {/* This container will now shift down when the bar is visible */}
                 <div className={`
                     ${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full flex flex-col
-                    transition-transform duration-300 ease-in-out
+                    transition-transform duration-300 ease-in-out relative
                 `}
                 style={{
                     transform: isBarVisible ? `translateY(${contentShiftDistance})` : 'translateY(0px)',
@@ -199,6 +204,18 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                         </>
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-300">Connecting to LiveKit...</div>
+                    )}
+
+                    {/* WARMUP LOADING OVERLAY - Show only when backend sends warmup_started and not yet completed */}
+                    {warmupStarted && !warmupCompleted && (
+                        <div className="absolute inset-0 z-50">
+                            <Loading
+                                showProgress={true}
+                                customMessage="Building your action plan… stay tuned. "
+                                backgroundOpacity="light"
+                                progressDuration={30}
+                            />
+                        </div>
                     )}
                 </div>
             </div>
@@ -408,8 +425,14 @@ function SessionInner() {
     } = useLiveKitSession(
         shouldInitializeLiveKit ? roomName : '',
         shouldInitializeLiveKit ? userName : '',
-        courseId || undefined
+        courseId || undefined,
+        { spawnAgent: true, spawnBrowser: true }
     );
+
+    // Warmup state (controlled by backend events)
+    const [warmupStarted, setWarmupStarted] = useState(false);
+    const [warmupCompleted, setWarmupCompleted] = useState(true); // Start as true, only show loading when backend sends warmup_started
+    const [warmupProgress, setWarmupProgress] = useState(0);
 
     // Suggested responses are now rendered inside the Sphere transcript bubble
     const isAgentSpeaking = useSessionStore((s) => s.isAgentSpeaking);
@@ -468,6 +491,74 @@ function SessionInner() {
             (window as any).__sessionStore = useSessionStore;
         }
     }, []);
+
+    // Listen for warmup events from backend via LiveKit data channel
+    useEffect(() => {
+        if (!room) return;
+
+        const handleDataReceived = (payload: Uint8Array, participant: any) => {
+            try {
+                const decoder = new TextDecoder();
+                const jsonString = decoder.decode(payload);
+                const message = JSON.parse(jsonString);
+
+                console.log('[SessionPage][Warmup] Received event:', message);
+
+                if (message.type === 'warmup_started') {
+                    console.log('[SessionPage][Warmup] ✓ Backend warmup started');
+                    setWarmupStarted(true);
+                    setWarmupCompleted(false);
+                    setWarmupProgress(0);
+                } else if (message.type === 'warmup_progress') {
+                    console.log(`[SessionPage][Warmup] Progress: ${Math.round(message.progress)}%`);
+                    setWarmupProgress(message.progress);
+                } else if (message.type === 'warmup_completed') {
+                    console.log('[SessionPage][Warmup] ✓ Backend warmup completed!');
+                    setWarmupCompleted(true);
+                    setWarmupProgress(100);
+                }
+            } catch (e) {
+                // Not a warmup event, ignore
+            }
+        };
+
+        room.on('dataReceived', handleDataReceived);
+
+        // Query warmup status when room connects (in case warmup already started)
+        const queryWarmupStatus = async () => {
+            try {
+                console.log('[SessionPage][Warmup] Querying initial warmup status...');
+                await sendBrowserInteraction({ action: 'get_warmup_status' });
+            } catch (e) {
+                console.warn('[SessionPage][Warmup] Failed to query warmup status:', e);
+            }
+        };
+
+        // Query status after a short delay to ensure backend is ready
+        const queryTimer = setTimeout(queryWarmupStatus, 1000);
+
+        return () => {
+            room.off('dataReceived', handleDataReceived);
+            clearTimeout(queryTimer);
+        };
+    }, [room, sendBrowserInteraction]);
+
+    // Frontend safety timeout: Always hide warmup screen after 30 seconds, regardless of backend
+    useEffect(() => {
+        if (!warmupStarted || warmupCompleted) return;
+
+        console.log('[SessionPage][Warmup] Starting frontend 30-second safety timeout...');
+
+        const safetyTimeout = setTimeout(() => {
+            console.log('[SessionPage][Warmup] ⏱️ Frontend safety timeout reached (30s) - force completing warmup');
+            setWarmupCompleted(true);
+            setWarmupProgress(100);
+        }, 30000); // 30 seconds
+
+        return () => {
+            clearTimeout(safetyTimeout);
+        };
+    }, [warmupStarted, warmupCompleted]);
 
     // Session restoration on initial load
     const restoredRef = useRef<string | null>(null);
@@ -608,6 +699,9 @@ function SessionInner() {
                         openNewTab={openNewTab}
                         switchTab={switchTab}
                         closeTab={closeTab}
+                        warmupStarted={warmupStarted}
+                        warmupCompleted={warmupCompleted}
+                        warmupProgress={warmupProgress}
                     />
 
                     {/* Bottom Controls Bar - All aligned on same axis */}

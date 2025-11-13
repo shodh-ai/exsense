@@ -629,6 +629,12 @@ const SphereComponent: React.FC<SphereProps> = ({ scale = 1.0, className }) => {
 
 // --- LOADING PAGE COMPONENT ---
 
+interface LoadingProps {
+  showProgress?: boolean;
+  customMessage?: string;
+  backgroundOpacity?: 'light' | 'medium' | 'heavy';
+  progressDuration?: number; // in seconds
+}
 
 
 
@@ -659,11 +665,18 @@ const tips = [
 
 
 
-export default function Loading() {
+export default function Loading({
+  showProgress = false,
+  customMessage,
+  backgroundOpacity = 'heavy',
+  progressDuration = 30
+}: LoadingProps = {}) {
 
   const [currentTip, setCurrentTip] = useState("Getting things ready...");
 
   const [isMounted, setIsMounted] = useState(false);
+
+  const [progress, setProgress] = useState(0);
 
 
 
@@ -672,18 +685,45 @@ export default function Loading() {
 
     setIsMounted(true);
 
-    const randomIndex = Math.floor(Math.random() * tips.length);
+    if (customMessage) {
+      setCurrentTip(customMessage);
+    } else {
+      const randomIndex = Math.floor(Math.random() * tips.length);
+      setCurrentTip(tips[randomIndex]);
+    }
 
-    setCurrentTip(tips[randomIndex]);
+    // Only run progress bar if showProgress is true
+    if (showProgress) {
+      // Simulate progress bar (0 to 95% over specified duration, never reaching 100%)
+      const duration = progressDuration * 1000; // convert to milliseconds
+      const interval = 100; // Update every 100ms
+      const increment = (95 / duration) * interval;
 
-  }, []);
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          const next = prev + increment;
+          return next >= 95 ? 95 : next;
+        });
+      }, interval);
+
+      return () => clearInterval(progressInterval);
+    }
+
+  }, [customMessage, showProgress, progressDuration]);
 
 
 
+
+  // Set background opacity based on prop
+  const bgClass = backgroundOpacity === 'light'
+    ? 'bg-white/15 backdrop-blur-sm'
+    : backgroundOpacity === 'medium'
+    ? 'bg-white/60 backdrop-blur-md'
+    : 'bg-white/95 backdrop-blur-sm';
 
   return (
 
-    <div className="flex items-center justify-center w-screen h-screen">
+    <div className={`flex items-center justify-center w-screen h-screen ${bgClass}`}>
 
       <div className="flex flex-col items-center gap-8">
 
@@ -703,11 +743,43 @@ export default function Loading() {
 
 
 
-        <p className="max-w-md px-4 text-center opacity-80 font-display-medium font-[number:var(--display-medium-font-weight)] text-[#566fe9] text-[length:var(--display-medium-font-size)] tracking-[var(--display-medium-letter-spacing)] leading-[var(--display-medium-line-height)] [font-style:var(--display-medium-font-style)]">
+        <div className="flex flex-col items-center gap-4 w-full max-w-md px-4">
 
-          {currentTip}
+          <p className="text-center font-display-medium font-[number:var(--display-medium-font-weight)] text-[#1f2937] text-[length:var(--display-medium-font-size)] tracking-[var(--display-medium-letter-spacing)] leading-[var(--display-medium-line-height)] [font-style:var(--display-medium-font-style)]">
 
-        </p>
+            {currentTip}
+
+          </p>
+
+
+
+          {/* Progress Bar - Only show if showProgress is true */}
+
+          {showProgress && (
+            <>
+              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+
+                <div
+
+                  className="h-full bg-gradient-to-r from-[#566FE9] to-[#8b9ff5] transition-all duration-300 ease-out rounded-full"
+
+                  style={{ width: `${progress}%` }}
+
+                />
+
+              </div>
+
+
+
+              <p className="text-sm text-gray-500 font-medium">
+
+                {Math.round(progress)}% Complete
+
+              </p>
+            </>
+          )}
+
+        </div>
 
       </div>
 
