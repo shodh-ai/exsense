@@ -12,32 +12,35 @@ interface LiveKitEventHandlers {
 }
 
 export function useLiveKitEvents(room: Room | null | undefined, handlers: LiveKitEventHandlers) {
+  // Subscribe once per room with stable wrappers and call latest handlers via ref
+  const handlersRef = (globalThis as any).__lkHandlersRef || { current: handlers };
+  (globalThis as any).__lkHandlersRef = handlersRef;
+  handlersRef.current = handlers;
+
   useEffect(() => {
     if (!room) return;
 
-    const {
-      onConnected,
-      onDisconnected,
-      onDataReceived,
-      onTrackSubscribed,
-      onTrackUnsubscribed,
-      onTranscriptionReceived,
-    } = handlers;
+    const onConnectedWrap = () => handlersRef.current?.onConnected?.();
+    const onDisconnectedWrap = () => handlersRef.current?.onDisconnected?.();
+    const onDataReceivedWrap = (payload: Uint8Array, participant?: any, kind?: any, topic?: string) => handlersRef.current?.onDataReceived?.(payload, participant, kind, topic);
+    const onTrackSubscribedWrap = (track: any, publication: any, participant: any) => handlersRef.current?.onTrackSubscribed?.(track, publication, participant);
+    const onTrackUnsubscribedWrap = (track: any, publication: any, participant: any) => handlersRef.current?.onTrackUnsubscribed?.(track, publication, participant);
+    const onTranscriptionReceivedWrap = (segments: any, participant?: any, publication?: any) => handlersRef.current?.onTranscriptionReceived?.(segments, participant, publication);
 
-    room.on(RoomEvent.Connected, onConnected);
-    room.on(RoomEvent.Disconnected, onDisconnected);
-    room.on(RoomEvent.DataReceived, onDataReceived as any);
-    room.on(RoomEvent.TrackSubscribed, onTrackSubscribed as any);
-    room.on(RoomEvent.TrackUnsubscribed, onTrackUnsubscribed as any);
-    room.on(RoomEvent.TranscriptionReceived, onTranscriptionReceived as any);
+    room.on(RoomEvent.Connected, onConnectedWrap);
+    room.on(RoomEvent.Disconnected, onDisconnectedWrap);
+    room.on(RoomEvent.DataReceived, onDataReceivedWrap as any);
+    room.on(RoomEvent.TrackSubscribed, onTrackSubscribedWrap as any);
+    room.on(RoomEvent.TrackUnsubscribed, onTrackUnsubscribedWrap as any);
+    room.on(RoomEvent.TranscriptionReceived, onTranscriptionReceivedWrap as any);
 
     return () => {
-      room.off(RoomEvent.Connected, onConnected);
-      room.off(RoomEvent.Disconnected, onDisconnected);
-      room.off(RoomEvent.DataReceived, onDataReceived as any);
-      room.off(RoomEvent.TrackSubscribed, onTrackSubscribed as any);
-      room.off(RoomEvent.TrackUnsubscribed, onTrackUnsubscribed as any);
-      room.off(RoomEvent.TranscriptionReceived, onTranscriptionReceived as any);
+      room.off(RoomEvent.Connected, onConnectedWrap);
+      room.off(RoomEvent.Disconnected, onDisconnectedWrap);
+      room.off(RoomEvent.DataReceived, onDataReceivedWrap as any);
+      room.off(RoomEvent.TrackSubscribed, onTrackSubscribedWrap as any);
+      room.off(RoomEvent.TrackUnsubscribed, onTrackUnsubscribedWrap as any);
+      room.off(RoomEvent.TranscriptionReceived, onTranscriptionReceivedWrap as any);
     };
-  }, [room, handlers]);
+  }, [room]);
 }
