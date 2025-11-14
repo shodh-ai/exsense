@@ -264,38 +264,63 @@ function SessionInner() {
             }
         };
 
-        const colorizeElements = (elements: any[]): any[] => {
-            // Apply pleasant readable colors to nodes while keeping arrows dark
-            const palette = ['#FDE68A','#A7F3D0','#BFDBFE','#FBCFE8','#DDD6FE','#C7D2FE'];
-            const dark = '#1f2937';
-            let idx = 0;
-            const getContrast = (hex: string) => {
-                const h = hex.replace('#','');
-                const r = parseInt(h.substring(0,2),16);
-                const g = parseInt(h.substring(2,4),16);
-                const b = parseInt(h.substring(4,6),16);
-                const lum = (0.299*r+0.587*g+0.114*b)/255;
-                return lum > 0.5 ? '#111827' : '#ffffff';
+   const colorizeElements = (elements: any[]): any[] => {
+        // Use vibrant, saturated backgrounds with guaranteed dark text
+        const backgroundColors = [
+            '#FEF3C7', // Light amber
+            '#D1FAE5', // Light emerald
+            '#DBEAFE', // Light blue
+            '#FCE7F3', // Light pink
+            '#EDE9FE', // Light purple
+            '#E0E7FF', // Light indigo
+        ];
+        
+        // Always use very dark gray for text - ensures readability on all light backgrounds
+        const textColor = '#1F2937'; // Gray-800 - very dark, high contrast
+        
+        // Use medium-dark colors for arrows/lines to stand out
+        const lineColor = '#374151'; // Gray-700
+        
+        let backgroundIndex = 0;
+        
+        return (elements || []).map((e) => {
+            if (!e || e.isDeleted) return e;
+            
+            // Handle arrows and lines - use dark stroke
+            if (e.type === 'arrow' || e.type === 'line') {
+            return { 
+                ...e, 
+                strokeColor: e.strokeColor || lineColor,
+                strokeWidth: e.strokeWidth || 2,
             };
-            return (elements || []).map((e) => {
-                if (!e || e.isDeleted) return e;
-                if (e.type === 'arrow' || e.type === 'line') {
-                    return { ...e, strokeColor: e.strokeColor || dark };
-                }
-                if (e.type === 'text') {
-                    // leave text color as-is; if background present, ensure readable
-                    return { ...e };
-                }
-                const fill = palette[idx % palette.length];
-                idx++;
-                const textColor = getContrast(fill);
-                return {
-                    ...e,
-                    backgroundColor: e.backgroundColor && e.backgroundColor !== 'transparent' ? e.backgroundColor : fill,
-                    strokeColor: e.strokeColor || dark,
-                    // text elements rendered separately; shapes won't have text
-                };
-            });
+            }
+            
+            // Handle text elements - force dark color for readability
+            if (e.type === 'text') {
+            return { 
+                ...e,
+                strokeColor: textColor, // Text color
+                opacity: 100,
+            };
+            }
+            
+            // Handle shapes (rectangles, ellipses, etc.)
+            const bgColor = backgroundColors[backgroundIndex % backgroundColors.length];
+            backgroundIndex++;
+            
+            return {
+            ...e,
+            // Light background for shape fill
+            backgroundColor: e.backgroundColor && e.backgroundColor !== 'transparent' 
+                ? e.backgroundColor 
+                : bgColor,
+            // Dark stroke around shapes
+            strokeColor: e.strokeColor || lineColor,
+            strokeWidth: e.strokeWidth || 2,
+            // Ensure opacity is high
+            opacity: e.opacity || 100,
+            };
+        });
         };
         const convertAndRender = async () => {
             if (diagramDefinition && diagramDefinition.trim()) {
