@@ -17,8 +17,6 @@ import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DraggableSphereWrapper } from '@/components/session/DraggableSphereWrapper';
 import { DemoRoleIndicator } from '@/components/session/DemoRoleIndicator';
-import Loading from '../(app)/loading';
-
 // Excalidraw and Mermaid conversion libs are imported dynamically in the effect below
 
 const IntroPage = NextDynamic(() => import('@/components/session/IntroPage'));
