@@ -15,7 +15,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Sphere from "@/components/compositions/Sphere";
-import { useProfileStats } from "@/hooks/useApi";
+import { useProfileStats, useTeacherAnalytics, useTeacherCourses } from "@/hooks/useApi";
+import { useApiService } from "@/lib/api";
 import { ProfileStatsSkeleton } from "@/components/utility/ProfileStatsSkeleton";
 
 // A custom hook for debouncing a value
@@ -40,8 +41,7 @@ const formFieldsTemplate = [
   { id: "last-name", label: "Last Name" },
   { id: "email", label: "Email" },
   { id: "phone-number", label: "Phone Number" },
-  { id: "education", label: "Education" },
-  { id: "country", label: "Country" },
+  { id: "bio", label: "Bio" },
 ];
 
 // Helper component for a single stat item
@@ -63,31 +63,66 @@ export default function ProfileDetails(): JSX.Element {
   const userRole = useMemo(() => (user?.publicMetadata?.role as string) || 'student', [user]);
   const normalizedRole = useMemo(() => (userRole === 'expert' ? 'teacher' : userRole === 'learner' ? 'student' : 'student'), [userRole]);
   const { data: profileStats = [], isLoading: statsLoading } = useProfileStats();
+  const { data: analytics } = useTeacherAnalytics();
+  const { data: teacherCourses = [] } = useTeacherCourses();
+  const apiService = useApiService();
 
   const [initialFormData, setInitialFormData] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"Saving..." | "All changes saved" | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasInitialized = useRef<boolean>(false);
+  const hasSyncedCoursesOnce = useRef<boolean>(false);
 
   const debouncedFormData = useDebounce(formData, 1000); // 1-second debounce delay
 
   useEffect(() => {
-    if (isLoaded && isSignedIn && user) {
+    if (isLoaded && isSignedIn && user && !hasInitialized.current) {
       const userData = {
         "first-name": user.firstName || "",
         "last-name": user.lastName || "",
         "email": user.primaryEmailAddress?.emailAddress || "",
-        "phone-number": user.primaryPhoneNumber?.phoneNumber || "",
-        "education": (user.unsafeMetadata?.education as string) || "B. Tech Information Technology",
-        "country": (user.unsafeMetadata?.country as string) || "India",
+        "phone-number": (user.unsafeMetadata?.phoneNumber as string) || user.primaryPhoneNumber?.phoneNumber || "",
+        "bio": (user.unsafeMetadata?.bio as string) || "",
       };
       setFormData(userData);
       setInitialFormData(userData);
+      hasInitialized.current = true;
     }
   }, [isLoaded, isSignedIn, user]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // One-time sync: ensure existing courses reflect current teacher name
+  useEffect(() => {
+    const runSync = async () => {
+      if (hasSyncedCoursesOnce.current) return;
+      if (!user || normalizedRole !== 'teacher') return;
+      if (!Array.isArray(teacherCourses) || teacherCourses.length === 0) return;
+
+      const fullName = `${formData["first-name"] || user.firstName || ""} ${formData["last-name"] || user.lastName || ""}`.trim();
+      if (!fullName) return;
+
+      const toUpdate = teacherCourses.filter((c: any) => (c?.teacher?.name || '').trim() !== fullName);
+      if (toUpdate.length === 0) {
+        hasSyncedCoursesOnce.current = true;
+        return;
+      }
+      try {
+        await Promise.allSettled(
+          toUpdate.map((c: any) =>
+            apiService.updateCourse(c.id, { teacher: { ...(c.teacher || {}), name: fullName } })
+          )
+        );
+      } catch (e) {
+        console.warn('One-time course name sync encountered errors', e);
+      } finally {
+        hasSyncedCoursesOnce.current = true;
+      }
+    };
+    runSync();
+  }, [normalizedRole, teacherCourses, apiService, user, formData]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData((prevData) => ({ ...prevData, [name]: value }));
   };
@@ -107,10 +142,24 @@ export default function ProfileDetails(): JSX.Element {
             lastName: debouncedFormData["last-name"],
             unsafeMetadata: {
               ...user.unsafeMetadata,
-              education: debouncedFormData["education"],
-              country: debouncedFormData["country"],
+              bio: debouncedFormData["bio"],
+              phoneNumber: debouncedFormData["phone-number"],
             }
           });
+          // Propagate teacher name change to all their courses so student pages reflect it
+          const prevFullName = `${initialFormData["first-name"] || ""} ${initialFormData["last-name"] || ""}`.trim();
+          const newFullName = `${debouncedFormData["first-name"] || ""} ${debouncedFormData["last-name"] || ""}`.trim();
+          if (newFullName && newFullName !== prevFullName && Array.isArray(teacherCourses) && teacherCourses.length > 0) {
+            try {
+              await Promise.allSettled(
+                teacherCourses.map((c: any) =>
+                  apiService.updateCourse(c.id, { teacher: { ...(c.teacher || {}), name: newFullName } })
+                )
+              );
+            } catch (e) {
+              console.warn("Failed to propagate teacher name to courses", e);
+            }
+          }
           setInitialFormData(debouncedFormData);
           setSaveStatus("All changes saved");
         } catch (error) {
@@ -146,8 +195,85 @@ export default function ProfileDetails(): JSX.Element {
     );
   }, [formData, profileStats]);
 
-  const firstColumnStats = dynamicProfileStats.filter((_, index) => index % 2 === 0);
-  const secondColumnStats = dynamicProfileStats.filter((_, index) => index % 2 !== 0);
+  // Rename labels for display only (icons and values remain as-is)
+  const labelOverrides = [
+    "Teacher Name",
+    "Teaching Style",
+    "Rating",
+    "Course Created",
+    "Total Time Spent",
+    "Resolved Doubts",
+  ];
+  // Icon files from public/ for each display label
+  const iconOverrides: Record<string, string> = {
+    "Teacher Name": "/TeacherNamelogo.png",
+    "Teaching Style": "/TeachingStylelogo.svg",
+    "Rating": "/Ratinglogo.svg",
+    "Course Created": "/CourseCreatedlogo.svg",
+    "Total Time Spent": "/TotalTimeSpentlogo.svg",
+    "Resolved Doubts": "/ResolvedDoubtslogo.svg",
+  };
+  const renamedProfileStats = useMemo(() => {
+    const formatMinutes = (mins: number) => {
+      const total = Math.max(0, Math.floor(mins || 0));
+      const h = Math.floor(total / 60);
+      const m = total % 60;
+      return `${h}h ${m}m`;
+    };
+
+    const ratingNum = typeof (analytics as any)?.averageRating === 'number'
+      ? (analytics as any).averageRating
+      : (typeof (analytics as any)?.rating === 'number' ? (analytics as any).rating : null);
+    const reviewsCount = (analytics as any)?.totalReviews ?? (analytics as any)?.reviewsCount ?? (analytics as any)?.reviews ?? null;
+    const totalMinutes = (analytics as any)?.totalTimeMinutes ?? (analytics as any)?.totalTeachingMinutes ?? (analytics as any)?.minutesTaught ?? null;
+    const resolvedDoubts = (analytics as any)?.resolvedDoubts ?? (analytics as any)?.doubtsResolved ?? (analytics as any)?.totalDoubtsResolved ?? null;
+    const coursesCreated = Array.isArray(teacherCourses) ? teacherCourses.length : ((analytics as any)?.coursesCreated ?? (analytics as any)?.totalCourses ?? null);
+    const teachingStyle = (user?.unsafeMetadata?.teachingStyle as string) || "Visual + Theoretical";
+
+    return dynamicProfileStats.map((stat, index) => {
+      const newLabel = labelOverrides[index] || stat.label;
+      let value = stat.value;
+      switch (newLabel) {
+        case "Teacher Name": {
+          const fullName = `${formData["first-name"] || ""} ${formData["last-name"] || ""}`.trim();
+          value = fullName || value;
+          break;
+        }
+        case "Teaching Style": {
+          value = teachingStyle;
+          break;
+        }
+        case "Rating": {
+          if (ratingNum != null && reviewsCount != null) {
+            const fixed = Number.isFinite(ratingNum) ? (ratingNum as number).toFixed(1) : String(ratingNum);
+            value = `${fixed} (${reviewsCount} reviews)`;
+          }
+          break;
+        }
+        case "Course Created": {
+          if (coursesCreated != null) value = String(coursesCreated);
+          break;
+        }
+        case "Total Time Spent": {
+          if (totalMinutes != null) value = formatMinutes(Number(totalMinutes));
+          break;
+        }
+        case "Resolved Doubts": {
+          if (resolvedDoubts != null) value = String(resolvedDoubts);
+          break;
+        }
+      }
+      return {
+        ...stat,
+        label: newLabel,
+        icon: iconOverrides[newLabel] || (stat as any).icon,
+        value,
+      };
+    });
+  }, [dynamicProfileStats, labelOverrides, iconOverrides, formData, analytics, teacherCourses, user]);
+
+  const firstColumnStats = renamedProfileStats.filter((_, index) => index % 2 === 0);
+  const secondColumnStats = renamedProfileStats.filter((_, index) => index % 2 !== 0);
 
   if (!isLoaded || (isSignedIn && statsLoading)) {
     return (
@@ -192,7 +318,7 @@ export default function ProfileDetails(): JSX.Element {
           </nav>
           <section className="flex w-full flex-col items-start gap-6">
             <h1 className="text-3xl font-bold text-[#394169]">
-              {normalizedRole === 'teacher' ? 'Instructor Profile' : 'Student Profile'}
+              {normalizedRole === 'teacher' ? 'Profile Details' : 'Student Profile'}
             </h1>
             <form className="w-full">
               <Card className="w-full rounded-xl border border-solid border-[#c7ccf8] p-4">
@@ -224,10 +350,48 @@ export default function ProfileDetails(): JSX.Element {
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {formFieldsTemplate.map((field) => (
-                      <div key={field.id} className="flex flex-col gap-2">
-                        <Label htmlFor={field.id} className="font-semibold text-[#394169]">{field.label}</Label>
-                        <Input id={field.id} name={field.id} value={formData[field.id] || ""} onChange={handleInputChange} className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]" disabled={field.id === 'email'} />
-                      </div>
+                      field.id === 'bio' ? (
+                        <div key={field.id} className="flex flex-col gap-2 md:col-span-2">
+                          <div className="flex items-center justify-between w-[818px]">
+                            <Label htmlFor={field.id} className="font-semibold text-[#394169]">{field.label}</Label>
+                            <span className="font-sans font-semibold text-[14px] leading-[15px] text-[#8187a0]">{(formData[field.id] || "").length}/500</span>
+                          </div>
+                          <textarea
+                            id={field.id}
+                            name={field.id}
+                            value={formData[field.id] || ""}
+                            onChange={handleInputChange}
+                            maxLength={500}
+                            className="w-[818px] h-[170px] rounded-xl border border-solid border-[#c7ccf8] bg-white px-5 py-3 font-medium text-[#394169] opacity-100 focus:outline-none focus:border-[#8187a0]"
+                            placeholder="Write a short bio..."
+                          />
+                        </div>
+                      ) : (
+                        <div key={field.id} className="flex flex-col gap-2">
+                          <Label htmlFor={field.id} className="font-semibold text-[#394169]">{field.label}</Label>
+                          {field.id === 'phone-number' ? (
+                            <Input
+                              id={field.id}
+                              name={field.id}
+                              type="tel"
+                              inputMode="tel"
+                              autoComplete="tel"
+                              value={formData[field.id] || ""}
+                              onChange={handleInputChange}
+                              className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
+                            />
+                          ) : (
+                            <Input
+                              id={field.id}
+                              name={field.id}
+                              value={formData[field.id] || ""}
+                              onChange={handleInputChange}
+                              className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
+                              disabled={field.id === 'email'}
+                            />
+                          )}
+                        </div>
+                      )
                     ))}
                   </div>
                   <div className="mt-6 flex justify-end gap-4">

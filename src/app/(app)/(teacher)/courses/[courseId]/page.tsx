@@ -2,6 +2,8 @@
 
 import { Star, ChevronLeftIcon } from "lucide-react";
 import React, { JSX, useMemo } from "react";
+import { useUser } from "@clerk/nextjs";
+
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCourse, useLessons, queryKeys } from "@/hooks/useApi";
@@ -96,8 +98,8 @@ const WhatYouWillLearnSection = ({ skills, outcomes }: { skills: string[]; outco
   <section className="flex flex-col gap-6"><h2 className="text-xl font-bold text-[#394169]">What you'll learn</h2><div className="flex flex-col gap-5"><div className="flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap">{skills.map((skill) => (<Badge key={skill} className="flex h-[32px] w-auto items-center justify-center rounded-[30px] bg-[#f6f6fe] px-4 py-2 text-sm font-medium text-[#566fe9] shadow-none">{skill}</Badge>))}</div><div className="flex flex-col gap-4">{outcomes.map((outcome) => (<div key={outcome} className="flex items-start gap-3"><div className="flex-shrink-0 mt-1"><img className="h-[16.25px] w-[16.25px]" alt="Checkmark" src="/ticked.svg" /></div><p className="text-base text-[16px] font-semibold leading-6 text-[#394169]">{outcome}</p></div>))}</div></div>
   </section>
 );
-const TeacherProfileSection = ({ name, title, bio }: { name?: string; title?: string; bio?: string }) => (
-  <section className="flex flex-col gap-6"><h2 className="text-xl font-bold text-[#394169]">Meet your teacher</h2><div className="flex flex-col gap-5"><div className="flex items-center gap-4"><Avatar className="h-14 w-14"><AvatarImage src="/teacher1.svg" alt={name} /></Avatar><div className="flex flex-col gap-1"><div className="flex flex-wrap items-center gap-2.5"><span className="text-base font-semibold text-[#394169]">{name || "Arjun Mehta"}</span><Badge variant="outline" className="flex items-center gap-1 rounded-[30px] border-[#566fe940] bg-[#566fe91a] py-1 pl-2.5 pr-3.5 text-[#566fe9]"><div className="relative h-4 w-4"><div className="relative left-px top-px h-[13px] w-3.5"><img className="absolute left-px top-0 h-3 w-[13px]" alt="Vector" src="/vector.svg" /><img className="absolute left-0 top-0 h-[13px] w-3.5" alt="Vector" src="/star1.svg" /></div></div><span className="text-sm font-medium">Top Educator</span></Badge></div><span className="text-sm font-medium text-[#8187a0]">{title || "AI Educator at DeepLearn Lab."}</span></div></div>{bio && <p className="text-base text-[16px] font-semibold leading-6 text-[#394169]" dangerouslySetInnerHTML={{ __html: bio.replace(/\n/g, "<br />") }}></p>}</div>
+const TeacherProfileSection = ({ name, title, bio, imageUrl }: { name?: string; title?: string; bio?: string; imageUrl?: string }) => (
+  <section className="flex flex-col gap-6"><h2 className="text-xl font-bold text-[#394169]">Meet your teacher</h2><div className="flex flex-col gap-5"><div className="flex items-center gap-4"><Avatar className="h-14 w-14"><AvatarImage src={imageUrl || "/teacher1.svg"} alt={name} /></Avatar><div className="flex flex-col gap-1"><div className="flex flex-wrap items-center gap-2.5"><span className="text-base font-semibold text-[#394169]">{name || "Arjun Mehta"}</span><Badge variant="outline" className="flex items-center gap-1 rounded-[30px] border-[#566fe940] bg-[#566fe91a] py-1 pl-2.5 pr-3.5 text-[#566fe9]"><div className="relative h-4 w-4"><div className="relative left-px top-px h-[13px] w-3.5"><img className="absolute left-px top-0 h-3 w-[13px]" alt="Vector" src="/vector.svg" /><img className="absolute left-0 top-0 h-[13px] w-3.5" alt="Vector" src="/star1.svg" /></div></div><span className="text-sm font-medium">Top Educator</span></Badge></div><span className="text-sm font-medium text-[#8187a0]">{title || "AI Educator at DeepLearn Lab."}</span></div></div>{bio && <p className="text-base text-[16px] font-semibold leading-6 text-[#394169]" dangerouslySetInnerHTML={{ __html: bio.replace(/\n/g, "<br />") }}></p>}</div>
   </section>
 );
 const FaqSection = ({ faqs }: { faqs: FaqItem[] }) => (
@@ -133,6 +135,7 @@ export default function TeacherCoursePage(): JSX.Element {
   const courseId = (params.courseId as string);
   const api = useApiService();
   const queryClient = useQueryClient();
+  const { user } = useUser();
 
   const { data: course, isLoading, error, refetch: refetchCourse } = useCourse(courseId);
   const { data: lessons, isLoading: lessonsLoading } = useLessons(courseId);
@@ -184,7 +187,17 @@ export default function TeacherCoursePage(): JSX.Element {
       { icon: "/assignment.svg", label: "Assignments", value: `${course.lessonCount || 0}` },
     ];
   }, [course]);
-  
+
+  const isViewerCourseTeacher = useMemo(() => {
+    const courseEmail = course?.teacher?.email?.toLowerCase?.();
+    const userEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase?.();
+    return !!courseEmail && !!userEmail && courseEmail === userEmail;
+  }, [course, user]);
+
+  const computedTeacherName = isViewerCourseTeacher ? (user?.fullName || (user?.unsafeMetadata?.name as string) || course?.teacher?.name) : course?.teacher?.name;
+  const computedTeacherTitle = isViewerCourseTeacher ? ((user?.unsafeMetadata?.title as string) || course?.teacher?.title) : course?.teacher?.title;
+  const computedTeacherImage = (course as any)?.teacher?.imageUrl || (isViewerCourseTeacher ? user?.imageUrl : undefined);
+
   // --- MODIFIED LOADING AND ERROR HANDLING ---
 
   // If data is still loading, render nothing.
@@ -249,7 +262,8 @@ export default function TeacherCoursePage(): JSX.Element {
               </section> */}
               <WhatYouWillLearnSection skills={course.skills || []} outcomes={course.learningOutcomes || []} />
               <CourseMap />
-              <TeacherProfileSection name={course.teacher?.name} title={course.teacher?.title} bio={course.teacher?.bio} />
+              <TeacherProfileSection name={computedTeacherName} title={computedTeacherTitle} bio={course.teacher?.bio} imageUrl={computedTeacherImage} />
+
               <FaqSection faqs={course.faqs || []} />
             </div>
           </div>

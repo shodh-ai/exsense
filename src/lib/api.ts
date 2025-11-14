@@ -225,7 +225,7 @@ export class ApiService {
   async getTeacherAnalytics(): Promise<any> { 
     try { return await this.client.get('/api/teacher/me/analytics'); }
     catch (err: any) {
-      if ([404, 401, 403].includes(err?.status)) return null;
+      if ([404, 401, 403, 429].includes(err?.status)) return null;
       throw err;
     }
   }
