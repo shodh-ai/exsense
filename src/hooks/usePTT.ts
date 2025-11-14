@@ -35,9 +35,11 @@ export function usePTT(deps: UsePTTDeps) {
   const sentThisPTTRef = useRef<boolean>(false);
   const lastSentTranscriptRef = useRef<string>('');
   const lastSentAtRef = useRef<number>(0);
+  const pttStartTimeRef = useRef<number>(0);
 
   const startPushToTalk = useCallback(async () => {
     try {
+      pttStartTimeRef.current = Date.now();
       try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 0; } catch {} }); } catch {}
       setIsPushToTalkActive(true);
       setIsMicEnabled(true);
@@ -90,31 +92,41 @@ export function usePTT(deps: UsePTTDeps) {
       const text = (pttBufferRef.current || []).join(' ').trim();
       pttBufferRef.current = [];
       try { pttAcceptUntilTsRef.current = 0; } catch {}
+
+      // Check minimum duration (250ms) to prevent accidental quick taps
+      const pttDuration = Date.now() - pttStartTimeRef.current;
+      if (pttDuration < 250) {
+        console.log(`[PTT] Ignoring quick tap (${pttDuration}ms < 250ms minimum).`);
+        return;
+      }
+
       // Diagnostics: log transcript and decision
-      console.log(`[PTT] stopPushToTalk triggered. Final transcript: "${text}"`);
+      console.log(`[PTT] stopPushToTalk triggered. Duration: ${pttDuration}ms, Final transcript: "${text}"`);
       // Per-press guard: ensure we send at most once for this PTT cycle
       if (sentThisPTTRef.current) {
         console.log('[PTT] Duplicate stop ignored (already sent for this press).');
         return;
       }
       sentThisPTTRef.current = true;
-      const now = Date.now();
-      if (text && text.length > 0) {
-        // Short-window dedupe across presses in case something triggers an immediate resend
-        const norm = text.trim();
-        const lastNorm = (lastSentTranscriptRef.current || '').trim();
-        if (lastNorm && norm === lastNorm && (now - (lastSentAtRef.current || 0)) < 120000) {
-          console.log('[PTT] Suppressing duplicate transcript resend within window.');
-          return;
-        }
-        console.log('[PTT] Transcript is not empty. Sending "student_spoke_or_acted".');
-        await startTask('student_spoke_or_acted', { transcript: text });
-        lastSentTranscriptRef.current = norm;
-        lastSentAtRef.current = now;
-      } else {
-        console.log('[PTT] Transcript is empty. Sending "student_stopped_listening".');
-        await startTask('student_stopped_listening', {});
+
+      // Skip empty transcripts entirely - don't send any event
+      if (!text || text.length === 0) {
+        console.log('[PTT] Transcript is empty. Skipping (no event sent).');
+        return;
       }
+
+      const now = Date.now();
+      // Short-window dedupe across presses in case something triggers an immediate resend
+      const norm = text.trim();
+      const lastNorm = (lastSentTranscriptRef.current || '').trim();
+      if (lastNorm && norm === lastNorm && (now - (lastSentAtRef.current || 0)) < 120000) {
+        console.log('[PTT] Suppressing duplicate transcript resend within window.');
+        return;
+      }
+      console.log('[PTT] Transcript is not empty. Sending "student_spoke_or_acted".');
+      await startTask('student_spoke_or_acted', { transcript: text });
+      lastSentTranscriptRef.current = norm;
+      lastSentAtRef.current = now;
       try {
         setIsAwaitingAIResponse(true);
         if (thinkingTimeoutRef.current) {
