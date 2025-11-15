@@ -467,6 +467,9 @@ function SessionInner() {
     // Extract the latest transcript for the avatar bubble
     const [latestTranscript, setLatestTranscript] = useState("");
     const transcriptClearTimerRef = useRef<number | null>(null);
+    const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+    const [isUserScrolling, setIsUserScrolling] = useState(false);
+    const userScrollTimeoutRef = useRef<number | null>(null);
 
     useEffect(() => {
         // When the array of messages changes, get the last one.
@@ -484,12 +487,30 @@ function SessionInner() {
                     clearTimeout(transcriptClearTimerRef.current);
                     transcriptClearTimerRef.current = null;
                 }
+                
+                // Auto-scroll logic: scroll to bottom if user hasn't manually scrolled
+                requestAnimationFrame(() => {
+                    if (transcriptScrollRef.current && !isUserScrolling) {
+                        const element = transcriptScrollRef.current;
+                        const lineHeight = 24; // Approximate line height in pixels
+                        const twoLinesHeight = lineHeight * 2;
+                        
+                        // Check if content exceeds 2 lines
+                        if (element.scrollHeight > twoLinesHeight) {
+                            // Smooth scroll to show the latest content
+                            element.scrollTo({
+                                top: element.scrollHeight,
+                                behavior: 'smooth'
+                            });
+                        }
+                    }
+                });
             }
         }
         return () => {
             // Do not clear here; speaking effect manages lifecycle
         };
-    }, [transcriptionMessages, isAgentSpeaking]);
+    }, [transcriptionMessages, isAgentSpeaking, isUserScrolling]);
 
     // When agent speaking state changes, clear transcript immediately when AI stops
     useEffect(() => {
@@ -502,6 +523,7 @@ function SessionInner() {
             // Small delay to allow smooth transition
             transcriptClearTimerRef.current = window.setTimeout(() => {
                 setLatestTranscript("");
+                setIsUserScrolling(false); // Reset scroll state when transcript clears
                 transcriptClearTimerRef.current = null;
             }, 500);
         }
@@ -509,6 +531,15 @@ function SessionInner() {
             // no-op cleanup; timers are cleared on re-runs as needed
         };
     }, [isAgentSpeaking]);
+
+    // Cleanup scroll timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (userScrollTimeoutRef.current) {
+                clearTimeout(userScrollTimeoutRef.current);
+            }
+        };
+    }, []);
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -744,11 +775,46 @@ function SessionInner() {
                                 {/* Left side: Transcript or Status Pill */}
                                 <div className="flex-1 flex items-center" style={{ maxWidth: '85%' }}>
                                     {latestTranscript ? (
-                                        <div className="w-full pointer-events-none">
-                                            <div className="flex items-center justify-start min-h-[48px] bg-[#E9EBFD] border border-[#E9EBFD] rounded-full px-6 py-3 ">
-                                                <p className="text-[#394169] text-base font-medium line-clamp-3">
+                                        <div className="w-full pointer-events-auto">
+                                            <div className="flex items-center justify-start min-h-[48px] max-h-[96px] bg-[#E9EBFD] border border-[#E9EBFD] rounded-full px-6 py-3 overflow-hidden">
+                                                <div 
+                                                    ref={transcriptScrollRef}
+                                                    className="text-[#394169] text-base font-medium overflow-y-auto w-full pr-2 custom-scrollbar"
+                                                    style={{ 
+                                                        maxHeight: '72px', // 3 lines * 24px line height
+                                                        lineHeight: '24px',
+                                                        scrollbarWidth: 'thin',
+                                                        scrollbarColor: '#566FE9 transparent'
+                                                    }}
+                                                    onScroll={(e) => {
+                                                        const element = e.currentTarget;
+                                                        const isAtBottom = Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) < 5;
+                                                        
+                                                        // If user scrolls up (not at bottom), mark as user scrolling
+                                                        if (!isAtBottom) {
+                                                            setIsUserScrolling(true);
+                                                            
+                                                            // Clear existing timeout
+                                                            if (userScrollTimeoutRef.current) {
+                                                                clearTimeout(userScrollTimeoutRef.current);
+                                                            }
+                                                            
+                                                            // Reset user scrolling flag after 3 seconds of no scroll
+                                                            userScrollTimeoutRef.current = window.setTimeout(() => {
+                                                                setIsUserScrolling(false);
+                                                            }, 3000);
+                                                        } else {
+                                                            // User scrolled to bottom, resume auto-scroll
+                                                            setIsUserScrolling(false);
+                                                            if (userScrollTimeoutRef.current) {
+                                                                clearTimeout(userScrollTimeoutRef.current);
+                                                                userScrollTimeoutRef.current = null;
+                                                            }
+                                                        }
+                                                    }}
+                                                >
                                                     {latestTranscript}
-                                                </p>
+                                                </div>
                                             </div>
                                         </div>
                                     ) : isAwaitingAIResponse ? (
