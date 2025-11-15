@@ -415,55 +415,213 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       } catch {}
     }, []);
 
+    // --- Agent task sender (moved above to satisfy dependency ordering) ---
+    const startTask = useCallback(async (taskName: string, payload: object) => {
+      // Idempotency: suppress identical transcript resends within a short window
+      try {
+        if (taskName === 'student_spoke_or_acted') {
+          const norm = String((payload as any)?.transcript || '').trim();
+          const lastName = lastSentTaskNameRef.current || '';
+          const lastNorm = (lastSentTranscriptRef.current || '').trim();
+          const lastAt = lastSentAtMsRef.current || 0;
+          const now = Date.now();
+          if (norm && lastName === 'student_spoke_or_acted' && lastNorm === norm && (now - lastAt) < 25000) {
+            console.log('[F2B DC] Suppressing duplicate student_spoke_or_acted within window');
+            return;
+          }
+        }
+      } catch {}
+      const dcId = `dc_${uuidv4()}`;
+      console.log(`%c[F2B DC PREP] ID: ${dcId}`, 'color: orange;', `Task: ${taskName}`, { roomState: roomInstance.state, agentIdentity });
+      if (!agentIdentity || agentIdentity.startsWith('browser-bot-')) {
+        pendingTasksRef.current.push({ name: taskName, payload });
+        console.warn(`[F2B DC QUEUED] ID: ${dcId} - Invalid agentIdentity='${agentIdentity || 'null'}'; queued '${taskName}' until agent_ready.`);
+        return;
+      }
+      try {
+        console.log(`[F2B DC TARGET] agentIdentity='${agentIdentity}'`);
+        console.log(`%c[F2B DC SEND] ID: ${dcId}`, 'color: orange;', `Starting task: ${taskName}`);
+        try {
+          const lp: any = roomInstance?.localParticipant as any;
+          const perms = lp?.permissions || (lp?._permissions) || null;
+          const rem = Array.from(roomInstance?.remoteParticipants?.keys?.() || []);
+          console.log('[F2B DC DIAG]', { localIdentity: lp?.identity, permissions: perms, remoteParticipants: rem });
+        } catch {}
+        const traceId = uuidv4();
+        try { (window as any).__lastTraceId = traceId; } catch {}
+        const envelope = {
+          type: 'agent_task',
+          taskName,
+          payload: { ...(payload as any), trace_id: traceId, _dcId: dcId },
+        };
+        const bytes = new TextEncoder().encode(JSON.stringify(envelope));
+        // Primary: legacy positional targeted send (broadest compatibility)
+        let sent = false;
+        try {
+          await (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity]);
+          sent = true;
+          try { console.log('[F2B DC VARIANT] primary=positional'); } catch {}
+        } catch (posErr) {
+          console.warn('[F2B DC VARIANT] positional failed, trying identity options', posErr);
+        }
+        if (!sent) {
+          // Secondary: identity options (destinationIdentities)
+          const optsId: any = { destinationIdentities: [agentIdentity], reliable: true, topic: 'agent_task' };
+          try { console.log('[F2B DC OPTS][identity]', optsId); } catch {}
+          try {
+            await roomInstance.localParticipant.publishData(bytes, optsId);
+            sent = true;
+            try { console.log('[F2B DC VARIANT] secondary=identity options'); } catch {}
+          } catch (optIdErr) {
+            console.warn('[F2B DC VARIANT] identity options failed, trying SID destination', optIdErr);
+          }
+        }
+        if (!sent) {
+          // Tertiary: destination via SID if available
+          let agentSid: string | undefined;
+          try {
+            const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
+            const part = remVals.find((p: any) => (p?.identity || '') === agentIdentity);
+            agentSid = part?.sid;
+          } catch {}
+          try { console.log('[F2B DC DEST]', { agentIdentity, agentSid }); } catch {}
+          if (agentSid) {
+            const optsSid: any = { destination: [agentSid], reliable: true, topic: 'agent_task' };
+            try { console.log('[F2B DC OPTS][sid]', optsSid); } catch {}
+            try {
+              await roomInstance.localParticipant.publishData(bytes, optsSid);
+              sent = true;
+              try { console.log('[F2B DC VARIANT] tertiary=options SID'); } catch {}
+            } catch (sidErr) {
+              console.warn('[F2B DC VARIANT] options SID failed', sidErr);
+            }
+          }
+        }
+        // Env-gated broadcast duplicate for safety when targeting is flaky
+        try {
+          const BCAST_DUP = (process.env.NEXT_PUBLIC_LK_DC_BCAST_DUP || 'false').toLowerCase() === 'true';
+          if (BCAST_DUP) {
+            try {
+              await roomInstance.localParticipant.publishData(bytes);
+              console.log('[F2B DC DUP] broadcast duplicate sent (env NEXT_PUBLIC_LK_DC_BCAST_DUP=true)');
+            } catch (e) {
+              console.warn('[F2B DC DUP] broadcast duplicate failed', e);
+            }
+          } else if (!sent) {
+            try {
+              await roomInstance.localParticipant.publishData(bytes);
+              console.log('[F2B DC FALLBACK] broadcast fallback sent because all targeted variants failed');
+            } catch (e) {
+              console.warn('[F2B DC FALLBACK] broadcast fallback failed', e);
+            }
+          }
+        } catch {}
+        // If a browser-bot is present, optionally double-send using the positional API without topic for extra safety (opt-in)
+        try {
+          const DOUBLE = (process.env.NEXT_PUBLIC_LK_DC_DOUBLE_SEND || 'false').toLowerCase() === 'true';
+          const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
+          const hasBrowser = remVals.some((p: any) => (p?.identity || '').startsWith('browser-bot-'));
+          if (DOUBLE && hasBrowser) {
+            try {
+              await (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity]);
+              console.log('[F2B DC RESEND] positional targeted resend because browser-bot present');
+            } catch (e) {
+              console.warn('[F2B DC RESEND] failed', e);
+            }
+          }
+        } catch {}
+        try {
+          const PROBE = (process.env.NEXT_PUBLIC_LK_DC_PROBE || '').toLowerCase() === 'true';
+          if (PROBE) {
+            const probe = new TextEncoder().encode(JSON.stringify({ type: 'probe', ts: Date.now(), note: 'dc_broadcast_probe' }));
+            await roomInstance.localParticipant.publishData(probe);
+            console.log('[F2B DC PROBE] broadcast probe sent');
+          }
+        } catch {}
+        console.log(`%c[F2B DC SUCCESS] ID: ${dcId}`, 'color: green;');
+        try {
+          if (taskName === 'student_spoke_or_acted') {
+            lastSentTaskNameRef.current = taskName;
+            lastSentTranscriptRef.current = String((payload as any)?.transcript || '').trim();
+            lastSentAtMsRef.current = Date.now();
+          }
+        } catch {}
+      } catch (e) {
+        console.error(`%c[F2B DC FAIL] ID: ${dcId}`, 'color: red;', `Failed to send '${taskName}' to agent='${agentIdentity}':`, e);
+        setConnectionError(`Failed to start task: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }, [agentIdentity]);
+
+    // --- Push To Talk helpers (LiveKit STT) ---
+    const { startPushToTalk, stopPushToTalk, pttStateRef, sendTranscriptTask } = usePTT({
+      roomInstance,
+      agentAudioElsRef,
+      pttBufferRef,
+      pttAcceptUntilTsRef,
+      thinkingTimeoutRef,
+      thinkingTimeoutMsRef,
+      setIsPushToTalkActive,
+      setIsMicEnabled,
+      setIsAwaitingAIResponse,
+      setShowWaitingPill,
+      startTask,
+    });
+
     // Handler for transcription data (LiveKit STT)
+    // ============================= FIX START ==============================
+    // 2. Replace the ENTIRE handleTranscriptionReceived function with this new version.
     const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant) => {
       if (!transcriptions || transcriptions.length === 0) return;
 
-      if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
+      // Get the current PTT state to make decisions.
+      const currentPttState = pttStateRef.current;
 
-      // --- PTT Buffer Logic (for sending user speech to agent) ---
-      try {
-        const now = Date.now();
-        const acceptWindow = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
+      // --- PTT Buffer Logic ---
+      // Only buffer our own speech when PTT is active ('listening' or 'stopping').
+      if (currentPttState === 'listening' || currentPttState === 'stopping') {
         const speakerId = participant?.identity || '';
         const isLocal = !!participant && !!roomInstance.localParticipant && (speakerId === roomInstance.localParticipant.identity);
-        const isAgentLike = typeof speakerId === 'string' && speakerId.startsWith('simulated-agent-');
-        const isAgentById = !!agentIdentity && speakerId === agentIdentity;
-        const accept = acceptWindow && (isLocal || (!isAgentLike && !isAgentById) || !participant);
-
-        if (accept) {
+        
+        // Only buffer the local participant's speech for sending to the agent.
+        if (isLocal || !participant) {
           transcriptions.forEach((seg) => {
-            const t = seg?.text;
-            const isFinal = seg?.final === true || (seg as any)?.isFinal === true || (seg as any)?.type === 'final';
-            if (typeof t === 'string' && t.trim()) {
-              if (("final" in (seg || {})) || ("isFinal" in (seg || {})) || ("type" in (seg || {}))) {
-                if (isFinal) appendUniquePTT(t);
-              } else {
-                appendUniquePTT(t);
-              }
+            if (seg?.text) {
+              appendUniquePTT(seg.text);
             }
           });
         }
-      } catch (e) {
-        console.warn('PTT buffering failed:', e);
       }
 
-      // --- UI Display Logic ---
+      // --- UI Display Logic (This part remains mostly the same) ---
       const finalSegment = transcriptions.find(seg => seg.final);
       const fullText = (finalSegment?.text || transcriptions.map(s => s.text).join('')).trim();
 
-      if (!fullText) return;
-
-      // Always update the live transcript window for smooth animation
-      updateTranscriptWindow(fullText);
-
-      // Only update persistent chat history if transcript is final
+      if (fullText) {
+        updateTranscriptWindow(fullText);
+      }
       if (finalSegment) {
-        const speaker = participant?.identity || 'Unknown';
+        const speaker = participant?.identity || 'Student';
         const message = `${speaker}: ${fullText}`;
         setTranscriptionMessages((prev) => [...prev.slice(-19), message]);
       }
-    }, [agentIdentity, appendUniquePTT, setTranscriptionMessages, updateTranscriptWindow]);
+      
+      // --- EVENT-DRIVEN SEND TRIGGER ---
+      // This is the core of the fix.
+      // If we were waiting to stop and a final segment has arrived, send the task now.
+      if (currentPttState === 'stopping' && finalSegment) {
+          console.log('[PTT] Final segment received while in "stopping" state. Triggering task send.');
+          sendTranscriptTask(); // This is the new, reliable way to send.
+      }
+    }, [
+      agentIdentity,
+      appendUniquePTT,
+      setTranscriptionMessages,
+      updateTranscriptWindow,
+      // Add these to satisfy exhaustive-deps and future-proof changes
+      pttStateRef,
+      sendTranscriptTask,
+    ]);
+    // ============================= FIX END ================================
 
     const handleDataReceived = useCallback(async (payload: Uint8Array, participant?: RemoteParticipant, kind?: any, topic?: string) => {
       if (!participant) return;
@@ -703,157 +861,6 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
 
   // --- API EXPOSED TO THE COMPONENTS ---
   // This is the clean interface your UI components will use to talk to the agent.
-  const startTask = useCallback(async (taskName: string, payload: object) => {
-    // Idempotency: suppress identical transcript resends within a short window
-    try {
-      if (taskName === 'student_spoke_or_acted') {
-        const norm = String((payload as any)?.transcript || '').trim();
-        const lastName = lastSentTaskNameRef.current || '';
-        const lastNorm = (lastSentTranscriptRef.current || '').trim();
-        const lastAt = lastSentAtMsRef.current || 0;
-        const now = Date.now();
-        if (norm && lastName === 'student_spoke_or_acted' && lastNorm === norm && (now - lastAt) < 25000) {
-          console.log('[F2B DC] Suppressing duplicate student_spoke_or_acted within window');
-          return;
-        }
-      }
-    } catch {}
-    const dcId = `dc_${uuidv4()}`;
-    console.log(`%c[F2B DC PREP] ID: ${dcId}`, 'color: orange;', `Task: ${taskName}`, { roomState: roomInstance.state, agentIdentity });
-    if (!agentIdentity || agentIdentity.startsWith('browser-bot-')) {
-      pendingTasksRef.current.push({ name: taskName, payload });
-      console.warn(`[F2B DC QUEUED] ID: ${dcId} - Invalid agentIdentity='${agentIdentity || 'null'}'; queued '${taskName}' until agent_ready.`);
-      return;
-    }
-    try {
-      console.log(`[F2B DC TARGET] agentIdentity='${agentIdentity}'`);
-      console.log(`%c[F2B DC SEND] ID: ${dcId}`, 'color: orange;', `Starting task: ${taskName}`);
-      try {
-        const lp: any = roomInstance?.localParticipant as any;
-        const perms = lp?.permissions || (lp?._permissions) || null;
-        const rem = Array.from(roomInstance?.remoteParticipants?.keys?.() || []);
-        console.log('[F2B DC DIAG]', { localIdentity: lp?.identity, permissions: perms, remoteParticipants: rem });
-      } catch {}
-      const traceId = uuidv4();
-      try { (window as any).__lastTraceId = traceId; } catch {}
-      const envelope = {
-        type: 'agent_task',
-        taskName,
-        payload: { ...(payload as any), trace_id: traceId, _dcId: dcId },
-      };
-      const bytes = new TextEncoder().encode(JSON.stringify(envelope));
-      // Primary: legacy positional targeted send (broadest compatibility)
-      let sent = false;
-      try {
-        await (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity]);
-        sent = true;
-        try { console.log('[F2B DC VARIANT] primary=positional'); } catch {}
-      } catch (posErr) {
-        console.warn('[F2B DC VARIANT] positional failed, trying identity options', posErr);
-      }
-      if (!sent) {
-        // Secondary: identity options (destinationIdentities)
-        const optsId: any = { destinationIdentities: [agentIdentity], reliable: true, topic: 'agent_task' };
-        try { console.log('[F2B DC OPTS][identity]', optsId); } catch {}
-        try {
-          await roomInstance.localParticipant.publishData(bytes, optsId);
-          sent = true;
-          try { console.log('[F2B DC VARIANT] secondary=identity options'); } catch {}
-        } catch (optIdErr) {
-          console.warn('[F2B DC VARIANT] identity options failed, trying SID destination', optIdErr);
-        }
-      }
-      if (!sent) {
-        // Tertiary: destination via SID if available
-        let agentSid: string | undefined;
-        try {
-          const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
-          const part = remVals.find((p: any) => (p?.identity || '') === agentIdentity);
-          agentSid = part?.sid;
-        } catch {}
-        try { console.log('[F2B DC DEST]', { agentIdentity, agentSid }); } catch {}
-        if (agentSid) {
-          const optsSid: any = { destination: [agentSid], reliable: true, topic: 'agent_task' };
-          try { console.log('[F2B DC OPTS][sid]', optsSid); } catch {}
-          try {
-            await roomInstance.localParticipant.publishData(bytes, optsSid);
-            sent = true;
-            try { console.log('[F2B DC VARIANT] tertiary=options SID'); } catch {}
-          } catch (sidErr) {
-            console.warn('[F2B DC VARIANT] options SID failed', sidErr);
-          }
-        }
-      }
-      // Env-gated broadcast duplicate for safety when targeting is flaky
-      try {
-        const BCAST_DUP = (process.env.NEXT_PUBLIC_LK_DC_BCAST_DUP || 'false').toLowerCase() === 'true';
-        if (BCAST_DUP) {
-          try {
-            await roomInstance.localParticipant.publishData(bytes);
-            console.log('[F2B DC DUP] broadcast duplicate sent (env NEXT_PUBLIC_LK_DC_BCAST_DUP=true)');
-          } catch (e) {
-            console.warn('[F2B DC DUP] broadcast duplicate failed', e);
-          }
-        } else if (!sent) {
-          try {
-            await roomInstance.localParticipant.publishData(bytes);
-            console.log('[F2B DC FALLBACK] broadcast fallback sent because all targeted variants failed');
-          } catch (e) {
-            console.warn('[F2B DC FALLBACK] broadcast fallback failed', e);
-          }
-        }
-      } catch {}
-      // If a browser-bot is present, optionally double-send using the positional API without topic for extra safety (opt-in)
-      try {
-        const DOUBLE = (process.env.NEXT_PUBLIC_LK_DC_DOUBLE_SEND || 'false').toLowerCase() === 'true';
-        const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
-        const hasBrowser = remVals.some((p: any) => (p?.identity || '').startsWith('browser-bot-'));
-        if (DOUBLE && hasBrowser) {
-          try {
-            await (roomInstance.localParticipant.publishData as any)(bytes, true, [agentIdentity]);
-            console.log('[F2B DC RESEND] positional targeted resend because browser-bot present');
-          } catch (e) {
-            console.warn('[F2B DC RESEND] failed', e);
-          }
-        }
-      } catch {}
-      try {
-        const PROBE = (process.env.NEXT_PUBLIC_LK_DC_PROBE || '').toLowerCase() === 'true';
-        if (PROBE) {
-          const probe = new TextEncoder().encode(JSON.stringify({ type: 'probe', ts: Date.now(), note: 'dc_broadcast_probe' }));
-          await roomInstance.localParticipant.publishData(probe);
-          console.log('[F2B DC PROBE] broadcast probe sent');
-        }
-      } catch {}
-      console.log(`%c[F2B DC SUCCESS] ID: ${dcId}`, 'color: green;');
-      try {
-        if (taskName === 'student_spoke_or_acted') {
-          lastSentTaskNameRef.current = taskName;
-          lastSentTranscriptRef.current = String((payload as any)?.transcript || '').trim();
-          lastSentAtMsRef.current = Date.now();
-        }
-      } catch {}
-    } catch (e) {
-      console.error(`%c[F2B DC FAIL] ID: ${dcId}`, 'color: red;', `Failed to send '${taskName}' to agent='${agentIdentity}':`, e);
-      setConnectionError(`Failed to start task: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }, [agentIdentity]);
-
-  // --- Push To Talk helpers (LiveKit STT) ---
-  const { startPushToTalk, stopPushToTalk } = usePTT({
-    roomInstance,
-    agentAudioElsRef,
-    pttBufferRef,
-    pttAcceptUntilTsRef,
-    thinkingTimeoutRef,
-    thinkingTimeoutMsRef,
-    setIsPushToTalkActive,
-    setIsMicEnabled,
-    setIsAwaitingAIResponse,
-    setShowWaitingPill,
-    startTask,
-    isAwaitingAIResponse,
-  });
 
   // --- TAB MANAGEMENT FUNCTIONS --- (declared after sendBrowserInteraction below)
 
