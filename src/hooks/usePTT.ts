@@ -15,6 +15,7 @@ interface UsePTTDeps {
   setIsAwaitingAIResponse: (v: boolean) => void;
   setShowWaitingPill: (v: boolean) => void;
   startTask: (taskName: string, payload: object) => Promise<void>;
+  isAwaitingAIResponse: boolean;
 }
 
 export function usePTT(deps: UsePTTDeps) {
@@ -30,6 +31,7 @@ export function usePTT(deps: UsePTTDeps) {
     setIsAwaitingAIResponse,
     setShowWaitingPill,
     startTask,
+    isAwaitingAIResponse,
   } = deps;
 
   const sentThisPTTRef = useRef<boolean>(false);
@@ -39,6 +41,11 @@ export function usePTT(deps: UsePTTDeps) {
 
   const startPushToTalk = useCallback(async () => {
     try {
+      // Prevent starting PTT while waiting for AI response
+      if (isAwaitingAIResponse) {
+        console.log('[PTT] Cannot start PTT while waiting for AI response');
+        return;
+      }
       pttStartTimeRef.current = Date.now();
       try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 0; } catch {} }); } catch {}
       setIsPushToTalkActive(true);
@@ -70,7 +77,7 @@ export function usePTT(deps: UsePTTDeps) {
     } catch (e) {
       console.error('[PTT] startPushToTalk failed:', e);
     }
-  }, [roomInstance, agentAudioElsRef, pttBufferRef, pttAcceptUntilTsRef, thinkingTimeoutRef, setIsPushToTalkActive, setIsMicEnabled, setIsAwaitingAIResponse, setShowWaitingPill]);
+  }, [roomInstance, agentAudioElsRef, pttBufferRef, pttAcceptUntilTsRef, thinkingTimeoutRef, setIsPushToTalkActive, setIsMicEnabled, setIsAwaitingAIResponse, setShowWaitingPill, isAwaitingAIResponse]);
 
   const stopPushToTalk = useCallback(async () => {
     try {
@@ -86,22 +93,15 @@ export function usePTT(deps: UsePTTDeps) {
       try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 1; } catch {} }); } catch {}
       setIsPushToTalkActive(false);
       setIsMicEnabled(false);
-      // Linger to accept late STT segments
-      try { pttAcceptUntilTsRef.current = Date.now() + 1800; } catch {}
-      try { await new Promise(r => setTimeout(r, 1850)); } catch {}
-      const text = (pttBufferRef.current || []).join(' ').trim();
-      pttBufferRef.current = [];
-      try { pttAcceptUntilTsRef.current = 0; } catch {}
 
       // Check minimum duration (250ms) to prevent accidental quick taps
       const pttDuration = Date.now() - pttStartTimeRef.current;
       if (pttDuration < 250) {
         console.log(`[PTT] Ignoring quick tap (${pttDuration}ms < 250ms minimum).`);
+        pttBufferRef.current = [];
         return;
       }
 
-      // Diagnostics: log transcript and decision
-      console.log(`[PTT] stopPushToTalk triggered. Duration: ${pttDuration}ms, Final transcript: "${text}"`);
       // Per-press guard: ensure we send at most once for this PTT cycle
       if (sentThisPTTRef.current) {
         console.log('[PTT] Duplicate stop ignored (already sent for this press).');
@@ -109,9 +109,21 @@ export function usePTT(deps: UsePTTDeps) {
       }
       sentThisPTTRef.current = true;
 
-      // Skip empty transcripts entirely - don't send any event
+      // Short wait to accept late STT segments
+      try { pttAcceptUntilTsRef.current = Date.now() + 1000; } catch {}
+      try { await new Promise(r => setTimeout(r, 1100)); } catch {}
+
+      const text = (pttBufferRef.current || []).join(' ').trim();
+      pttBufferRef.current = [];
+      try { pttAcceptUntilTsRef.current = 0; } catch {}
+
+      // Diagnostics: log transcript and decision
+      console.log(`[PTT] stopPushToTalk triggered. Duration: ${pttDuration}ms, Final transcript: "${text}"`);
+
+      // If transcript is empty, re-enable mic immediately (user can try again)
       if (!text || text.length === 0) {
-        console.log('[PTT] Transcript is empty. Skipping (no event sent).');
+        console.log('[PTT] Transcript is empty. Re-enabling mic for retry.');
+        try { setIsAwaitingAIResponse(false); } catch {}
         return;
       }
 
@@ -121,12 +133,16 @@ export function usePTT(deps: UsePTTDeps) {
       const lastNorm = (lastSentTranscriptRef.current || '').trim();
       if (lastNorm && norm === lastNorm && (now - (lastSentAtRef.current || 0)) < 120000) {
         console.log('[PTT] Suppressing duplicate transcript resend within window.');
+        try { setIsAwaitingAIResponse(false); } catch {}
         return;
       }
+
       console.log('[PTT] Transcript is not empty. Sending "student_spoke_or_acted".');
       await startTask('student_spoke_or_acted', { transcript: text });
       lastSentTranscriptRef.current = norm;
       lastSentAtRef.current = now;
+
+      // Keep mic disabled while waiting for AI response
       try {
         setIsAwaitingAIResponse(true);
         if (thinkingTimeoutRef.current) {

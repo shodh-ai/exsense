@@ -190,6 +190,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const setIsDiagramGenerating = useSessionStore((s) => s.setIsDiagramGenerating);
   const isPushToTalkActive = useSessionStore((s) => s.isPushToTalkActive);
   const setIsPushToTalkActive = useSessionStore((s) => s.setIsPushToTalkActive);
+  const isAwaitingAIResponse = useSessionStore((s) => s.isAwaitingAIResponse);
   const setIsAwaitingAIResponse = useSessionStore((s) => s.setIsAwaitingAIResponse);
   const setShowWaitingPill = useSessionStore((s) => s.setShowWaitingPill);
   // Browser tab actions from store
@@ -415,14 +416,12 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     }, []);
 
     // Handler for transcription data (LiveKit STT)
-    // ============================= FIX START ==============================
     const handleTranscriptionReceived = useCallback((transcriptions: TranscriptionSegment[], participant?: Participant) => {
       if (!transcriptions || transcriptions.length === 0) return;
-  
+
       if (LIVEKIT_DEBUG) console.log('[useLiveKitSession] Transcription received:', transcriptions);
-  
+
       // --- PTT Buffer Logic (for sending user speech to agent) ---
-      // This part buffers your own speech when Push-To-Talk is active.
       try {
         const now = Date.now();
         const acceptWindow = now <= (pttAcceptUntilTsRef.current || 0) || !!isPushToTalkActiveRef.current;
@@ -431,7 +430,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         const isAgentLike = typeof speakerId === 'string' && speakerId.startsWith('simulated-agent-');
         const isAgentById = !!agentIdentity && speakerId === agentIdentity;
         const accept = acceptWindow && (isLocal || (!isAgentLike && !isAgentById) || !participant);
-  
+
         if (accept) {
           transcriptions.forEach((seg) => {
             const t = seg?.text;
@@ -448,29 +447,23 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       } catch (e) {
         console.warn('PTT buffering failed:', e);
       }
-  
-      // --- UI Display Logic (to fix the "flash") ---
-  
-      // 1. Find the most complete text from the current batch of segments.
-      // The final segment is the most accurate, so we prefer its text.
+
+      // --- UI Display Logic ---
       const finalSegment = transcriptions.find(seg => seg.final);
       const fullText = (finalSegment?.text || transcriptions.map(s => s.text).join('')).trim();
-  
+
       if (!fullText) return;
-  
-      // 2. ALWAYS update the live, animated transcript window.
-      // This will show both interim and final results for a smooth animation.
+
+      // Always update the live transcript window for smooth animation
       updateTranscriptWindow(fullText);
-  
-      // 3. ONLY update the persistent "chat history" IF the transcript is final.
-      // This prevents the full sentence from flashing on the screen prematurely.
+
+      // Only update persistent chat history if transcript is final
       if (finalSegment) {
         const speaker = participant?.identity || 'Unknown';
         const message = `${speaker}: ${fullText}`;
         setTranscriptionMessages((prev) => [...prev.slice(-19), message]);
       }
     }, [agentIdentity, appendUniquePTT, setTranscriptionMessages, updateTranscriptWindow]);
-    // ============================= FIX END ================================
 
     const handleDataReceived = useCallback(async (payload: Uint8Array, participant?: RemoteParticipant, kind?: any, topic?: string) => {
       if (!participant) return;
@@ -859,6 +852,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
     setIsAwaitingAIResponse,
     setShowWaitingPill,
     startTask,
+    isAwaitingAIResponse,
   });
 
   // --- TAB MANAGEMENT FUNCTIONS --- (declared after sendBrowserInteraction below)
