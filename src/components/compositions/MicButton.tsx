@@ -20,11 +20,17 @@ export const MicButton = ({ className, onPress, onRelease }: MicButtonProps): JS
         setIsMicEnabled,
         isMicActivatingPending,
         setIsMicActivatingPending,
+        isAwaitingAIResponse,
     } = useSessionStore();
 
     const isPressingRef = useRef(false);
 
     const handlePointerDown = async () => {
+        // Prevent interaction while waiting for AI response
+        if (isAwaitingAIResponse) {
+            console.log("[MicButton][PTT] Cannot activate mic while waiting for AI response");
+            return;
+        }
         // Press-to-talk: initiate on press
         if (isMicActivatingPending || isMicEnabled) {
             isPressingRef.current = true;
@@ -46,19 +52,25 @@ export const MicButton = ({ className, onPress, onRelease }: MicButtonProps): JS
         try { await onRelease?.(); } catch (e) { console.error("[MicButton][PTT] onRelease error:", e); }
     };
 
-    // This UI logic correctly reflects the three possible states.
-    const buttonStyle = isMicActivatingPending
-        ? "bg-orange-500 animate-pulse" // Orange & pulsing for pending
-        : !isMicEnabled
-            ? "bg-[#566FE9]" // Blue for mic off
-            : "bg-[#566FE91A]"; // Light blue for mic on
+    // This UI logic correctly reflects the four possible states.
+    const buttonStyle = isAwaitingAIResponse
+        ? "bg-gray-400 opacity-50" // Gray & semi-transparent when AI is responding
+        : isMicActivatingPending
+            ? "bg-orange-500 animate-pulse" // Orange & pulsing for pending
+            : !isMicEnabled
+                ? "bg-[#566FE9]" // Blue for mic off
+                : "bg-[#566FE91A]"; // Light blue for mic on
+
+    const cursorStyle = isAwaitingAIResponse ? "cursor-not-allowed" : "cursor-pointer";
 
     const iconSrc = !isMicEnabled ? "/mic-off.svg" : "/mic-on.svg";
-    const ariaLabel = isMicActivatingPending
-        ? "Waiting for microphone activation"
-        : !isMicEnabled
-            ? "Turn on microphone"
-            : "Turn off microphone";
+    const ariaLabel = isAwaitingAIResponse
+        ? "Microphone disabled while AI is responding"
+        : isMicActivatingPending
+            ? "Waiting for microphone activation"
+            : !isMicEnabled
+                ? "Turn on microphone"
+                : "Turn off microphone";
 
     return (
         <button
@@ -67,9 +79,9 @@ export const MicButton = ({ className, onPress, onRelease }: MicButtonProps): JS
             onPointerLeave={handlePointerUp}
             onTouchStart={handlePointerDown}
             onTouchEnd={handlePointerUp}
-            className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${buttonStyle} ${className || ''}`}
+            className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-all ${buttonStyle} ${cursorStyle} ${className || ''}`}
             aria-label={ariaLabel}
-            disabled={isMicActivatingPending} // Button is disabled during the pending state
+            disabled={isMicActivatingPending || isAwaitingAIResponse} // Button is disabled during pending state or when AI is responding
         >
             <img className="w-[24px] h-[24px]" alt={ariaLabel} src={iconSrc} />
         </button>
