@@ -73,6 +73,12 @@ export function usePTT(deps: UsePTTDeps): UsePTTReturn {
       console.log(`[PTT] Ignoring quick tap (${pttDuration}ms < 250ms minimum).`);
       return;
     }
+    console.log(`[PTT] stopPushToTalk triggered. Duration: ${pttDuration}ms, Final transcript: "${text}"`);
+
+
+
+
+
 
     if (!text) {
       console.log('[PTT] Transcript is empty. Skipping (no event sent).');
