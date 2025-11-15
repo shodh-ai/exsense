@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import type React from 'react';
 import type { Room } from 'livekit-client';
 import { Track, createLocalAudioTrack } from 'livekit-client';
+import { useSessionStore } from '@/lib/store';
 
 interface UsePTTDeps {
   roomInstance: Room;
@@ -117,6 +118,14 @@ export function usePTT(deps: UsePTTDeps): UsePTTReturn {
 
   const startPushToTalk = useCallback(async () => {
     try {
+      // Block PTT while awaiting agent response (defensive, beyond UI gating)
+      try {
+        const awaiting = !!useSessionStore.getState().isAwaitingAIResponse;
+        if (awaiting) {
+          console.log('[PTT] startPushToTalk blocked: awaiting agent response.');
+          return;
+        }
+      } catch {}
       pttStartTimeRef.current = Date.now();
       try { agentAudioElsRef.current.forEach((el) => { try { el.volume = 0; } catch {} }); } catch {}
       setIsPushToTalkActive(true);

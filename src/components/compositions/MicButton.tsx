@@ -20,13 +20,17 @@ export const MicButton = ({ className, onPress, onRelease }: MicButtonProps): JS
         setIsMicEnabled,
         isMicActivatingPending,
         setIsMicActivatingPending,
+        isAwaitingAIResponse,
     } = useSessionStore();
 
     const isPressingRef = useRef(false);
 
     const handlePointerDown = async () => {
         // Press-to-talk: initiate on press
-        if (isMicActivatingPending || isMicEnabled) {
+        if (isMicActivatingPending || isMicEnabled || isAwaitingAIResponse) {
+            if (isAwaitingAIResponse) {
+                console.log("[MicButton][PTT] Press blocked: awaiting agent response.");
+            }
             isPressingRef.current = true;
             return;
         }
@@ -56,9 +60,11 @@ export const MicButton = ({ className, onPress, onRelease }: MicButtonProps): JS
     const iconSrc = !isMicEnabled ? "/mic-off.svg" : "/mic-on.svg";
     const ariaLabel = isMicActivatingPending
         ? "Waiting for microphone activation"
-        : !isMicEnabled
-            ? "Turn on microphone"
-            : "Turn off microphone";
+        : isAwaitingAIResponse
+            ? "Waiting for agent response"
+            : !isMicEnabled
+                ? "Turn on microphone"
+                : "Turn off microphone";
 
     return (
         <button
@@ -67,9 +73,9 @@ export const MicButton = ({ className, onPress, onRelease }: MicButtonProps): JS
             onPointerLeave={handlePointerUp}
             onTouchStart={handlePointerDown}
             onTouchEnd={handlePointerUp}
-            className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${buttonStyle} ${className || ''}`}
+            className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center transition-colors ${buttonStyle} ${className || ''} ${isAwaitingAIResponse ? 'opacity-50 cursor-not-allowed' : ''}`}
             aria-label={ariaLabel}
-            disabled={isMicActivatingPending} // Button is disabled during the pending state
+            disabled={isMicActivatingPending || isAwaitingAIResponse} // Disable during pending or while awaiting agent response
         >
             <img className="w-[24px] h-[24px]" alt={ariaLabel} src={iconSrc} />
         </button>
