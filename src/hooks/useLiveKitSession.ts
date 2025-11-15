@@ -565,6 +565,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       setIsAwaitingAIResponse,
       setShowWaitingPill,
       startTask,
+      isAwaitingAIResponse,
     });
 
     // Handler for transcription data (LiveKit STT)
