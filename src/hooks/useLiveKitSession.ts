@@ -190,6 +190,7 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   const setIsDiagramGenerating = useSessionStore((s) => s.setIsDiagramGenerating);
   const isPushToTalkActive = useSessionStore((s) => s.isPushToTalkActive);
   const setIsPushToTalkActive = useSessionStore((s) => s.setIsPushToTalkActive);
+  const isAwaitingAIResponse = useSessionStore((s) => s.isAwaitingAIResponse);
   const setIsAwaitingAIResponse = useSessionStore((s) => s.setIsAwaitingAIResponse);
   const setShowWaitingPill = useSessionStore((s) => s.setShowWaitingPill);
   // Browser tab actions from store

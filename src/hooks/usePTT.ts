@@ -16,6 +16,7 @@ interface UsePTTDeps {
   setIsAwaitingAIResponse: (v: boolean) => void;
   setShowWaitingPill: (v: boolean) => void;
   startTask: (taskName: string, payload: object) => Promise<void>;
+  isAwaitingAIResponse: boolean;
 }
 
 // ============================= FIX START ==============================
@@ -41,6 +42,7 @@ export function usePTT(deps: UsePTTDeps): UsePTTReturn {
     setIsAwaitingAIResponse,
     setShowWaitingPill,
     startTask,
+    isAwaitingAIResponse,
   } = deps;
 
   const lastSentTranscriptRef = useRef<string>('');
@@ -166,7 +168,7 @@ export function usePTT(deps: UsePTTDeps): UsePTTReturn {
     } catch (e) {
       console.error('[PTT] startPushToTalk failed:', e);
     }
-  }, [roomInstance, agentAudioElsRef, pttBufferRef, pttAcceptUntilTsRef, thinkingTimeoutRef, setIsPushToTalkActive, setIsMicEnabled, setIsAwaitingAIResponse, setShowWaitingPill]);
+  }, [roomInstance, agentAudioElsRef, pttBufferRef, pttAcceptUntilTsRef, thinkingTimeoutRef, setIsPushToTalkActive, setIsMicEnabled, setIsAwaitingAIResponse, setShowWaitingPill, isAwaitingAIResponse]);
 
   // ============================= FIX START ==============================
   // 4. Drastically simplify stopPushToTalk.
