@@ -16,7 +16,7 @@ export function useSessionCleanup({
   sendDeleteNowRef,
 }: UseSessionCleanupArgs) {
   useEffect(() => {
-    const sendDelete = async () => {
+    const sendDelete = async (force: boolean = false) => {
       try {
         let sessId = sessionIdRef.current;
         if (!sessId) {
@@ -46,7 +46,12 @@ export function useSessionCleanup({
           }
         }
         if (!sessId) return;
-        const url = `/api/sessions/${sessId}?_method=DELETE`;
+
+        // By default, use grace period (allows refresh reconnection)
+        // Only force immediate deletion if explicitly requested
+        const forceParam = force ? '?force=true' : '';
+        const url = `/api/sessions/${sessId}${forceParam}`;
+
         try {
           await fetch(url, { method: 'DELETE', keepalive: true, mode: 'cors' });
         } catch {
@@ -60,14 +65,19 @@ export function useSessionCleanup({
       } catch {}
     };
 
-    // Expose imperative deletion
-    sendDeleteNowRef.current = () => sendDelete();
+    // Expose imperative deletion (with optional force parameter)
+    // When called without force, uses grace period (good for navigation)
+    // When called with force=true, immediately terminates pod
+    sendDeleteNowRef.current = (force?: boolean) => sendDelete(force || false);
 
     if (DELETE_ON_UNLOAD) {
       const onUnload = () => {
         try {
           isUnloadingRef.current = true;
-          void sendDelete();
+          // On page unload, use grace period (not force delete)
+          // This allows the user to refresh without losing their session
+          // The LiveKit webhook will handle actual disconnects
+          void sendDelete(false);
         } catch {}
       };
       window.addEventListener('beforeunload', onUnload);
