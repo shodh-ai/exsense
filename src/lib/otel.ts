@@ -13,9 +13,10 @@ import { ZoneContextManager } from '@opentelemetry/context-zone';
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import { FetchInstrumentation } from '@opentelemetry/instrumentation-fetch';
 import { XMLHttpRequestInstrumentation } from '@opentelemetry/instrumentation-xml-http-request';
-import { trace, context } from '@opentelemetry/api';
+import { trace, context, propagation } from '@opentelemetry/api';
 
 let isInitialized = false;
+let provider: WebTracerProvider | null = null;
 
 /**
  * Parse headers from environment variable
@@ -30,6 +31,51 @@ function parseHeaders(envVar: string | undefined): Record<string, string> {
     }
   });
   return headers;
+}
+
+/**
+ * Call this after login/session creation to tag future spans with user/session identifiers
+ */
+export function setTelemetryUser(userId: string, sessionId: string) {
+  if (!provider) {
+    console.warn('[OTel] Provider not initialized, cannot set user attributes.');
+    return;
+  }
+  try {
+    const newResource = new Resource({
+      [SemanticResourceAttributes.SERVICE_NAME]: process.env.NEXT_PUBLIC_OTEL_SERVICE_NAME || 'exsense-frontend',
+      'session_id': sessionId,
+      'student_id': userId,
+      'enduser.id': userId,
+    });
+    // Merge into existing resource so future spans inherit
+    provider.resource.merge(newResource);
+    // Optional log for debugging
+    // eslint-disable-next-line no-console
+    console.log(`[OTel] Telemetry context updated for student: ${userId}, session: ${sessionId}`);
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[OTel] Failed to merge user/session into resource', e);
+  }
+}
+
+/**
+ * Inject the active W3C trace context into provided headers (for manual fetch/websocket usage)
+ */
+export function injectTraceContext(headers: Headers | Record<string, string> = {}): Record<string, string> {
+  const carrier: Record<string, string> = {};
+  try {
+    propagation.inject(context.active(), carrier);
+  } catch {
+    // ignore
+  }
+  if (headers instanceof Headers) {
+    for (const [k, v] of Object.entries(carrier)) {
+      headers.set(k, v);
+    }
+    return {};
+  }
+  return { ...headers, ...carrier };
 }
 
 /**
@@ -81,7 +127,7 @@ export function initTelemetry(): void {
     });
 
     // Create provider
-    const provider = new WebTracerProvider({
+    provider = new WebTracerProvider({
       resource,
     });
 
