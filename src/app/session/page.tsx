@@ -155,7 +155,8 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                                         <VideoBlockView videoUrl={(block as any).videoUrl} />
                                     )}
                                 </div>
-                                <div className="px-3 pb-3 pt-1 select-none flex items-center justify-center gap-2 text-gray-600">
+                                {/* --- MODIFIED SECTION START --- */}
+                                <div className="px-3 pb-3 pt-1 select-none flex items-start justify-center gap-2 text-gray-600">
                                   <img
                                     src={
                                       block.type === 'excalidraw' ? '/whiteboard-inactive.svg' :
@@ -163,14 +164,23 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                                       '/video-inactive.svg'
                                     }
                                     alt="block icon"
-                                    className="w-4 h-4 opacity-90"
+                                    className="w-4 h-4 opacity-90 mt-1"
                                   />
-                                  <span className="text-xs leading-5">
-                                    {(block as any).summary ||
-                                      (block.type === 'excalidraw' ? 'Whiteboard' :
-                                       block.type === 'video' ? 'Video' : 'Replay')}
-                                  </span>
+                                  <div className="flex flex-col text-xs leading-5 text-center">
+                                      <span>
+                                          {(block as any).summary ||
+                                          (block.type === 'excalidraw' ? 'Whiteboard' :
+                                          block.type === 'video' ? 'Video' : 'Replay')}
+                                      </span>
+                                      {/* Conditionally render the details if they exist on the block object */}
+                                      {(block as any).details && (
+                                          <span className="text-gray-500">
+                                              {(block as any).details}
+                                          </span>
+                                      )}
+                                  </div>
                                 </div>
+                                {/* --- MODIFIED SECTION END --- */}
                             </div>
                         ))}
                     </div>
@@ -229,6 +239,8 @@ function SessionInner() {
     const setBlocks = useSessionStore((s) => s.setBlocks);
     const addBlock = useSessionStore((s) => s.addBlock);
     const updateBlock = useSessionStore((s) => s.updateBlock);
+    const courseProgress = useSessionStore((s) => s.courseProgress);
+    const setCourseProgress = useSessionStore((s) => s.setCourseProgress);
 
     const [isIntroActive, setIsIntroActive] = useState(true);
     const [wbSessionId, setWbSessionId] = useState<string | null>(null);
@@ -279,63 +291,63 @@ function SessionInner() {
             }
         };
 
-   const colorizeElements = (elements: any[]): any[] => {
-        // Use vibrant, saturated backgrounds with guaranteed dark text
-        const backgroundColors = [
-            '#FEF3C7', // Light amber
-            '#D1FAE5', // Light emerald
-            '#DBEAFE', // Light blue
-            '#FCE7F3', // Light pink
-            '#EDE9FE', // Light purple
-            '#E0E7FF', // Light indigo
-        ];
-        
-        // Always use very dark gray for text - ensures readability on all light backgrounds
-        const textColor = '#1F2937'; // Gray-800 - very dark, high contrast
-        
-        // Use medium-dark colors for arrows/lines to stand out
-        const lineColor = '#374151'; // Gray-700
-        
-        let backgroundIndex = 0;
-        
-        return (elements || []).map((e) => {
-            if (!e || e.isDeleted) return e;
+        const colorizeElements = (elements: any[]): any[] => {
+            // Use vibrant, saturated backgrounds with guaranteed dark text
+            const backgroundColors = [
+                '#FEF3C7', // Light amber
+                '#D1FAE5', // Light emerald
+                '#DBEAFE', // Light blue
+                '#FCE7F3', // Light pink
+                '#EDE9FE', // Light purple
+                '#E0E7FF', // Light indigo
+            ];
             
-            // Handle arrows and lines - use dark stroke
-            if (e.type === 'arrow' || e.type === 'line') {
-            return { 
-                ...e, 
+            // Always use very dark gray for text - ensures readability on all light backgrounds
+            const textColor = '#1F2937'; // Gray-800 - very dark, high contrast
+            
+            // Use medium-dark colors for arrows/lines to stand out
+            const lineColor = '#374151'; // Gray-700
+            
+            let backgroundIndex = 0;
+            
+            return (elements || []).map((e) => {
+                if (!e || e.isDeleted) return e;
+                
+                // Handle arrows and lines - use dark stroke
+                if (e.type === 'arrow' || e.type === 'line') {
+                return { 
+                    ...e, 
+                    strokeColor: e.strokeColor || lineColor,
+                    strokeWidth: e.strokeWidth || 2,
+                };
+                }
+                
+                // Handle text elements - force dark color for readability
+                if (e.type === 'text') {
+                return { 
+                    ...e,
+                    strokeColor: textColor, // Text color
+                    opacity: 100,
+                };
+                }
+                
+                // Handle shapes (rectangles, ellipses, etc.)
+                const bgColor = backgroundColors[backgroundIndex % backgroundColors.length];
+                backgroundIndex++;
+                
+                return {
+                ...e,
+                // Light background for shape fill
+                backgroundColor: e.backgroundColor && e.backgroundColor !== 'transparent' 
+                    ? e.backgroundColor 
+                    : bgColor,
+                // Dark stroke around shapes
                 strokeColor: e.strokeColor || lineColor,
                 strokeWidth: e.strokeWidth || 2,
-            };
-            }
-            
-            // Handle text elements - force dark color for readability
-            if (e.type === 'text') {
-            return { 
-                ...e,
-                strokeColor: textColor, // Text color
-                opacity: 100,
-            };
-            }
-            
-            // Handle shapes (rectangles, ellipses, etc.)
-            const bgColor = backgroundColors[backgroundIndex % backgroundColors.length];
-            backgroundIndex++;
-            
-            return {
-            ...e,
-            // Light background for shape fill
-            backgroundColor: e.backgroundColor && e.backgroundColor !== 'transparent' 
-                ? e.backgroundColor 
-                : bgColor,
-            // Dark stroke around shapes
-            strokeColor: e.strokeColor || lineColor,
-            strokeWidth: e.strokeWidth || 2,
-            // Ensure opacity is high
-            opacity: e.opacity || 100,
-            };
-        });
+                // Ensure opacity is high
+                opacity: e.opacity || 100,
+                };
+            });
         };
         const convertAndRender = async () => {
             if (diagramDefinition && diagramDefinition.trim()) {
@@ -381,12 +393,37 @@ function SessionInner() {
                         const ts = new Date();
                         const time = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                         const summary = `${kind} • ${time}`;
-                        addBlock({ id: blockId, type: 'excalidraw', summary, elements: excalidrawElements as any });
+                        
+                        // Build details from centralized courseProgress state (defensive fallbacks)
+                        const currentChapter = courseProgress?.currentChapter ?? '?';
+                        const totalChapters = courseProgress?.totalChapters ?? '?';
+                        const chapterTitle = courseProgress?.chapterTitle ?? '?';
+                        const currentPage = courseProgress?.currentPage ?? '?';
+                        const totalPages = courseProgress?.totalPages ?? '?';
+                        const pageTitle = courseProgress?.pageTitle ?? '?';
+
+                        const courseDetails = `Chap (${currentChapter}/${totalChapters}): ${chapterTitle} • Page (${currentPage}/${totalPages}): ${pageTitle}`;
+                        
+                        // Add the new block to the Zustand store with the 'details' property
+                        addBlock({ 
+                            id: blockId, 
+                            type: 'excalidraw', 
+                            summary, 
+                            details: courseDetails, // The new details property
+                            elements: excalidrawElements as any 
+                        });
+                        
                         // Persist to backend if session exists
                         try {
                           const sid = wbSessionId;
                           if (sid) {
-                            await apiService.addWhiteboardBlock(sid, { type: 'EXCALIDRAW' as WhiteboardBlockType, summary, data: excalidrawElements });
+                            // Also include the new details in the payload to the backend
+                            await apiService.addWhiteboardBlock(sid, { 
+                                type: 'EXCALIDRAW' as WhiteboardBlockType, 
+                                summary, 
+                                details: courseDetails, // Persist details if your API supports it
+                                data: excalidrawElements 
+                            });
                           }
                         } catch (persistErr) {
                           console.warn('[Session] Failed to persist whiteboard block:', persistErr);
@@ -560,7 +597,7 @@ function SessionInner() {
                 console.log('[SessionPage][Warmup] Received event:', message);
 
                 if (message.type === 'warmup_started') {
-                    console.log('[SessionPage][Warmup] ✓ Backend warmup started');
+                    console.log('[SessionPage][Warmup] Backend warmup started');
                     setWarmupStarted(true);
                     setWarmupCompleted(false);
                     setWarmupProgress(0);
@@ -568,9 +605,22 @@ function SessionInner() {
                     console.log(`[SessionPage][Warmup] Progress: ${Math.round(message.progress)}%`);
                     setWarmupProgress(message.progress);
                 } else if (message.type === 'warmup_completed') {
-                    console.log('[SessionPage][Warmup] ✓ Backend warmup completed!');
+                    console.log('[SessionPage][Warmup] Backend warmup completed!');
                     setWarmupCompleted(true);
                     setWarmupProgress(100);
+                } else if (message.type === 'course_progress') {
+                    // Producer: update centralized course progress from backend event
+                    const p = message.progress || message.payload || message;
+                    if (p && typeof p === 'object') {
+                        setCourseProgress({
+                            currentChapter: p.currentChapter,
+                            totalChapters: p.totalChapters,
+                            chapterTitle: p.chapterTitle,
+                            currentPage: p.currentPage,
+                            totalPages: p.totalPages,
+                            pageTitle: p.pageTitle,
+                        });
+                    }
                 }
             } catch (e) {
                 // Not a warmup event, ignore
@@ -596,7 +646,7 @@ function SessionInner() {
             room.off('dataReceived', handleDataReceived);
             clearTimeout(queryTimer);
         };
-    }, [room, sendBrowserInteraction]);
+    }, [room, sendBrowserInteraction, setCourseProgress]);
 
     // Frontend safety timeout: Always hide warmup screen after 30 seconds, regardless of backend
     useEffect(() => {
@@ -634,7 +684,7 @@ function SessionInner() {
           try {
             const full = await apiService.getWhiteboardSession(session.id);
             const restored = (full.blocks || []).map((b: any) => {
-              if (b.type === 'EXCALIDRAW') return { id: b.id, type: 'excalidraw', summary: b.summary, elements: b.data || [] };
+              if (b.type === 'EXCALIDRAW') return { id: b.id, type: 'excalidraw', summary: b.summary, details: b.details, elements: b.data || [] };
               if (b.type === 'RRWEB') return { id: b.id, type: 'rrweb', summary: b.summary, eventsUrl: b.eventsUrl };
               if (b.type === 'VIDEO') return { id: b.id, type: 'video', summary: b.summary, videoUrl: b.videoUrl };
               return null;

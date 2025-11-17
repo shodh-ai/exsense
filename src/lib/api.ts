@@ -118,6 +118,7 @@ export interface WhiteboardBlockDTO {
   order: number;
   summary: string;
   type: WhiteboardBlockType;
+  details?: string;
   data?: any;
   eventsUrl?: string | null;
   videoUrl?: string | null;
@@ -281,7 +282,7 @@ export class ApiService {
   async getWhiteboardSession(sessionId: string): Promise<WhiteboardSessionDTO> {
     return this.client.get(`/api/whiteboard/session/${sessionId}`);
   }
-  async addWhiteboardBlock(sessionId: string, block: { type: WhiteboardBlockType; summary: string; order?: number; data?: any; eventsUrl?: string | null; videoUrl?: string | null }): Promise<WhiteboardBlockDTO> {
+  async addWhiteboardBlock(sessionId: string, block: { type: WhiteboardBlockType; summary: string; details?: string; order?: number; data?: any; eventsUrl?: string | null; videoUrl?: string | null }): Promise<WhiteboardBlockDTO> {
     return this.client.post(`/api/whiteboard/session/${sessionId}/blocks`, block as any);
   }
 }

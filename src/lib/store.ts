@@ -29,6 +29,7 @@ export interface ExcalidrawBlock {
   id: string;
   type: 'excalidraw';
   summary: string;
+  details?: string;
   elements: VisualizationElement[]; // Excalidraw elements
 }
 
@@ -82,204 +83,218 @@ export interface DebriefMessage {
   text: string;
 }
 
+// --- Course Progress State ---
+export interface CourseProgress {
+  currentChapter?: number;
+  totalChapters?: number;
+  chapterTitle?: string;
+  currentPage?: number;
+  totalPages?: number;
+  pageTitle?: string;
+}
+
 interface SessionState {
-    // --- State Properties ---
-    activeView: SessionView;
-    excalidrawAPI: ExcalidrawAPIType | null;
-    agentStatusText: string;
-    isAgentSpeaking: boolean;
-    isStudentTurn: boolean;
-    suggestedStudentTool: string | null;
-    isMicEnabled: boolean;
-    isMusicButtonPlaying: boolean;
-    isMicActivatingPending: boolean;
-    isPushToTalkActive: boolean;
-    showWaitingPill: boolean;
-    visualizationData: unknown[] | null;
-    // New dynamic whiteboard feed blocks (supersedes visualizationData)
-    whiteboardBlocks: WhiteboardBlock[];
-    // Mermaid diagram definition used as single source of truth for visualization
-    diagramDefinition: string;
-    // Centralized loading state for diagram generation
-    isDiagramGenerating: boolean;
-    suggestedResponses: { id: string; text: string; reason?: string }[];
-    suggestedTitle?: string;
-    isNavigating: boolean; // <-- State for our loader
-    // Global loading flag while waiting for AI/imprinter analysis
-    isAwaitingAIResponse: boolean;
-    // User role in the session (presenter or viewer for demo mode)
-    userRole: 'presenter' | 'viewer' | null;
-    // Current room name for sharing
-    currentRoomName: string | null;
+  // --- State Properties ---
+  activeView: SessionView;
+  excalidrawAPI: ExcalidrawAPIType | null;
+  agentStatusText: string;
+  isAgentSpeaking: boolean;
+  isStudentTurn: boolean;
+  suggestedStudentTool: string | null;
+  isMicEnabled: boolean;
+  isMusicButtonPlaying: boolean;
+  isMicActivatingPending: boolean;
+  isPushToTalkActive: boolean;
+  showWaitingPill: boolean;
+  visualizationData: unknown[] | null;
+  // New dynamic whiteboard feed blocks (supersedes visualizationData)
+  whiteboardBlocks: WhiteboardBlock[];
+  // Mermaid diagram definition used as single source of truth for visualization
+  diagramDefinition: string;
+  // Centralized loading state for diagram generation
+  isDiagramGenerating: boolean;
+  suggestedResponses: { id: string; text: string; reason?: string }[];
+  suggestedTitle?: string;
+  isNavigating: boolean; // <-- State for our loader
+  // Global loading flag while waiting for AI/imprinter analysis
+  isAwaitingAIResponse: boolean;
+  // User role in the session (presenter or viewer for demo mode)
+  userRole: 'presenter' | 'viewer' | null;
+  // Current room name for sharing
+  currentRoomName: string | null;
+  // Course context shared across UI
+  courseProgress?: CourseProgress;
 
-    // --- Browser tab state ---
-    tabs: BrowserTab[];
-    activeTabId: string | null;
+  // --- Browser tab state ---
+  tabs: BrowserTab[];
+  activeTabId: string | null;
 
-    // --- Imprinting / Session Controller State ---
-    imprinting_mode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL';
-    currentLO: string | null;
-    // When true, user is in conceptual debrief flow and allowed to "Show Me"
-    conceptualStarted: boolean;
+  // --- Imprinting / Session Controller State ---
+  imprinting_mode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL';
+  currentLO: string | null;
+  // When true, user is in conceptual debrief flow and allowed to "Show Me"
+  conceptualStarted: boolean;
 
-    // --- New Imprinting Flow State ---
-    imprintingPhase: ImprintingPhase;
-    curriculumDraft: LearningObjective[];
+  // --- New Imprinting Flow State ---
+  imprintingPhase: ImprintingPhase;
+  curriculumDraft: LearningObjective[];
 
-    // --- Actions ---
-    setActiveView: (view: SessionView) => void;
-    setExcalidrawAPI: (api: ExcalidrawAPIType) => void;
-    setAgentStatusText: (text: string) => void;
-    setIsAgentSpeaking: (isSpeaking: boolean) => void;
-    setIsStudentTurn: (isTurn: boolean) => void;
-    setSuggestedStudentTool: (tool: string | null) => void;
-    setIsMicEnabled: (isEnabled: boolean) => void;
-    setIsMusicButtonPlaying: (isPlaying: boolean) => void;
-    setIsMicActivatingPending: (isPending: boolean) => void;
-    setIsPushToTalkActive: (active: boolean) => void;
-    setShowWaitingPill: (show: boolean) => void;
-    setVisualizationData: (data: unknown[] | null) => void;
-    // Whiteboard feed actions
-    addBlock: (block: WhiteboardBlock) => void;
-    updateBlock: (blockId: string, newContent: Partial<ExcalidrawBlock> | Partial<RrwebBlock>) => void;
-    setBlocks: (blocks: WhiteboardBlock[]) => void;
-    setDiagramDefinition: (definition: string) => void;
-    setIsDiagramGenerating: (isGenerating: boolean) => void;
-    setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
-    clearSuggestedResponses: () => void;
-    setIsNavigating: (isNavigating: boolean) => void; // <-- Action for our loader
-    setIsAwaitingAIResponse: (isAwaiting: boolean) => void;
-    setUserRole: (role: 'presenter' | 'viewer' | null) => void;
-    setCurrentRoomName: (roomName: string | null) => void;
+  // --- Actions ---
+  setActiveView: (view: SessionView) => void;
+  setExcalidrawAPI: (api: ExcalidrawAPIType) => void;
+  setAgentStatusText: (text: string) => void;
+  setIsAgentSpeaking: (isSpeaking: boolean) => void;
+  setIsStudentTurn: (isTurn: boolean) => void;
+  setSuggestedStudentTool: (tool: string | null) => void;
+  setIsMicEnabled: (isEnabled: boolean) => void;
+  setIsMusicButtonPlaying: (isPlaying: boolean) => void;
+  setIsMicActivatingPending: (isPending: boolean) => void;
+  setIsPushToTalkActive: (active: boolean) => void;
+  setShowWaitingPill: (show: boolean) => void;
+  setVisualizationData: (data: unknown[] | null) => void;
+  // Whiteboard feed actions
+  addBlock: (block: WhiteboardBlock) => void;
+  updateBlock: (blockId: string, newContent: Partial<ExcalidrawBlock> | Partial<RrwebBlock>) => void;
+  setBlocks: (blocks: WhiteboardBlock[]) => void;
+  setDiagramDefinition: (definition: string) => void;
+  setIsDiagramGenerating: (isGenerating: boolean) => void;
+  setSuggestedResponses: (suggestions: { id: string; text: string; reason?: string }[], title?: string) => void;
+  clearSuggestedResponses: () => void;
+  setIsNavigating: (isNavigating: boolean) => void; // <-- Action for our loader
+  setIsAwaitingAIResponse: (isAwaiting: boolean) => void;
+  setUserRole: (role: 'presenter' | 'viewer' | null) => void;
+  setCurrentRoomName: (roomName: string | null) => void;
+  setCourseProgress: (progress: Partial<CourseProgress>) => void;
 
-    // --- Browser tab actions ---
-    addTab: (tab: BrowserTab) => void;
-    removeTab: (id: string) => void;
-    setActiveTabId: (id: string | null) => void;
+  // --- Browser tab actions ---
+  addTab: (tab: BrowserTab) => void;
+  removeTab: (id: string) => void;
+  setActiveTabId: (id: string | null) => void;
 
-    // --- Imprinting Actions ---
-    setImprintingMode: (mode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL') => void;
-    setCurrentLO: (lo: string | null) => void;
-    setConceptualStarted: (started: boolean) => void;
+  // --- Imprinting Actions ---
+  setImprintingMode: (mode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL') => void;
+  setCurrentLO: (lo: string | null) => void;
+  setConceptualStarted: (started: boolean) => void;
 
-    // --- New Imprinting Flow Actions ---
-    setImprintingPhase: (phase: ImprintingPhase) => void;
-    setCurriculumDraft: (draft: LearningObjective[]) => void;
+  // --- New Imprinting Flow Actions ---
+  setImprintingPhase: (phase: ImprintingPhase) => void;
+  setCurriculumDraft: (draft: LearningObjective[]) => void;
 
-    // --- Debrief message state ---
-    debriefMessage: DebriefMessage | null;
-    setDebriefMessage: (message: DebriefMessage | null) => void;
+  // --- Debrief message state ---
+  debriefMessage: DebriefMessage | null;
+  setDebriefMessage: (message: DebriefMessage | null) => void;
 }
 
 export const useSessionStore = create<SessionState>()(
-    devtools(
-        (set) => ({
-            // --- Initial State ---
-            activeView: 'excalidraw',
-            excalidrawAPI: null,
-            agentStatusText: 'Initializing...',
-            isAgentSpeaking: false,
-            isStudentTurn: false,
-            suggestedStudentTool: null,
-            isMicEnabled: false,
-            isMusicButtonPlaying: false,
-            isMicActivatingPending: false,
-            isPushToTalkActive: false,
-            showWaitingPill: false,
-            visualizationData: null,
-            whiteboardBlocks: [],
-            diagramDefinition: '',
-            isDiagramGenerating: false,
-            suggestedResponses: [],
-            suggestedTitle: undefined,
-            isNavigating: false, // <-- Initial state is false
-            isAwaitingAIResponse: false,
-            userRole: null,
-            currentRoomName: null,
+  devtools(
+    (set) => ({
+      // --- Initial State ---
+      activeView: 'excalidraw',
+      excalidrawAPI: null,
+      agentStatusText: 'Initializing...',
+      isAgentSpeaking: false,
+      isStudentTurn: false,
+      suggestedStudentTool: null,
+      isMicEnabled: false,
+      isMusicButtonPlaying: false,
+      isMicActivatingPending: false,
+      isPushToTalkActive: false,
+      showWaitingPill: false,
+      visualizationData: null,
+      whiteboardBlocks: [],
+      diagramDefinition: '',
+      isDiagramGenerating: false,
+      suggestedResponses: [],
+      suggestedTitle: undefined,
+      isNavigating: false, // <-- Initial state is false
+      isAwaitingAIResponse: false,
+      userRole: null,
+      currentRoomName: null,
+      courseProgress: undefined,
 
-            // --- Browser tab defaults ---
-            tabs: [],
-            activeTabId: null,
+      // --- Browser tab defaults ---
+      tabs: [],
+      activeTabId: null,
 
-            // --- Imprinting defaults ---
-            imprinting_mode: 'DEBRIEF_CONCEPTUAL',
-            currentLO: null,
-            conceptualStarted: false,
+      // --- Imprinting defaults ---
+      imprinting_mode: 'DEBRIEF_CONCEPTUAL',
+      currentLO: null,
+      conceptualStarted: false,
 
-            // --- New Imprinting Flow defaults ---
-            imprintingPhase: 'SEED_INPUT',
-            curriculumDraft: [],
-            // --- Debrief message defaults ---
-            debriefMessage: null,
+      // --- New Imprinting Flow defaults ---
+      imprintingPhase: 'SEED_INPUT',
+      curriculumDraft: [],
+      // --- Debrief message defaults ---
+      debriefMessage: null,
 
-            // --- Actions Implementation ---
-            setActiveView: (view) => set({ activeView: view }),
-            setExcalidrawAPI: (api) => set({ excalidrawAPI: api }),
-            setAgentStatusText: (text) => set({ agentStatusText: text }),
-            setIsAgentSpeaking: (isSpeaking) => set({ isAgentSpeaking: isSpeaking }),
-            setIsStudentTurn: (isTurn) => set({ isStudentTurn: isTurn }),
-            setSuggestedStudentTool: (tool) => set({ suggestedStudentTool: tool }),
-            setIsMicEnabled: (isEnabled) => set({ isMicEnabled: isEnabled }),
-            setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
-            setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }),
-            setIsPushToTalkActive: (active) => set({ isPushToTalkActive: active }),
-            setShowWaitingPill: (show) => set({ showWaitingPill: show }),
-            setVisualizationData: (data) => set({ visualizationData: data }),
-            addBlock: (block) => set((state) => ({ whiteboardBlocks: [...state.whiteboardBlocks, block] })),
-            updateBlock: (blockId, newContent) => set((state) => ({
-              whiteboardBlocks: state.whiteboardBlocks.map((b) => {
-                if (b.id !== blockId) return b;
-                // Merge content based on block type, preserving id/type
-                if (b.type === 'excalidraw') {
-                  return { ...b, ...(newContent as Partial<ExcalidrawBlock>) } as ExcalidrawBlock;
-                }
-                if (b.type === 'rrweb') {
-                  return { ...b, ...(newContent as Partial<RrwebBlock>) } as RrwebBlock;
-                }
-                if (b.type === 'video') {
-                  return { ...b, ...(newContent as Partial<VideoBlock>) } as VideoBlock;
-                }
-                return b;
-              })
-            })),
-            setBlocks: (blocks) => set({ whiteboardBlocks: blocks }),
-            setDiagramDefinition: (definition) => set({ diagramDefinition: definition }),
-            setIsDiagramGenerating: (isGenerating) => set({ isDiagramGenerating: isGenerating }),
-            setSuggestedResponses: (suggestions, title) => set({ suggestedResponses: suggestions, suggestedTitle: title }),
-            clearSuggestedResponses: () => set({ suggestedResponses: [], suggestedTitle: undefined }),
-            setIsNavigating: (isNavigating) => set({ isNavigating }), // <-- Action implementation
-            setIsAwaitingAIResponse: (isAwaiting: boolean) => set({ isAwaitingAIResponse: isAwaiting }),
-            setUserRole: (role) => set({ userRole: role }),
-            setCurrentRoomName: (roomName) => set({ currentRoomName: roomName }),
-
-            // --- Browser tab actions ---
-            addTab: (tab) => set((state) => {
-              // Prevent duplicate tabs with same ID
-              const exists = state.tabs.some(t => t.id === tab.id);
-              if (exists) {
-                console.warn(`[Store] Tab with ID ${tab.id} already exists, skipping addTab`);
-                return state;
-              }
-              return { tabs: [...state.tabs, tab] };
-            }),
-            removeTab: (id) => set((state) => ({
-              tabs: state.tabs.filter(t => t.id !== id),
-              // if removing current active, clear active; caller may select a new one
-              activeTabId: state.activeTabId === id ? null : state.activeTabId,
-            })),
-            setActiveTabId: (id) => set({ activeTabId: id }),
-
-            // --- Imprinting Actions ---
-            setImprintingMode: (mode) => set({ imprinting_mode: mode }),
-            setCurrentLO: (lo) => set({ currentLO: lo }),
-            setConceptualStarted: (started) => set({ conceptualStarted: started }),
-
-            // --- New Imprinting Flow Actions ---
-            setImprintingPhase: (phase) => set({ imprintingPhase: phase }),
-            setCurriculumDraft: (draft) => set({ curriculumDraft: draft }),
-            // --- Debrief message action ---
-            setDebriefMessage: (message) => set({ debriefMessage: message }),
-        }),
-        { name: "SessionUIStore" }
-    )
+      // --- Actions Implementation ---
+      setActiveView: (view) => set({ activeView: view }),
+      setExcalidrawAPI: (api) => set({ excalidrawAPI: api }),
+      setAgentStatusText: (text) => set({ agentStatusText: text }),
+      setIsAgentSpeaking: (isSpeaking) => set({ isAgentSpeaking: isSpeaking }),
+      setIsStudentTurn: (isTurn) => set({ isStudentTurn: isTurn }),
+      setSuggestedStudentTool: (tool) => set({ suggestedStudentTool: tool }),
+      setIsMicEnabled: (isEnabled) => set({ isMicEnabled: isEnabled }),
+      setIsMusicButtonPlaying: (isPlaying) => set({ isMusicButtonPlaying: isPlaying }),
+      setIsMicActivatingPending: (isPending) => set({ isMicActivatingPending: isPending }),
+      setIsPushToTalkActive: (active) => set({ isPushToTalkActive: active }),
+      setShowWaitingPill: (show) => set({ showWaitingPill: show }),
+      setVisualizationData: (data) => set({ visualizationData: data }),
+      setCourseProgress: (progress) => set((state) => ({
+        courseProgress: { ...(state.courseProgress || {}), ...progress },
+      })),
+      addBlock: (block) => set((state) => ({ whiteboardBlocks: [...state.whiteboardBlocks, block] })),
+      updateBlock: (blockId, newContent) => set((state) => ({
+        whiteboardBlocks: state.whiteboardBlocks.map((b) => {
+          if (b.id !== blockId) return b;
+          // Merge content based on block type, preserving id/type
+          if (b.type === 'excalidraw') {
+            return { ...b, ...(newContent as Partial<ExcalidrawBlock>) } as ExcalidrawBlock;
+          }
+          if (b.type === 'rrweb') {
+            return { ...b, ...(newContent as Partial<RrwebBlock>) } as RrwebBlock;
+          }
+          if (b.type === 'video') {
+            return { ...b, ...(newContent as Partial<VideoBlock>) } as VideoBlock;
+          }
+          return b;
+        })
+      })),
+      setBlocks: (blocks) => set({ whiteboardBlocks: blocks }),
+      setDiagramDefinition: (definition) => set({ diagramDefinition: definition }),
+      setIsDiagramGenerating: (isGenerating) => set({ isDiagramGenerating: isGenerating }),
+      setSuggestedResponses: (suggestions, title) => set({ suggestedResponses: suggestions, suggestedTitle: title }),
+      clearSuggestedResponses: () => set({ suggestedResponses: [], suggestedTitle: undefined }),
+      setIsNavigating: (isNavigating) => set({ isNavigating }), // <-- Action implementation
+      setIsAwaitingAIResponse: (isAwaiting: boolean) => set({ isAwaitingAIResponse: isAwaiting }),
+      setUserRole: (role) => set({ userRole: role }),
+      setCurrentRoomName: (roomName) => set({ currentRoomName: roomName }),
+      // --- Browser tab actions ---
+      addTab: (tab) => set((state) => {
+        // Prevent duplicate tabs with same ID
+        const exists = state.tabs.some(t => t.id === tab.id);
+        if (exists) {
+          console.warn(`[Store] Tab with ID ${tab.id} already exists, skipping addTab`);
+          return state;
+        }
+        return { tabs: [...state.tabs, tab] };
+      }),
+      removeTab: (id) => set((state) => ({
+        tabs: state.tabs.filter(t => t.id !== id),
+        // if removing current active, clear active; caller may select a new one
+        activeTabId: state.activeTabId === id ? null : state.activeTabId,
+      })),
+      setActiveTabId: (id) => set({ activeTabId: id }),
+      // --- Imprinting Actions ---
+      setImprintingMode: (mode) => set({ imprinting_mode: mode }),
+      setCurrentLO: (lo) => set({ currentLO: lo }),
+      setConceptualStarted: (started) => set({ conceptualStarted: started }),
+      // --- New Imprinting Flow Actions ---
+      setImprintingPhase: (phase) => set({ imprintingPhase: phase }),
+      setCurriculumDraft: (draft) => set({ curriculumDraft: draft }),
+      // --- Debrief message action ---
+      setDebriefMessage: (message) => set({ debriefMessage: message }),
+    }),
+    { name: "SessionUIStore" }
+  )
 );
