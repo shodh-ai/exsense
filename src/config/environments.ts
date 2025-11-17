@@ -40,9 +40,9 @@ export const ENVIRONMENTS: EnvironmentConfig[] = [
     description: "Jupyter notebook environment"
   },
   {
-    displayName: "Google Docs",
-    backendValue: "google_docs",
-    description: "Google Docs document editor"
+    displayName: "Google Workspace",
+    backendValue: "google_workspace",
+    description: "Google Workspace document editor"
   }
 ];
 
