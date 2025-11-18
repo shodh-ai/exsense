@@ -7,9 +7,11 @@ let ReplayerCtor: any = null;
 
 export interface RrwebBlockViewProps {
   eventsUrl: string;
+  startTime?: number;       // Optional: Start playback from this timestamp (ms)
+  duration?: number;         // Optional: Auto-pause after this duration (ms)
 }
 
-const RrwebBlockView: React.FC<RrwebBlockViewProps> = ({ eventsUrl }) => {
+const RrwebBlockView: React.FC<RrwebBlockViewProps> = ({ eventsUrl, startTime, duration }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,56 @@ const RrwebBlockView: React.FC<RrwebBlockViewProps> = ({ eventsUrl }) => {
             events,
           },
         });
-        replayer.play();
+
+        // Support precise timestamp-based playback for RAG-controlled demos
+        if (startTime !== undefined && startTime > 0) {
+          console.log(`[RrwebBlockView] Starting playback from ${startTime}ms (relative to recording start)`);
+
+          // Start playing and immediately seek to the target time
+          replayer.play();
+
+          // Use goto to jump to specific timestamp (relative to recording start)
+          // Wait a tick for player to initialize
+          setTimeout(() => {
+            try {
+              console.log('[RrwebBlockView] Replayer methods:', Object.keys(replayer).filter(k => typeof replayer[k] === 'function'));
+
+              if (typeof replayer.goto === 'function') {
+                const beforeTime = replayer.getCurrentTime?.() || 'unknown';
+                // goto() expects relative time in ms from start of recording
+                replayer.goto(startTime);
+                const afterTime = replayer.getCurrentTime?.() || 'unknown';
+                console.log(`[RrwebBlockView] ✅ Seeked using goto()`);
+                console.log(`[RrwebBlockView] Before: ${beforeTime}ms, After: ${afterTime}ms, Target: ${startTime}ms`);
+              } else if (typeof replayer.setCurrentTime === 'function') {
+                console.warn('[RrwebBlockView] goto not available, using setCurrentTime');
+                replayer.setCurrentTime(startTime);
+              } else {
+                console.error('[RrwebBlockView] ❌ No seek method available on replayer!');
+                console.error('[RrwebBlockView] Available methods:', Object.keys(replayer));
+              }
+            } catch (e) {
+              console.error('[RrwebBlockView] ❌ Failed to seek:', e);
+            }
+          }, 100);
+
+          // Auto-pause after duration if specified
+          if (duration && duration > 0) {
+            console.log(`[RrwebBlockView] Will auto-pause after ${duration}ms`);
+            setTimeout(() => {
+              try {
+                replayer.pause();
+                console.log(`[RrwebBlockView] Auto-paused after ${duration}ms`);
+              } catch (e) {
+                console.error('[RrwebBlockView] Failed to auto-pause:', e);
+              }
+            }, duration + 200); // Add buffer for seek time
+          }
+        } else {
+          // Default: play from beginning
+          replayer.play();
+        }
+
         setIsLoading(false);
       } catch (e: unknown) {
         if (cancelled) return;

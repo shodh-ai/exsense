@@ -172,8 +172,30 @@ async function handleRrwebReplay(params: any): Promise<void> {
   if (url && typeof url === 'string') {
     const id = params.id || `rrweb_${Date.now()}`;
     const summary = params.summary || params.title || 'Session Replay';
+
+    // Support RAG-controlled precise playback
+    const startTime = params.start_timestamp || params.startTime;
+    const duration = params.play_duration_ms || params.duration;
+
     try {
-      getStore().addBlock({ id, type: 'rrweb', summary, eventsUrl: url } as any);
+      const block: any = {
+        id,
+        type: 'rrweb',
+        summary,
+        eventsUrl: url
+      };
+
+      // Add timestamp parameters if provided (for RAG-based precise playback)
+      if (startTime !== undefined) {
+        block.startTime = Number(startTime);
+        console.log(`[UI] RRWeb with startTime: ${startTime}ms`);
+      }
+      if (duration !== undefined) {
+        block.duration = Number(duration);
+        console.log(`[UI] RRWeb with duration: ${duration}ms`);
+      }
+
+      getStore().addBlock(block);
       getStore().setActiveView('excalidraw');
     } catch {}
   }

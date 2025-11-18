@@ -22,7 +22,7 @@ import { DemoRoleIndicator } from '@/components/session/DemoRoleIndicator';
 const IntroPage = NextDynamic(() => import('@/components/session/IntroPage'));
 
 const ExcalidrawBlockView = NextDynamic<{ initialElements: any[] }>(() => import('@/components/session/ExcalidrawBlockView'), { ssr: false });
-const RrwebBlockView = NextDynamic<{ eventsUrl: string }>(() => import('@/components/session/RrwebBlockView'), { ssr: false });
+const RrwebBlockView = NextDynamic<{ eventsUrl: string; startTime?: number; duration?: number }>(() => import('@/components/session/RrwebBlockView'), { ssr: false });
 const VideoBlockView = NextDynamic<{ videoUrl: string }>(() => import('@/components/session/VideoBlockView'), { ssr: false });
 const LiveKitViewer = NextDynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
 
@@ -149,7 +149,11 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                                         <ExcalidrawBlockView initialElements={block.elements as any[]} />
                                     )}
                                     {block.type === 'rrweb' && (
-                                        <RrwebBlockView eventsUrl={(block as any).eventsUrl} />
+                                        <RrwebBlockView
+                                            eventsUrl={(block as any).eventsUrl}
+                                            startTime={(block as any).startTime}
+                                            duration={(block as any).duration}
+                                        />
                                     )}
                                     {block.type === 'video' && (
                                         <VideoBlockView videoUrl={(block as any).videoUrl} />
