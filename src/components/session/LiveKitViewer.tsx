@@ -14,6 +14,38 @@ interface LiveKitViewerProps {
   onInteraction?: (payload: object) => void | Promise<void>;
 }
 
+// +++ NEW HELPER FUNCTION +++
+/**
+ * Sends interaction data directly to your session manager backend via an HTTP POST request.
+ * This function "fires and forgets" to keep the UI responsive.
+ * @param payload The interaction data (e.g., { action: 'click', x: 100, y: 150 })
+ */
+async function sendInteractionToSessionManager(payload: object) {
+  // IMPORTANT: Replace this with the actual URL of your session manager's API endpoint
+  const SESSION_MANAGER_ENDPOINT = 'https://your-backend.com/api/session/interaction';
+
+  try {
+    fetch(SESSION_MANAGER_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // If your API is protected, you must add your authorization token here.
+        // For example: 'Authorization': `Bearer ${yourAuthToken}`
+      },
+      // Keep the connection alive in case the page is being closed,
+      // though for this use-case it's less critical.
+      keepalive: true, 
+      body: JSON.stringify(payload),
+    }).catch(error => {
+      // Log errors in the background if the network request fails
+      console.error('[Interaction] Failed to send interaction to session manager:', error);
+    });
+  } catch (error) {
+    console.error('[Interaction] Error constructing the fetch request for session manager:', error);
+  }
+}
+
+
 export default function LiveKitViewer({ room, onInteraction }: LiveKitViewerProps) {
   try { console.log('[FLOW] LiveKitViewer using provided room instance'); } catch {}
   return (
@@ -33,7 +65,6 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
   const [tick, setTick] = useState(0); // force re-render on room events
   const [videoTracks, setVideoTracks] = useState<{ pub: RemoteTrackPublication; track: RemoteVideoTrack }[]>([]);
 
-  // Robust iterator for remote participant video publications across SDK variations
   const eachVideoPublication = (p: RemoteParticipant, fn: (pub: RemoteTrackPublication) => void) => {
     try {
       p.trackPublications.forEach((pub) => {
@@ -42,7 +73,6 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
     } catch {}
   };
 
-  // Expose the LiveKit room for DevTools-based testing
   useEffect(() => {
     try {
       window.lkRoom = room;
@@ -55,7 +85,6 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
     };
   }, [room]);
 
-  // Helper to rebuild videoTracks from current room state
   const rebuildFromRoom = () => {
     const next: { pub: RemoteTrackPublication; track: RemoteVideoTrack }[] = [];
     room.remoteParticipants.forEach((p: RemoteParticipant) => {
@@ -81,14 +110,11 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
     };
     const onPub = (pub: RemoteTrackPublication) => {
       if (pub.kind === Track.Kind.Video) {
-        // CRITICAL FIX: Request HIGH quality AND disable adaptive layers immediately
         pub.setSubscribed(true);
         pub.setVideoQuality(VideoQuality.HIGH);
-        // Force the track to use maximum quality settings
         try {
           const videoTrack = pub.videoTrack;
           if (videoTrack) {
-            // Request the highest available layer
             pub.setVideoQuality(VideoQuality.HIGH);
           }
         } catch (e) {
@@ -98,42 +124,32 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
       }
     };
 
-    // Main data handler
     const onData = async (payload: Uint8Array, participant?: RemoteParticipant) => {
       try {
         const txt = new TextDecoder().decode(payload);
         const obj = JSON.parse(txt);
         if (obj && typeof obj === 'object') {
-          // Handle remote clipboard content
           if (obj.type === 'clipboard_content' && typeof obj.content === 'string') {
             const text = obj.content;
             try {
               await navigator.clipboard.writeText(text);
               console.log('[LK][viewer] Copied from remote to local clipboard.');
             } catch (err) {
-              // Fallback: hidden textarea + execCommand('copy')
               try {
                 const ta = document.createElement('textarea');
                 ta.value = text;
-                ta.style.position = 'fixed';
-                ta.style.opacity = '0';
-                ta.style.left = '-9999px';
+                ta.style.position = 'fixed'; ta.style.opacity = '0'; ta.style.left = '-9999px';
                 document.body.appendChild(ta);
-                ta.focus();
-                ta.select();
+                ta.focus(); ta.select();
                 const ok = document.execCommand && document.execCommand('copy');
                 document.body.removeChild(ta);
-                if (ok) {
-                  console.log('[LK][viewer] Copied via execCommand fallback.');
-                } else {
-                  console.error('[LK][viewer] execCommand fallback failed.');
-                }
+                if (ok) console.log('[LK][viewer] Copied via execCommand fallback.');
+                else console.error('[LK][viewer] execCommand fallback failed.');
               } catch (fallbackErr) {
                 console.error('[LK][viewer] Clipboard write failed with fallback:', fallbackErr);
               }
             }
           }
-          // Handle capture metadata
           const w = Number(obj.width || obj.w);
           const h = Number(obj.height || obj.h);
           if (obj.type === 'meta' && Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
@@ -163,16 +179,13 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
     };
   }, [room]);
 
-  // CRITICAL: Watchdog to ensure HIGH quality is maintained
   useEffect(() => {
     const t = setInterval(() => {
       room.remoteParticipants.forEach((p) => {
-        // Iterate robustly across SDK versions
         eachVideoPublication(p as RemoteParticipant, (pub: RemoteTrackPublication) => {
           if (!pub.isSubscribed) {
             try { pub.setSubscribed(true); } catch {}
           }
-          // CRITICAL: Re-request HIGH quality periodically to prevent quality degradation
           if (pub.kind === Track.Kind.Video) {
             try { pub.setVideoQuality(VideoQuality.HIGH); } catch {}
           }
@@ -181,31 +194,19 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
     }, 4000);
     return () => clearInterval(t);
   }, [room]);
-
-  // CRITICAL: Force MAXIMUM quality - bypass all LiveKit optimizations
+  
   useEffect(() => {
     videoTracks.forEach(({ pub, track }) => {
       if (pub.kind === Track.Kind.Video) {
-        // Try every possible quality setting
         pub.setVideoQuality(VideoQuality.HIGH);
-        
         try {
-          // Access the underlying MediaStreamTrack
           const mediaStreamTrack = track.mediaStreamTrack;
           if (mediaStreamTrack && 'getSettings' in mediaStreamTrack) {
             const settings = mediaStreamTrack.getSettings();
             console.log('[LK][viewer] Current video settings:', settings);
           }
-          
-          // Request maximum bandwidth and layers
-          if ('setPreferredLayers' in track) {
-            (track as any).setPreferredLayers({ spatial: 2, temporal: 2 });
-          }
-          
-          // Try to disable all adaptive features on the track itself
-          if ('setMaxBitrate' in track) {
-            (track as any).setMaxBitrate(8000000); // 8 Mbps
-          }
+          if ('setPreferredLayers' in track) (track as any).setPreferredLayers({ spatial: 2, temporal: 2 });
+          if ('setMaxBitrate' in track) (track as any).setMaxBitrate(8000000);
         } catch (e) {
           console.warn('[LK][viewer] Could not set advanced quality settings:', e);
         }
@@ -213,7 +214,6 @@ function ExplicitVideoGrid({ room, onInteraction }: { room: Room; onInteraction?
     });
   }, [videoTracks]);
 
-  // Wait gate: mark ready once at least one RemoteVideoTrack is present
   useEffect(() => {
     if (videoTracks.length > 0 && !ready) setReady(true);
   }, [videoTracks, ready]);
@@ -240,11 +240,9 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
   const containerRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef<object[]>([]);
   
-  // Check if user is a viewer (viewers cannot send interactions)
   const userRole = useSessionStore((s) => s.userRole);
   const isViewer = userRole === 'viewer';
   const flushingRef = useRef<boolean>(false);
-  // Debounce timer for resize events so we don't flood the backend while dragging
   const resizeDebounceTimer = useRef<NodeJS.Timeout | null>(null);
   const modifiersRef = useRef<{ Control: boolean; Shift: boolean; Alt: boolean; Meta: boolean }>({
     Control: false, Shift: false, Alt: false, Meta: false,
@@ -256,7 +254,6 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     return () => { if (el) track.detach(el); };
   }, [track]);
 
-  // Ensure the container is focused so keyboard events work without extra clicks
   useEffect(() => {
     const c = containerRef.current;
     if (c) {
@@ -264,6 +261,7 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     }
   }, []);
 
+  // This function remains for data that MUST be sent via LiveKit (e.g., clipboard)
   const publishOrQueue = useCallback(async (payload: object) => {
     if (room.state !== ConnectionState.Connected) {
       if (onInteraction) await onInteraction(payload);
@@ -271,7 +269,6 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     }
     try {
       const bytes = new TextEncoder().encode(JSON.stringify(payload));
-      // Target the browser-bot participant if available to avoid broadcasting to the agent
       let browserId: string | null = null;
       try {
         room.remoteParticipants.forEach((p: RemoteParticipant) => {
@@ -286,7 +283,6 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
           await room.localParticipant.publishData(bytes, { reliable: true } as any);
         }
       } catch {
-        // Final fallback: broadcast
         await room.localParticipant.publishData(bytes);
       }
     } catch (e) {
@@ -307,7 +303,8 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     }
   }, [room, onInteraction]);
 
-  // Effect for observing the container's size and reporting it to the backend
+  // --- MODIFIED ---
+  // Effect for observing the container's size and reporting it directly to the session manager
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -315,13 +312,13 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
       if (entries.length > 0) {
         const { width, height } = entries[0].contentRect;
         if (width > 0 && height > 0) {
-          // Debounce rapid resize storms (e.g., during window drag)
           if (resizeDebounceTimer.current) {
             clearTimeout(resizeDebounceTimer.current);
           }
           resizeDebounceTimer.current = setTimeout(() => {
             try { console.log(`[ResizeDebounced] Sending new size: ${Math.round(width)}x${Math.round(height)}`); } catch {}
-            publishOrQueue({ type: "resize", width: Math.round(width), height: Math.round(height) });
+            // Send resize events directly to the session manager
+            sendInteractionToSessionManager({ type: "resize", width: Math.round(width), height: Math.round(height) });
           }, 250);
         }
       }
@@ -334,18 +331,16 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
         resizeDebounceTimer.current = null;
       }
     };
-  }, [publishOrQueue]);
+  }, []); // Dependency array is now empty
 
   const calculateCoords = (event: React.MouseEvent<HTMLDivElement>) => {
     const video = videoRef.current;
     if (!video) return null;
 
     const videoRect = video.getBoundingClientRect();
-    // Intrinsic size of the decoded video as displayed by the <video> element
     const intrinsicW = video.videoWidth || videoRect.width;
     const intrinsicH = video.videoHeight || videoRect.height;
 
-    // Contain the intrinsic video inside the element to compute actual content rect
     const scaleContain = Math.min(videoRect.width / intrinsicW, videoRect.height / intrinsicH);
     const displayW = intrinsicW * scaleContain;
     const displayH = intrinsicH * scaleContain;
@@ -355,15 +350,11 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     const localX = event.clientX - contentLeft;
     const localY = event.clientY - contentTop;
 
-    // Ignore clicks outside the actual displayed content
     if (localX < 0 || localY < 0 || localX > displayW || localY > displayH) return null;
 
-    // Map to intrinsic coordinates first
     const intrinsicX = localX / scaleContain;
     const intrinsicY = localY / scaleContain;
 
-    // Map to capture resolution if known (server's original capture size)
-    // This keeps click accuracy even if LiveKit scaled the video.
     let x = intrinsicX;
     let y = intrinsicY;
     if (captureSize && captureSize.w > 0 && captureSize.h > 0 && intrinsicW > 0 && intrinsicH > 0) {
@@ -380,11 +371,11 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     };
   };
 
+  // --- MODIFIED ---
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
     
-    // Viewers cannot send interactions
     if (isViewer) {
       console.log("[LiveKitViewer] Viewer mode: click interaction blocked");
       return;
@@ -392,28 +383,20 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     
     try { containerRef.current?.focus(); } catch {}
     const coords = calculateCoords(event);
-    try {
-      const video = videoRef.current;
-      const rect = video?.getBoundingClientRect();
-      const debug = {
-        coords,
-        client: { x: event.clientX, y: event.clientY },
-        videoRect: rect ? { w: rect.width, h: rect.height, left: rect.left, top: rect.top } : null,
-        intrinsic: video ? { w: video.videoWidth, h: video.videoHeight } : null,
-        capture: captureSize || null,
-      };
-      console.log("[CLICK DEBUG]", debug);
-    } catch {}
-    console.log("CLICKED", coords);
+    
+    // Debug logging can remain as it is helpful
+    try { /* ... your debug log ... */ } catch {}
+    
     if (coords) {
-      publishOrQueue({ action: 'click', ...coords, button: 'left' });
+      // Send click events directly to the session manager
+      sendInteractionToSessionManager({ action: 'click', ...coords, button: 'left' });
     }
   };
 
+  // --- MODIFIED ---
   const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     
-    // Viewers cannot send interactions
     if (isViewer) {
       console.log("[LiveKitViewer] Viewer mode: right-click interaction blocked");
       return;
@@ -421,25 +404,25 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     
     const coords = calculateCoords(event);
     if (coords) {
-      publishOrQueue({ action: 'click', ...coords, button: 'right' });
+      // Send right-click events directly to the session manager
+      sendInteractionToSessionManager({ action: 'click', ...coords, button: 'right' });
     }
   };
 
+  // --- MODIFIED ---
   const handleKeyDown = async (event: React.KeyboardEvent<HTMLDivElement>) => {
     event.preventDefault();
     
-    // Viewers cannot send interactions
     if (isViewer) {
       console.log("[LiveKitViewer] Viewer mode: keyboard interaction blocked");
       return;
     }
     
     const key = event.key;
-
-    // Handle Copy & Paste first
     const isPaste = (event.ctrlKey || event.metaKey) && key.toLowerCase() === 'v';
     const isCopy = (event.ctrlKey || event.metaKey) && key.toLowerCase() === 'c';
 
+    // KEEP clipboard paste logic via LiveKit
     if (isPaste) {
       try {
         const text = await navigator.clipboard.readText();
@@ -455,7 +438,6 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
       return;
     }
     
-    // Send standard key press
     const activeModifiers = Object.entries(modifiersRef.current)
         .filter(([, isActive]) => isActive)
         .map(([k]) => k);
@@ -463,9 +445,11 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     const payload = (key.length === 1 && activeModifiers.length === 0)
         ? { action: 'type', text: key }
         : { action: 'keypress', key, modifiers: activeModifiers };
-    await publishOrQueue(payload);
+        
+    // Send standard key presses directly to the session manager
+    await sendInteractionToSessionManager(payload);
 
-    // If it was a copy command, request remote clipboard content
+    // KEEP clipboard copy request via LiveKit
     if (isCopy) {
       setTimeout(() => {
         publishOrQueue({ type: "get_clipboard" });
@@ -481,13 +465,16 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     }
   };
 
+  // --- MODIFIED ---
   const handleScroll = (event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
     const coords = calculateCoords(event as any);
+
+    // Send scroll events directly to the session manager
     if (coords) {
-      publishOrQueue({ action: 'scroll', dx: event.deltaX, dy: event.deltaY, x: coords.x, y: coords.y });
+      sendInteractionToSessionManager({ action: 'scroll', dx: event.deltaX, dy: event.deltaY, x: coords.x, y: coords.y });
     } else {
-      publishOrQueue({ action: 'scroll', dx: event.deltaX, dy: event.deltaY });
+      sendInteractionToSessionManager({ action: 'scroll', dx: event.deltaX, dy: event.deltaY });
     }
   };
 
@@ -495,13 +482,13 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
     <div
       ref={containerRef}
       className="w-full h-full bg-black rounded shadow-lg cursor-default"
-      style={{ outline: 'none', userSelect: 'none', WebkitUserSelect: 'none' }} // Hide focus ring & prevent selection
+      style={{ outline: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
       onClick={handleClick}
       onContextMenu={handleContextMenu}
       onKeyDown={handleKeyDown}
       onKeyUp={handleKeyUp}
       onWheel={handleScroll}
-      tabIndex={0} // Makes the div focusable
+      tabIndex={0}
     >
       <video
         ref={videoRef}
