@@ -61,9 +61,34 @@ interface SessionContentProps {
 
 function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab, warmupStarted, warmupCompleted, warmupProgress }: SessionContentProps) {
     const whiteboardBlocks = useSessionStore((s) => s.whiteboardBlocks);
+    const courseProgress = useSessionStore((s) => s.courseProgress);
     const whiteboardScrollRef = useRef<HTMLDivElement | null>(null);
     const [isBarVisible, setIsBarVisible] = useState(false);
     const hideTimer = useRef<NodeJS.Timeout | null>(null); // Ref to hold the timer
+
+    // Build shared course details string so it can appear on all blocks
+    const currentChapter = courseProgress?.currentChapter ?? '?';
+    const totalChapters = courseProgress?.totalChapters ?? '?';
+    const chapterTitle = courseProgress?.chapterTitle ?? '?';
+    const currentPage = courseProgress?.currentPage ?? '?';
+    const totalPages = courseProgress?.totalPages ?? '?';
+    const pageTitle = courseProgress?.pageTitle ?? '?';
+
+    const courseDetails = `Chap (${currentChapter}/${totalChapters}): ${chapterTitle} • Page (${currentPage}/${totalPages}): ${pageTitle}`;
+
+    // Debug: log current course progress and derived details on each render
+    if (typeof window !== 'undefined') {
+        console.log('[SessionPage][CourseDetails][Render]', {
+            courseProgress,
+            currentChapter,
+            totalChapters,
+            chapterTitle,
+            currentPage,
+            totalPages,
+            pageTitle,
+            courseDetails,
+        });
+    }
 
     // The vertical distance the content needs to shift down.
     const contentShiftDistance = '76px';
@@ -172,12 +197,9 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                                           (block.type === 'excalidraw' ? 'Whiteboard' :
                                           block.type === 'video' ? 'Video' : 'Replay')}
                                       </span>
-                                      {/* Conditionally render the details if they exist on the block object */}
-                                      {(block as any).details && (
-                                          <span className="text-gray-500">
-                                              {(block as any).details}
-                                          </span>
-                                      )}
+                                      <span className="text-gray-500">
+                                          {(block as any).details ?? courseDetails}
+                                      </span>
                                   </div>
                                 </div>
                                 {/* --- MODIFIED SECTION END --- */}
@@ -495,6 +517,28 @@ function SessionInner() {
     const [warmupCompleted, setWarmupCompleted] = useState(true); // Start as true, only show loading when backend sends warmup_started
     const [warmupProgress, setWarmupProgress] = useState(0);
 
+    // --- Fetch course/session context directly from backend (Option 1) ---
+    useEffect(() => {
+        const loadContext = async () => {
+            console.log('[SessionPage][CourseContext] Effect fired with:', { courseId, sessionManagerSessionId });
+            if (!courseId || !sessionManagerSessionId) {
+                console.log('[SessionPage][CourseContext] Missing courseId or sessionManagerSessionId; skipping fetch');
+                return;
+            }
+            try {
+                console.log('[SessionPage][CourseContext] Fetching course context via ApiService.getSessionContext');
+                const ctx = await apiService.getSessionContext(courseId, sessionManagerSessionId);
+                console.log('[SessionPage][CourseContext] Received context:', ctx);
+                // ctx is expected to match CourseProgress shape from backend
+                setCourseProgress(ctx);
+            } catch (e) {
+                console.error('[SessionPage][CourseContext] Error fetching context:', e);
+            }
+        };
+
+        void loadContext();
+    }, [courseId, sessionManagerSessionId, apiService, setCourseProgress]);
+
     // Suggested responses are now rendered inside the Sphere transcript bubble
     const isAgentSpeaking = useSessionStore((s) => s.isAgentSpeaking);
     const isAwaitingAIResponse = useSessionStore((s) => s.isAwaitingAIResponse);
@@ -610,16 +654,28 @@ function SessionInner() {
                     setWarmupProgress(100);
                 } else if (message.type === 'course_progress') {
                     // Producer: update centralized course progress from backend event
+                    console.log('[SessionPage][CourseProgress] Raw message:', message);
                     const p = message.progress || message.payload || message;
+                    console.log('[SessionPage][CourseProgress] Extracted payload p:', p);
                     if (p && typeof p === 'object') {
-                        setCourseProgress({
-                            currentChapter: p.currentChapter,
-                            totalChapters: p.totalChapters,
-                            chapterTitle: p.chapterTitle,
-                            currentPage: p.currentPage,
-                            totalPages: p.totalPages,
-                            pageTitle: p.pageTitle,
-                        });
+                        // Support both camelCase and snake_case payloads from backend
+                        const mapped = {
+                            currentChapter: p.currentChapter ?? p.current_chapter,
+                            totalChapters: p.totalChapters ?? p.total_chapters,
+                            chapterTitle: p.chapterTitle ?? p.chapter_title,
+                            currentPage: p.currentPage ?? p.current_page,
+                            totalPages: p.totalPages ?? p.total_pages,
+                            pageTitle: p.pageTitle ?? p.page_title,
+                        };
+                        console.log('[SessionPage][CourseProgress] Mapped fields to setCourseProgress:', mapped);
+                        setCourseProgress(mapped);
+                        try {
+                            console.log('[SessionPage][CourseProgress] Store state after setCourseProgress:', useSessionStore.getState().courseProgress);
+                        } catch (storeErr) {
+                            console.warn('[SessionPage][CourseProgress] Failed to read store state after update:', storeErr);
+                        }
+                    } else {
+                        console.warn('[SessionPage][CourseProgress] Payload p was not an object, skipping setCourseProgress');
                     }
                 }
             } catch (e) {
