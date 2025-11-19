@@ -26,6 +26,10 @@ import { SendModal } from '@/components/compositions/SendModal';
 import { TabManager } from '@/components/session/TabManager';
 import { getBackendValue } from '@/config/environments';
 import { useApiService } from '@/lib/api';
+import { CognitiveShadowPanel } from '@/components/imprinting/CognitiveShadowPanel';
+import { RRWebReplayModal } from '@/components/imprinting/RRWebReplayModal';
+import { fetchShadowState, type CognitiveShadowState, type PendingQuestion } from '@/lib/cognitiveShadowService';
+import { sendTeacherEmphasisEvent } from '@/lib/ingestionService';
 
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
@@ -205,13 +209,6 @@ function SessionContent({
         <div className='w-full h-full flex flex-col items-center relative'>
 
             <div className="flex-grow relative w-full h-full">
-                {isAwaitingAIResponse && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center z-50 animate-fade-in">
-                        <Wand className="w-10 h-10 text-white animate-pulse mb-4" />
-                        <p className="text-white text-lg">AI is analyzing your demonstration...</p>
-                        <p className="text-white/70 text-sm">This may take a moment.</p>
-                    </div>
-                )}
                 <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
                     <ConceptualDebriefView
                         debrief={currentDebrief}
@@ -386,6 +383,7 @@ interface TeacherFooterProps {
     // New: navigation buttons and mode
     componentButtons: ButtonConfig[];
     imprintingMode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL';
+    onCaptureInsight?: () => void;
 }
 const TeacherFooter = ({ 
     onUploadClick, 
@@ -659,6 +657,10 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     const [warmupCompleted, setWarmupCompleted] = useState(true); // Start as true, only show loading when backend sends warmup_started
     const [warmupProgress, setWarmupProgress] = useState(0);
 
+    const [shadowState, setShadowState] = useState<CognitiveShadowState | null>(null);
+    const [replayQuestion, setReplayQuestion] = useState<PendingQuestion | null>(null);
+    const [isReplayOpen, setIsReplayOpen] = useState(false);
+
     // Listen for warmup events from backend via LiveKit data channel
     useEffect(() => {
         if (!room) return;
@@ -726,6 +728,25 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
             clearTimeout(safetyTimeout);
         };
     }, [warmupStarted, warmupCompleted]);
+
+    // Poll Cognitive Shadow state while in LIVE_IMPRINTING
+    useEffect(() => {
+        if (imprintingPhase !== 'LIVE_IMPRINTING' || !roomName) {
+            setShadowState(null);
+            return;
+        }
+
+        const intervalId = setInterval(async () => {
+            try {
+                const state = await fetchShadowState(roomName);
+                setShadowState(state);
+            } catch (e) {
+                console.warn('Failed to fetch shadow state', e);
+            }
+        }, 3000);
+
+        return () => clearInterval(intervalId);
+    }, [imprintingPhase, roomName]);
 
     // VNC session management removed (LiveKit-only)
 
@@ -852,6 +873,24 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
             setImprintingPhase('REVIEW_DRAFT');
         } catch (error) {
             setImprintingPhase('SEED_INPUT');
+        }
+    };
+
+    const handleCaptureInsight = async () => {
+        if (!user?.id || !roomName) return;
+        setStatusMessage('Capturing insight...');
+        try {
+            await sendTeacherEmphasisEvent({
+                session_id: roomName,
+                // curriculumId is a URL param that may be null
+                curriculum_id: courseId || undefined,
+                current_lo: currentLO || undefined,
+            });
+            setStatusMessage('Insight captured!');
+        } catch (e) {
+            setStatusMessage('Failed to capture insight.');
+            // eslint-disable-next-line no-console
+            console.error('Capture Insight failed', e);
         }
     };
 
@@ -1624,8 +1663,14 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                                     isPublishDisabled={!courseId || isPublishingTemplate}
                                     componentButtons={componentButtons}
                                     imprintingMode={imprinting_mode}
+                                    onCaptureInsight={handleCaptureInsight}
                                 />
                                 )}
+                                <RRWebReplayModal
+                                    isOpen={isReplayOpen}
+                                    question={replayQuestion}
+                                    onClose={() => setIsReplayOpen(false)}
+                                />
                             </>
                         )
                     }
