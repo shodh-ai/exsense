@@ -42,18 +42,15 @@ export const useBrowserActionExecutor = (room: Room | null, browserIdentity?: st
       if (!room || !room.localParticipant) {
         throw new Error('LiveKit room is not connected');
       }
+      if (!browserIdentity || !browserIdentity.trim().length) {
+        throw new Error('Browser manager is not connected (no browserIdentity); not sending command.');
+      }
       const payload = JSON.stringify(command);
       const bytes = new TextEncoder().encode(payload);
-      try {
-        if (browserIdentity && browserIdentity.trim().length > 0) {
-          room.localParticipant.publishData(bytes, { destinationIdentities: [browserIdentity], reliable: true } as any);
-        } else {
-          room.localParticipant.publishData(bytes, { reliable: true } as any);
-        }
-      } catch (e) {
-        // Fallback to broadcast if targeted send fails due to SDK option differences
-        room.localParticipant.publishData(bytes);
-      }
+      await room.localParticipant.publishData(
+        bytes,
+        { destinationIdentities: [browserIdentity], reliable: true } as any,
+      );
       return { success: true, message: `Sent ${command.tool_name}`, timestamp: Date.now() };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -62,7 +59,7 @@ export const useBrowserActionExecutor = (room: Room | null, browserIdentity?: st
     } finally {
       setIsExecuting(false);
     }
-  }, [room]);
+  }, [room, browserIdentity]);
 
   return { isExecuting, lastError, executeBrowserAction };
 };
