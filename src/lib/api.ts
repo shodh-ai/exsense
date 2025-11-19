@@ -118,6 +118,7 @@ export interface WhiteboardBlockDTO {
   order: number;
   summary: string;
   type: WhiteboardBlockType;
+  details?: string;
   data?: any;
   eventsUrl?: string | null;
   videoUrl?: string | null;
@@ -267,6 +268,12 @@ export class ApiService {
     return this.client.post('/api/sessions/publish-template', { courseId, sessionId } as any);
   }
 
+  // --- Course session context (Brum/lesson progress) ---
+  async getSessionContext(courseId: string, sessionId: string): Promise<any> {
+    // Matches backend route: GET /api/courses/:courseId/sessions/:sessionId/context
+    return this.client.get(`/api/courses/${courseId}/sessions/${sessionId}/context`);
+  }
+
   // --- Admin API ---
   async getAdminUsers(): Promise<any[]> { return this.client.get('/api/admin/users'); }
   async enableUser(userId: string): Promise<{ id: string; isDisabled: boolean }> { return this.client.patch(`/api/admin/users/${userId}/enable`, {} as any); }
@@ -281,7 +288,7 @@ export class ApiService {
   async getWhiteboardSession(sessionId: string): Promise<WhiteboardSessionDTO> {
     return this.client.get(`/api/whiteboard/session/${sessionId}`);
   }
-  async addWhiteboardBlock(sessionId: string, block: { type: WhiteboardBlockType; summary: string; order?: number; data?: any; eventsUrl?: string | null; videoUrl?: string | null }): Promise<WhiteboardBlockDTO> {
+  async addWhiteboardBlock(sessionId: string, block: { type: WhiteboardBlockType; summary: string; details?: string; order?: number; data?: any; eventsUrl?: string | null; videoUrl?: string | null }): Promise<WhiteboardBlockDTO> {
     return this.client.post(`/api/whiteboard/session/${sessionId}/blocks`, block as any);
   }
 }
