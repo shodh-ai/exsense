@@ -876,12 +876,15 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
         const payload = JSON.stringify({ action: 'navigate', url: startUrl });
         const bytes = new TextEncoder().encode(payload);
         try {
-          if (browserIdentity && browserIdentity.trim().length > 0) {
-            roomInstance?.localParticipant?.publishData(bytes, { destinationIdentities: [browserIdentity], reliable: true } as any);
-          } else {
-            roomInstance?.localParticipant?.publishData(bytes);
+          if (browserIdentity && browserIdentity.trim().length > 0 && roomInstance?.localParticipant) {
+            roomInstance.localParticipant.publishData(
+              bytes,
+              { destinationIdentities: [browserIdentity], reliable: true } as any,
+            );
+            if (SESSION_FLOW_DEBUG) console.log('[FLOW] Sent initial navigate to', startUrl, `(to ${browserIdentity})`);
+          } else if (SESSION_FLOW_DEBUG) {
+            console.log('[FLOW] Skipping initial navigate: no browserIdentity yet');
           }
-          if (SESSION_FLOW_DEBUG) console.log('[FLOW] Sent initial navigate to', startUrl, browserIdentity ? `(to ${browserIdentity})` : '(broadcast)');
         } catch (e) {
           console.warn('[FLOW] Failed to publish initial navigate:', e);
         }
@@ -983,11 +986,32 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
       const traceId = (payload as any)?.trace_id || uuidv4();
       const json = JSON.stringify({ ...(payload as any), trace_id: traceId });
       const bytes = new TextEncoder().encode(json);
-      await roomInstance.localParticipant.publishData(bytes);
+      let browserId: string | null = null;
+      if (browserIdentity && browserIdentity.trim().length > 0) {
+        browserId = browserIdentity.trim();
+      } else {
+        try {
+          const remVals: any[] = Array.from((roomInstance?.remoteParticipants as any)?.values?.() || []);
+          const browser = remVals.find((p: any) => (p?.identity || '').startsWith('browser-bot-'));
+          if (browser && browser.identity) {
+            browserId = String(browser.identity);
+          }
+        } catch {}
+      }
+
+      if (!browserId) {
+        console.warn('[Interaction] No browser-bot participant; dropping browser interaction payload');
+        return;
+      }
+
+      await roomInstance.localParticipant.publishData(
+        bytes,
+        { destinationIdentities: [browserId], reliable: true } as any,
+      );
     } catch (e) {
       console.error('[Interaction] Failed to publish data:', e);
     }
-  }, []);
+  }, [browserIdentity]);
 
   // --- NEW TAB MANAGEMENT FUNCTIONS ---
   const openNewTab = useCallback(async (name: string, url: string) => {
