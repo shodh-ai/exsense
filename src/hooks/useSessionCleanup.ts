@@ -35,29 +35,23 @@ export function useSessionCleanup({
                   sessionIdRef.current = id;
                 }
               }
-            } catch {}
+            } catch { }
           }
           if (!sessId) {
-            for (let i = 0; i < 10; i++) {
-              await new Promise((resolve) => setTimeout(resolve, 200));
-              sessId = sessionIdRef.current;
-              if (sessId) break;
-            }
+            // Best-effort: if we don't have an ID yet, we can't delete.
+            // We do NOT wait in a loop here because during 'unload' the browser
+            // will likely kill the process before the loop completes.
           }
         }
         if (!sessId) return;
-        const url = `/api/sessions/${sessId}?_method=DELETE`;
+        const url = `/api/sessions/${sessId}`;
         try {
+          // Use keepalive to allow the request to outlive the page
           await fetch(url, { method: 'DELETE', keepalive: true, mode: 'cors' });
-        } catch {
-          try {
-            if (typeof navigator !== 'undefined' && 'sendBeacon' in navigator) {
-              const blob = new Blob([], { type: 'text/plain' });
-              (navigator as any).sendBeacon(url, blob);
-            }
-          } catch {}
+        } catch (e) {
+          // Ignore errors during unload
         }
-      } catch {}
+      } catch { }
     };
 
     // Expose imperative deletion
@@ -68,7 +62,7 @@ export function useSessionCleanup({
         try {
           isUnloadingRef.current = true;
           void sendDelete();
-        } catch {}
+        } catch { }
       };
       window.addEventListener('beforeunload', onUnload);
       window.addEventListener('pagehide', onUnload, { capture: true });
@@ -78,6 +72,6 @@ export function useSessionCleanup({
       };
     }
 
-    return () => {};
+    return () => { };
   }, [DELETE_ON_UNLOAD]);
 }
