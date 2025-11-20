@@ -26,7 +26,15 @@ import { SendModal } from '@/components/compositions/SendModal';
 import { TabManager } from '@/components/session/TabManager';
 import { getBackendValue } from '@/config/environments';
 import { useApiService } from '@/lib/api';
+import { createClient, LiveTranscriptionEvents, LiveSchema } from '@deepgram/sdk';
 
+// Make sure you expose this in your .env.local
+const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || '';
+// The URL of your browser pod (where we POST events)
+// In production, this might be dynamic based on the session, but for now:
+const BROWSER_POD_HTTP_URL = process.env.NEXT_PUBLIC_BROWSER_POD_URL
+  ? `${process.env.NEXT_PUBLIC_BROWSER_POD_URL}/live-events`
+  : 'http://localhost:8778/live-events';
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
 const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
@@ -39,6 +47,118 @@ interface DebriefMessage {
   hypothesis?: string; // For the AI's initial summary
   text: string;       // For the question or any subsequent message
 }
+
+// --- Cognitive Shadow typed models ---
+export interface LiveGraphConcept {
+  name: string;
+  definition?: string;
+}
+
+export interface LiveGraphStep {
+  step: {
+    name: string;
+    expert_intent: string;
+    step_order?: number;
+  };
+  actions?: any[];
+}
+
+export interface LiveGraphData {
+  lo: { name: string; description?: string };
+  steps: LiveGraphStep[];
+  concepts: LiveGraphConcept[];
+}
+
+export interface PendingQuestion {
+  id?: string;
+  text: string;
+  priority?: 'high' | 'normal' | 'low';
+  context_replay?: {
+    rrweb_asset_id: string;
+    start_timestamp: number;
+    play_duration_ms: number;
+  };
+}
+
+export interface TreePlanNode {
+  type: 'speak_and_listen' | 'execute_actions';
+  content: string;
+  transitions: Array<{
+    condition: string;
+    target: string;
+  }>;
+}
+
+export interface TreePlanProposal {
+  start_node_id: string;
+  nodes: Record<string, TreePlanNode>;
+}
+
+export interface CognitiveShadowPayload {
+  type: 'cognitive_shadow_update';
+  session_id: string;
+  moment_id?: string;
+  live_graph?: LiveGraphData;
+  pending_questions?: PendingQuestion[];
+  tree_proposal?: TreePlanProposal;
+}
+
+// Recursive Tree Node Component for draftTreeProposal preview
+const TreeNode = ({ nodeId, nodeData, isRoot = false }: { nodeId: string; nodeData: TreePlanNode; isRoot?: boolean }) => {
+  const isBranch = nodeData.transitions && nodeData.transitions.length > 0;
+  const nodeColor = nodeData.type === 'speak_and_listen'
+    ? 'bg-purple-100 border-purple-200 text-purple-800'
+    : 'bg-blue-100 border-blue-200 text-blue-800';
+  const icon = nodeData.type === 'speak_and_listen' ? '🗣️' : '⚡';
+
+  return (
+    <div className={`relative ${!isRoot ? 'ml-4 pl-4 border-l-2 border-gray-200' : ''} mt-2`}>
+      <div className={`p-2 rounded-md border ${nodeColor} shadow-sm text-xs`}>
+        <div className="flex items-center gap-2 font-bold mb-1">
+          <span>{icon}</span>
+          <span className="uppercase tracking-wider text-[10px]">{nodeId}</span>
+        </div>
+        <div className="text-gray-700 line-clamp-2">
+          {nodeData.content}
+        </div>
+      </div>
+
+      {isBranch && (
+        <div className="mt-1">
+          {nodeData.transitions.map((t, idx) => (
+            <div key={idx} className="relative">
+              <div className="absolute -left-4 top-3 w-4 h-0.5 bg-gray-200" />
+              <div className="text-[10px] text-gray-400 uppercase font-mono ml-1 mb-0.5">
+                {t.condition === 'default' ? '↳ Next' : `↳ If: ${t.condition}`}
+              </div>
+              <div className="ml-2 text-[10px] font-semibold text-gray-600 bg-gray-50 px-1 rounded inline-block border">
+                Go to: {t.target}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const TreeVisualizer = ({ tree }: { tree: TreePlanProposal }) => {
+  if (!tree || !tree.nodes) return <div className="text-xs text-gray-400">Invalid tree data</div>;
+  const startNodeId = tree.start_node_id;
+  const startNode = tree.nodes[startNodeId];
+  if (!startNode) return <div className="text-xs text-gray-400">Start node not found</div>;
+
+  return (
+    <div className="font-sans">
+      <TreeNode nodeId={startNodeId} nodeData={startNode} isRoot={true} />
+      <div className="ml-4 pl-4 border-l-2 border-gray-200 mt-2">
+        <div className="text-[10px] text-gray-400 italic">
+          ... {Math.max(0, Object.keys(tree.nodes).length - 1)} more steps ...
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // --- NEW: The component for the conceptual chat view ---
 interface ConceptualDebriefViewProps {
@@ -54,22 +174,109 @@ interface ConceptualDebriefViewProps {
   // nav controls
   componentButtons: ButtonConfig[];
   imprintingMode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL';
+  // Cognitive shadow panel data
+  liveGraph: LiveGraphData | null;
+  pendingQuestions: PendingQuestion[];
+  draftTreeProposal: TreePlanProposal | null;
+  onApprovePlan: () => void;
 }
 
-const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef, onToggleRecording, isRecording, recordingDuration, componentButtons, imprintingMode }: ConceptualDebriefViewProps) => {
+const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef, onToggleRecording, isRecording, recordingDuration, componentButtons, imprintingMode, liveGraph, pendingQuestions, draftTreeProposal, onApprovePlan }: ConceptualDebriefViewProps) => {
   return (
     // MODIFICATION: Increased padding-bottom to prevent overlap with the new fixed footer.
     <div className="w-full h-full flex flex-col justify-between items-center text-black bg-transparent p-4 md:p-8 pb-[120px]">
-      {/* Debrief Content */}
-      <div className="w-full max-w-4xl space-y-8 overflow-y-auto pr-4 animate-fade-in">
-        {debrief && (
-          <div className="space-y-4">
-            {debrief.hypothesis && (
-              <p className="text-lg text-[#566FE9] leading-relaxed">{debrief.hypothesis}</p>
-            )}
-            <p className="text-lg text-black leading-relaxed">{debrief.text}</p>
+      {/* Debrief Content + Cognitive Shadow side panel */}
+      <div className="w-full max-w-6xl flex flex-col lg:flex-row gap-6 overflow-y-auto pr-4 animate-fade-in">
+        <div className="flex-1 space-y-8">
+          {debrief && (
+            <div className="space-y-4">
+              {debrief.hypothesis && (
+                <p className="text-lg text-[#566FE9] leading-relaxed">{debrief.hypothesis}</p>
+              )}
+              <p className="text-lg text-black leading-relaxed">{debrief.text}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="w-full lg:w-[360px] flex-shrink-0 space-y-4">
+          {/* Live Graph summary */}
+          <div className="flex-1 bg-white/80 backdrop-blur border border-[#C7CCF8] rounded-2xl p-4 flex flex-col min-h-[140px]">
+            <h3 className="text-sm font-bold text-[#566FE9] mb-2 flex items-center gap-2">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              Live Knowledge Graph
+            </h3>
+            <div className="flex-1 overflow-y-auto bg-[#F5F7FF] rounded-xl p-3 text-xs">
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="bg-white p-2 rounded shadow-sm">
+                  <div className="text-[10px] text-gray-500">Steps Captured</div>
+                  <div className="text-lg font-bold text-gray-800">
+                    {(liveGraph?.steps || []).length}
+                  </div>
+                </div>
+                <div className="bg-white p-2 rounded shadow-sm">
+                  <div className="text-[10px] text-gray-500">Concepts</div>
+                  <div className="text-lg font-bold text-gray-800">
+                    {(liveGraph?.concepts || []).length}
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {(liveGraph?.steps || []).slice(-3).reverse().map((s: any, i: number) => (
+                  <div key={i} className="text-xs bg-white p-2 rounded border border-gray-200">
+                    <span className="font-semibold text-[#566FE9] mr-1">{s.step?.name || 'Step'}:</span>
+                    <span className="text-gray-600">{s.step?.expert_intent || 'Processing...'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* Pending Questions */}
+          <div className="flex-1 bg-white/80 backdrop-blur border border-[#C7CCF8] rounded-2xl p-4 flex flex-col min-h-[140px]">
+            <h3 className="text-sm font-bold text-[#566FE9] mb-2">
+              Pending Questions ({pendingQuestions?.length || 0})
+            </h3>
+            <div className="flex-1 overflow-y-auto bg-[#F5F7FF] rounded-xl p-2">
+              {(!pendingQuestions || pendingQuestions.length === 0) ? (
+                <div className="text-xs text-gray-400 italic p-2">AI is listening... no questions yet.</div>
+              ) : (
+                <div className="space-y-3">
+                  {pendingQuestions.map((q: any, idx: number) => (
+                    <div key={idx} className="bg-white border border-blue-100 p-3 rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-[10px] font-bold text-[#566FE9] uppercase tracking-wider">
+                          {q.priority || 'Normal'} Priority
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-800 leading-relaxed">{q.text || q.question || ''}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Draft Plan Proposal */}
+          {draftTreeProposal && (
+            <div className="bg-white/90 backdrop-blur border-2 border-[#566FE9] rounded-2xl p-4 shadow-lg">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-sm font-bold text-[#566FE9]">Draft Lesson Plan Ready</h3>
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] rounded-full font-bold">REVIEW</span>
+              </div>
+              <div className="max-h-32 overflow-y-auto bg-gray-50 rounded mb-3 p-2 text-xs">
+                <pre className="whitespace-pre-wrap break-words text-[10px] text-gray-700">
+                  {JSON.stringify(draftTreeProposal, null, 2)}
+                </pre>
+              </div>
+              <button
+                onClick={onApprovePlan}
+                className="w-full bg-[#566FE9] text-white py-2 rounded-lg text-sm font-semibold hover:bg-[#4a5fd1] transition-colors shadow-md"
+              >
+                Approve & Finalize Plan
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 
@@ -169,6 +376,10 @@ interface SessionContentProps {
     warmupStarted: boolean;
     warmupCompleted: boolean;
     warmupProgress: number;
+    liveGraph: any | null;
+    pendingQuestions: any[];
+    draftTreeProposal: any | null;
+    onApprovePlan: () => void;
 }
 
 function SessionContent({
@@ -197,6 +408,10 @@ function SessionContent({
     warmupStarted,
     warmupCompleted,
     warmupProgress,
+    liveGraph,
+    pendingQuestions,
+    draftTreeProposal,
+    onApprovePlan,
 }: SessionContentProps) {
     const isAwaitingAIResponse = useSessionStore((s: ReturnType<typeof useSessionStore.getState>) => s.isAwaitingAIResponse);
 
@@ -205,13 +420,7 @@ function SessionContent({
         <div className='w-full h-full flex flex-col items-center relative'>
 
             <div className="flex-grow relative w-full h-full">
-                {isAwaitingAIResponse && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 flex flex-col items-center justify-center z-50 animate-fade-in">
-                        <Wand className="w-10 h-10 text-white animate-pulse mb-4" />
-                        <p className="text-white text-lg">AI is analyzing your demonstration...</p>
-                        <p className="text-white/70 text-sm">This may take a moment.</p>
-                    </div>
-                )}
+
                 <div className={`${activeView === 'excalidraw' ? 'block' : 'hidden'} w-full h-full`}>
                     <ConceptualDebriefView
                         debrief={currentDebrief}
@@ -224,6 +433,10 @@ function SessionContent({
                         recordingDuration={conceptualRecordingDuration}
                         componentButtons={componentButtons}
                         imprintingMode={imprintingMode}
+                        liveGraph={liveGraph}
+                        pendingQuestions={pendingQuestions}
+                        draftTreeProposal={draftTreeProposal}
+                        onApprovePlan={onApprovePlan}
                     />
                 </div>
 
@@ -386,6 +599,10 @@ interface TeacherFooterProps {
     // New: navigation buttons and mode
     componentButtons: ButtonConfig[];
     imprintingMode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL';
+    // Live session controls
+    isLiveSessionActive: boolean;
+    onStartLiveSession: () => void;
+    onStopLiveSession: () => void;
 }
 const TeacherFooter = ({ 
     onUploadClick, 
@@ -410,6 +627,9 @@ const TeacherFooter = ({
     isPublishDisabled,
     componentButtons,
     imprintingMode,
+    isLiveSessionActive,
+    onStartLiveSession,
+    onStopLiveSession,
 }: TeacherFooterProps) => {
     const formatTime = (seconds: number) => {
         const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
@@ -481,7 +701,7 @@ const TeacherFooter = ({
                         onClick={onUploadClick}
                     />
                 )}
-                {/* 9th Button Group (Recording Controls) */}
+                {/* 9th Button Group (Recording Controls - batch "voicemail" episodes) */}
                 {imprintingMode === 'WORKFLOW' && (
                     !isRecording ? (
                         <button
@@ -528,6 +748,15 @@ const TeacherFooter = ({
                         </div>
                     )
                 )}
+                {/* Live Session toggle (Deepgram streaming) */}
+                <button
+                    onClick={isLiveSessionActive ? onStopLiveSession : onStartLiveSession}
+                    className={`w-[170px] h-[56px] flex items-center justify-center rounded-[50px] py-4 px-5 border transition-colors ${isLiveSessionActive ? 'bg-red-500 text-white border-red-600 hover:bg-red-600' : 'bg-[#E9EBFD] text-[#566FE9] border-[#C7CCF8] hover:bg-[#d8ddff]'}`}
+                    title={isLiveSessionActive ? 'Stop Live Cognitive Shadow' : 'Start Live Cognitive Shadow'}
+                >
+                    <Mic className="w-5 h-5 mr-2" />
+                    {isLiveSessionActive ? 'Stop Live Session' : 'Start Live Session'}
+                </button>
                 {/* Publish Template button (replaces Finalize Topic) */}
                 <button
                     onClick={onPublishTemplateClick}
@@ -659,7 +888,12 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     const [warmupCompleted, setWarmupCompleted] = useState(true); // Start as true, only show loading when backend sends warmup_started
     const [warmupProgress, setWarmupProgress] = useState(0);
 
-    // Listen for warmup events from backend via LiveKit data channel
+    const [liveGraph, setLiveGraph] = useState<LiveGraphData | null>(null);
+    const [pendingQuestions, setPendingQuestions] = useState<PendingQuestion[]>([]);
+    const [draftTreeProposal, setDraftTreeProposal] = useState<TreePlanProposal | null>(null);
+    const [proposalStatus, setProposalStatus] = useState<string>('idle');
+
+    // Listen for warmup and cognitive shadow events from backend via LiveKit data channel
     useEffect(() => {
         if (!room) return;
 
@@ -672,7 +906,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                 console.log('[TeacherPage][Warmup] Received event:', message);
 
                 if (message.type === 'warmup_started') {
-                    console.log('[TeacherPage][Warmup] ✓ Backend warmup started');
+                    console.log('[TeacherPage][Warmup] Backend warmup started');
                     setWarmupStarted(true);
                     setWarmupCompleted(false);
                     setWarmupProgress(0);
@@ -680,9 +914,22 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                     console.log(`[TeacherPage][Warmup] Progress: ${Math.round(message.progress)}%`);
                     setWarmupProgress(message.progress);
                 } else if (message.type === 'warmup_completed') {
-                    console.log('[TeacherPage][Warmup] ✓ Backend warmup completed!');
+                    console.log('[TeacherPage][Warmup] Backend warmup completed!');
                     setWarmupCompleted(true);
                     setWarmupProgress(100);
+                } else if (message.type === 'cognitive_shadow_update') {
+                    console.log('[TeacherPage][Shadow] Received update:', message);
+                    if (message.live_graph) {
+                        setLiveGraph(message.live_graph);
+                    }
+                    if (message.pending_questions) {
+                        setPendingQuestions(message.pending_questions);
+                    }
+                    if (message.tree_proposal) {
+                        setDraftTreeProposal(message.tree_proposal);
+                        setProposalStatus('draft_ready');
+                        setStatusMessage('AI has proposed a lesson plan.');
+                    }
                 }
             } catch (e) {
                 // Not a warmup event, ignore
@@ -837,6 +1084,12 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     const [recordingDuration, setRecordingDuration] = useState(0);
     const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Live, streaming cognitive shadow session state (Deepgram)
+    const [isLiveSessionActive, setIsLiveSessionActive] = useState<boolean>(false);
+    const deepgramLiveRef = useRef<any>(null);
+    const liveMediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
     const curriculumId = courseId as string;
 
     // VNC session helpers removed
@@ -853,6 +1106,149 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         } catch (error) {
             setImprintingPhase('SEED_INPUT');
         }
+    };
+
+    const sendLiveEventToPod = async (eventData: any) => {
+        try {
+            await fetch(BROWSER_POD_HTTP_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(eventData),
+            });
+        } catch (err) {
+            console.error('[LiveEvent] Failed to send event to pod:', err);
+        }
+    };
+
+    const handleStartLiveSession = async () => {
+        if (!user?.id || !DEEPGRAM_API_KEY) {
+            setSubmitError('Missing User ID or Deepgram API Key');
+            return;
+        }
+
+        try {
+            setStatusMessage('Initializing Live Cognitive Shadow...');
+
+            // 1. Signal Backend to Start Tasks (Correlator, Workers)
+            await sendBrowser('start_live_monitoring', {
+                session_id: roomName,
+                environment: imprintingEnvironment,
+            });
+
+            // 2. Get Microphone Stream
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+            // 3. Initialize Deepgram Client
+            const deepgram = createClient(DEEPGRAM_API_KEY);
+
+            // 4. Setup Live Connection
+            const live = deepgram.listen.live({
+                model: 'nova-2',
+                language: 'en-US',
+                smart_format: true,
+                interim_results: false,
+                utterance_end_ms: '1500',
+                vad_events: true,
+            } as LiveSchema);
+
+            // 5. Event Listeners
+            live.on(LiveTranscriptionEvents.Open, () => {
+                console.log('[Deepgram] Connection opened.');
+                setStatusMessage('Live Session Active. I am listening...');
+                setIsLiveSessionActive(true);
+
+                // KeepAlive logic (Deepgram closes after 10s of silence without this)
+                keepAliveIntervalRef.current = setInterval(() => {
+                    if (live.getReadyState() === 1) {
+                        live.keepAlive();
+                    }
+                }, 5000);
+            });
+
+            live.on(LiveTranscriptionEvents.Transcript, (data: any) => {
+                const transcript = data.channel?.alternatives?.[0]?.transcript;
+                if (transcript && data.is_final && transcript.length > 0) {
+                    sendLiveEventToPod({
+                        event_type: 'transcript_chunk',
+                        text: transcript,
+                        timestamp: Date.now() / 1000,
+                        session_id: roomName,
+                    });
+                }
+            });
+
+            live.on(LiveTranscriptionEvents.UtteranceEnd, () => {
+                console.log('[Deepgram] VAD Trigger (Pause detected)');
+                sendLiveEventToPod({
+                    event_type: 'speech_pause',
+                    duration_ms: 1500,
+                    timestamp: Date.now() / 1000,
+                    session_id: roomName,
+                });
+            });
+
+            live.on(LiveTranscriptionEvents.Error, (err: any) => {
+                console.error('[Deepgram] Error:', err);
+                setStatusMessage('Transcription connection lost.');
+            });
+
+            // 6. Feed Audio to Deepgram
+            const mediaRecorder = new MediaRecorder(stream);
+            liveMediaRecorderRef.current = mediaRecorder;
+
+            mediaRecorder.addEventListener('dataavailable', (event) => {
+                if (event.data.size > 0 && live.getReadyState() === 1) {
+                    live.send(event.data);
+                }
+            });
+
+            mediaRecorder.start(250);
+            deepgramLiveRef.current = live;
+        } catch (err: any) {
+            console.error('[LiveSession] Failed to start:', err);
+            setSubmitError(`Failed to start live session: ${err?.message || String(err)}`);
+            setIsLiveSessionActive(false);
+        }
+    };
+
+    const handleStopLiveSession = async () => {
+        setStatusMessage('Stopping live session...');
+
+        // 1. Stop Microphone
+        try {
+            if (liveMediaRecorderRef.current && liveMediaRecorderRef.current.state !== 'inactive') {
+                liveMediaRecorderRef.current.stop();
+                liveMediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
+            }
+        } catch (err) {
+            console.warn('[LiveSession] Error stopping live media recorder:', err);
+        }
+
+        // 2. Close Deepgram
+        try {
+            if (deepgramLiveRef.current) {
+                deepgramLiveRef.current.finish();
+                deepgramLiveRef.current = null;
+            }
+        } catch (err) {
+            console.warn('[LiveSession] Error finishing Deepgram live session:', err);
+        }
+
+        // 3. Clear Intervals
+        if (keepAliveIntervalRef.current) {
+            clearInterval(keepAliveIntervalRef.current);
+            keepAliveIntervalRef.current = null;
+        }
+
+        // 4. Tell Backend to Stop
+        try {
+            await sendBrowser('stop_live_monitoring', { session_id: roomName });
+        } catch (err) {
+            console.warn('[LiveSession] Failed to notify backend to stop live monitoring:', err);
+        }
+
+        setIsLiveSessionActive(false);
+        setStatusMessage('Session ended.');
     };
 
     // Conceptual audio recording: start/stop-and-send
@@ -1030,6 +1426,17 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
 
     const handleReviewComplete = () => setImprintingPhase('LO_SELECTION');
     const handleLoSelected = (loName: string) => { setCurrentLO(loName); setImprintingPhase('LIVE_IMPRINTING'); };
+
+    const handleApprovePlan = async () => {
+        try {
+            // Future: wire into dedicated backend endpoint
+            setProposalStatus('approved');
+            setDraftTreeProposal(null);
+            setStatusMessage('Lesson plan approved.');
+        } catch (e) {
+            console.error('[TeacherPage] handleApprovePlan failed', e);
+        }
+    };
 
     const currentDebrief = useSessionStore((s) => s.debriefMessage);
     const conceptualStarted = useSessionStore((s) => s.conceptualStarted);
@@ -1624,6 +2031,9 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                                     isPublishDisabled={!courseId || isPublishingTemplate}
                                     componentButtons={componentButtons}
                                     imprintingMode={imprinting_mode}
+                                    isLiveSessionActive={isLiveSessionActive}
+                                    onStartLiveSession={handleStartLiveSession}
+                                    onStopLiveSession={handleStopLiveSession}
                                 />
                                 )}
                             </>
