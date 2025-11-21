@@ -7,7 +7,7 @@ import { useParams } from "next/navigation";
 import { useCourse, useLessons, queryKeys } from "@/hooks/useApi";
 import { useApiService } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useSessionStore } from "@/lib/store";
 
 // --- UI Components ---
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -133,13 +133,14 @@ export default function TeacherCoursePage(): JSX.Element {
   const courseId = (params.courseId as string);
   const api = useApiService();
   const queryClient = useQueryClient();
+  const showNotification = useSessionStore((s) => s.showNotification);
 
   const { data: course, isLoading, error, refetch: refetchCourse } = useCourse(courseId);
   const { data: lessons, isLoading: lessonsLoading } = useLessons(courseId);
 
   const handleStatusChange = async (newStatus: 'DRAFT' | 'PUBLISHED') => {
     const actionVerb = newStatus === 'PUBLISHED' ? 'Publishing' : 'Unpublishing';
-    toast.loading(`${actionVerb} course...`);
+    showNotification(`${actionVerb} course...`);
     try {
         await api.updateCourse(courseId, { status: newStatus });
         
@@ -150,13 +151,11 @@ export default function TeacherCoursePage(): JSX.Element {
         });
         await queryClient.invalidateQueries({ queryKey: ['courses'] }); // Invalidate general course list for student view
         
-        toast.dismiss();
-        toast.success(`Course ${newStatus === 'PUBLISHED' ? 'published' : 'unpublished'} successfully!`);
+        showNotification(`Course ${newStatus === 'PUBLISHED' ? 'published' : 'unpublished'} successfully!`);
 
         refetchCourse();
     } catch (err) {
-        toast.dismiss();
-        toast.error(`Failed to ${newStatus === 'PUBLISHED' ? 'publish' : 'unpublish'} course.`);
+        showNotification(`Failed to ${newStatus === 'PUBLISHED' ? 'publish' : 'unpublish'} course.`);
         console.error("Status change failed:", err);
     }
   };

@@ -96,17 +96,20 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
     const transcriptRef = useRef(transcript);
     const suggestedResponsesRef = useRef<{ id: string; text: string; reason?: string }[]>([]);
     const promptRef = useRef<string | undefined>(undefined);
+    const notificationMessageRef = useRef<string | null>(null);
 
     // --- ZUSTAND STORE ---
     const { isMusicButtonPlaying, setIsMusicButtonPlaying, isMicEnabled } = useSessionStore();
     const suggestedResponses = useSessionStore((s) => s.suggestedResponses);
     const promptTextFromStore = useSessionStore((s) => s.suggestedTitle);
+    const notificationMessage = useSessionStore((s) => s.notificationMessage);
     const displaySuggestions = Array.isArray(suggestedResponses) ? suggestedResponses : [];
     const promptText = promptTextFromStore; // no default; only show when backend provides
 
     // --- Sync state to refs to avoid stale closures in callbacks ---
     useEffect(() => { isAudioActiveRef.current = isAudioActive; }, [isAudioActive]);
     useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+    useEffect(() => { notificationMessageRef.current = notificationMessage; }, [notificationMessage]);
 
     useEffect(() => { suggestedResponsesRef.current = displaySuggestions || []; }, [displaySuggestions]);
     useEffect(() => { promptRef.current = promptText; }, [promptText]);
@@ -457,7 +460,8 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
                 style.left = `${left}px`;
                 style.top = `${top}px`;
                 style.transform = 'none';
-                const shouldShow = !!transcriptRef.current || (suggestedResponsesRef.current?.length ?? 0) > 0;
+                const hasNotification = !!notificationMessageRef.current;
+                const shouldShow = hasNotification || !!transcriptRef.current || (suggestedResponsesRef.current?.length ?? 0) > 0;
                 style.opacity = shouldShow ? '1' : '0';
             }
 
@@ -521,16 +525,15 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
             }
         };
     }, [currentEmotion, isMusicExplicitlyPaused]); // Dependencies for re-running the setup effect
-
-    // =================================================================
     // --- JSX RENDERING ---
     // =================================================================
     return (
         <div className="absolute top-0 left-0 w-full h-full z-50 pointer-events-none">
-            {(transcript || (displaySuggestions && displaySuggestions.length > 0) || !!promptText) && (
+            {(notificationMessage || transcript || (displaySuggestions && displaySuggestions.length > 0) || !!promptText) && (
                 <div
                     ref={bubbleRef}
                     className="absolute w-auto px-6 py-3 rounded-2xl pointer-events-auto text-center"
+
                     style={{
                         opacity: 0,
                         top: 0,
@@ -538,7 +541,8 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
                         transform: 'translateX(-50%)',
                         transition: 'opacity 0.3s ease-in-out',
                         willChange: 'top, left, opacity',
-                        backgroundColor: 'rgba(246, 246, 254, 0.9)',
+                        // When showing a notification, let only the pill styling be visible.
+                        backgroundColor: notificationMessage ? 'transparent' : 'rgba(246, 246, 254, 0.9)',
                         fontFamily: 'var(--font-plus-jakarta-sans), Plus Jakarta Sans, ui-sans-serif, system-ui, -apple-system, sans-serif',
                         fontWeight: 600,
                         fontSize: '16px',
@@ -552,8 +556,22 @@ const Sphere: React.FC<SphereProps> = ({ transcript: transcriptProp = "", onSele
                         whiteSpace: 'pre-wrap',
                     }}
                 >
-                    {displaySuggestions && displaySuggestions.length > 0 ? (
+                    {notificationMessage ? (
+                        <div className="inline-flex items-center h-[48px] bg-transparent border border-[#E9EBFD] rounded-full pl-1 pr-4 gap-[10px]">
+                            <div className="flex items-center justify-center w-[40px] h-[40px] rounded-full bg-[#566FE9]">
+                                <img
+                                    src="/Correct.svg"
+                                    alt="Notification"
+                                    className="w-5 h-5"
+                                />
+                            </div>
+                            <span className="font-semibold text-base leading-5 text-[#566FE9] whitespace-nowrap">
+                                {notificationMessage}
+                            </span>
+                        </div>
+                    ) : displaySuggestions && displaySuggestions.length > 0 ? (
                         <div className="flex flex-col items-center gap-3">
+
                             {(transcript || promptText) && (
                                 <h3 className="text-base md:text-lg font-semibold text-slate-800 text-center">
                                     {transcript || promptText}
