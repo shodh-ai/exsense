@@ -1,6 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-
+//fixed
 // Define which routes are public (no auth required)
 const isPublicRoute = createRouteMatcher([
   "/",                 // landing
