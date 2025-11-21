@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApiService, Course, Enrollment, Lesson, LessonContent, StudentProfile } from '@/lib/api';
-import { toast } from 'sonner';
+import { useSessionStore } from '@/lib/store';
 import { useAuth } from '@clerk/nextjs';
 
 // Query Keys for React Query
@@ -95,6 +95,11 @@ export const useTeacherCourses = () => {
   });
 };
 
+// Helper to drive StatusPill alongside toasts
+const notify = (message: string) => {
+  try { useSessionStore.getState().showNotification(message); } catch {}
+};
+
 export const useUpdateCourse = () => {
   const apiService = useApiService();
   const queryClient = useQueryClient();
@@ -105,10 +110,10 @@ export const useUpdateCourse = () => {
     onSuccess: (updatedCourse) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.course(updatedCourse.id) });
       queryClient.invalidateQueries({ queryKey: queryKeys.courses });
-      toast.success('Course updated successfully!');
+      notify('Course updated successfully!');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update course: ${error.message}`);
+      notify(`Failed to update course: ${error.message}`);
     },
   });
 };
@@ -136,10 +141,10 @@ export const useCreateCourse = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.courses });
       queryClient.invalidateQueries({ queryKey: queryKeys.teacherCourses(userId || undefined) });
-      toast.success('Course created successfully!');
+      notify('Course created successfully!');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create course: ${error.message}`);
+      notify(`Failed to create course: ${error.message}`);
     },
   });
 };
@@ -155,10 +160,10 @@ export const useDeleteCourse = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.courses });
       queryClient.invalidateQueries({ queryKey: queryKeys.teacherCourses(userId || undefined) });
       queryClient.removeQueries({ queryKey: queryKeys.course(courseId) });
-      toast.success('Course deleted');
+      notify('Course deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete course: ${error.message}`);
+      notify(`Failed to delete course: ${error.message}`);
     },
   });
 };
@@ -205,13 +210,13 @@ export const useEnrollInCourse = () => {
     mutationFn: (courseId: string) => apiService.enrollInCourse(courseId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.myEnrollments(userId || undefined) });
-      toast.success('Successfully enrolled in course!');
+      notify('Successfully enrolled in course!');
     },
     onError: (error: Error) => {
       if (error.message.includes('already enrolled')) {
-        toast.info('You are already enrolled in this course.');
+        notify('You are already enrolled in this course.');
       } else {
-        toast.error(`Failed to enroll: ${error.message}`);
+        notify(`Failed to enroll: ${error.message}`);
       }
     },
   });
@@ -264,10 +269,10 @@ export const useCreateLesson = (courseId: string) => {
     mutationFn: (data: { title: string }) => apiService.createLesson(courseId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.lessons(courseId) });
-      toast.success('Lesson created');
+      notify('Lesson created');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create lesson: ${error.message}`);
+      notify(`Failed to create lesson: ${error.message}`);
     },
   });
 };
@@ -279,10 +284,10 @@ export const useDeleteLesson = (courseId: string) => {
     mutationFn: (lessonId: string) => apiService.deleteLesson(lessonId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.lessons(courseId) });
-      toast.success('Lesson deleted');
+      notify('Lesson deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete lesson: ${error.message}`);
+      notify(`Failed to delete lesson: ${error.message}`);
     },
   });
 };
@@ -294,10 +299,10 @@ export const useReorderLessons = (courseId: string) => {
     mutationFn: (orderedLessonIds: string[]) => apiService.reorderLessons(courseId, orderedLessonIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.lessons(courseId) });
-      toast.success('Lessons reordered');
+      notify('Lessons reordered');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to reorder lessons: ${error.message}`);
+      notify(`Failed to reorder lessons: ${error.message}`);
     },
   });
 };
@@ -332,10 +337,10 @@ export const useAddLessonContent = (lessonId: string) => {
     mutationFn: (data: any) => apiService.addLessonContent(lessonId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.lessonContents(lessonId) });
-      toast.success('Content added');
+      notify('Content added');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to add content: ${error.message}`);
+      notify(`Failed to add content: ${error.message}`);
     }
   });
 };
@@ -347,10 +352,10 @@ export const useDeleteLessonContent = (lessonId: string) => {
     mutationFn: (contentId: string) => apiService.deleteLessonContent(contentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.lessonContents(lessonId) });
-      toast.success('Content deleted');
+      notify('Content deleted');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete content: ${error.message}`);
+      notify(`Failed to delete content: ${error.message}`);
     }
   });
 };
@@ -385,10 +390,10 @@ export const useCreateBrumSession = () => {
     mutationFn: (sessionData: any) => apiService.createBrumSession(sessionData),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.brumData });
-      toast.success('AI session created successfully!');
+      notify('AI session created successfully!');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to create AI session: ${error.message}`);
+      notify(`Failed to create AI session: ${error.message}`);
     },
   });
 };
@@ -474,10 +479,10 @@ export const useToggleUserDisabled = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.adminUsers });
-      toast.success('User status updated');
+      notify('User status updated');
     },
     onError: (error: Error) => {
-      toast.error(`Failed to update user: ${error.message}`);
+      notify(`Failed to update user: ${error.message}`);
     },
   });
 };

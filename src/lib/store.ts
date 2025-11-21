@@ -139,6 +139,12 @@ interface SessionState {
   imprintingPhase: ImprintingPhase;
   curriculumDraft: LearningObjective[];
 
+  // --- Debrief message state ---
+  debriefMessage: DebriefMessage | null;
+
+  // --- Global notifications (drives StatusPill) ---
+  notificationMessage: string | null;
+
   // --- Actions ---
   setActiveView: (view: SessionView) => void;
   setExcalidrawAPI: (api: ExcalidrawAPIType) => void;
@@ -180,9 +186,12 @@ interface SessionState {
   setImprintingPhase: (phase: ImprintingPhase) => void;
   setCurriculumDraft: (draft: LearningObjective[]) => void;
 
-  // --- Debrief message state ---
-  debriefMessage: DebriefMessage | null;
+  // --- Debrief message action ---
   setDebriefMessage: (message: DebriefMessage | null) => void;
+
+  // --- Notification actions ---
+  showNotification: (message: string) => void;
+  clearNotification: () => void;
 }
 
 export const useSessionStore = create<SessionState>()(
@@ -226,6 +235,9 @@ export const useSessionStore = create<SessionState>()(
       curriculumDraft: [],
       // --- Debrief message defaults ---
       debriefMessage: null,
+
+      // --- Notification defaults ---
+      notificationMessage: null,
 
       // --- Actions Implementation ---
       setActiveView: (view) => set({ activeView: view }),
@@ -294,6 +306,10 @@ export const useSessionStore = create<SessionState>()(
       setCurriculumDraft: (draft) => set({ curriculumDraft: draft }),
       // --- Debrief message action ---
       setDebriefMessage: (message) => set({ debriefMessage: message }),
+
+      // --- Notification actions ---
+      showNotification: (message: string) => set({ notificationMessage: message }),
+      clearNotification: () => set({ notificationMessage: null }),
     }),
     { name: "SessionUIStore" }
   )

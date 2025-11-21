@@ -303,9 +303,9 @@ const shellFragmentShader = `
 
 interface SphereProps {
 
-    scale?: number;
+  scale?: number;
 
-    className?: string;
+  className?: string;
 
 }
 
@@ -314,310 +314,310 @@ interface SphereProps {
 
 const SphereComponent: React.FC<SphereProps> = ({ scale = 1.0, className }) => {
 
-    const mountRef = useRef<HTMLDivElement>(null);
+  const mountRef = useRef<HTMLDivElement>(null);
 
 
 
 
-    useEffect(() => {
+  useEffect(() => {
 
-        const currentMount = mountRef.current;
+    const currentMount = mountRef.current;
 
-        if (!currentMount) return;
+    if (!currentMount) return;
 
 
 
 
-        let animationFrameId: number;
+    let animationFrameId: number;
 
 
 
 
-        const scene = new THREE.Scene();
+    const scene = new THREE.Scene();
 
-        const camera = new THREE.PerspectiveCamera(50, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(50, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
 
-        // CHANGED: Moved the camera further back to fit the larger blob
+    // CHANGED: Moved the camera further back to fit the larger blob
 
-        camera.position.set(0, 0, 10);
+    camera.position.set(0, 0, 10);
 
 
 
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 
-        renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+    renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
 
-        renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(window.devicePixelRatio);
 
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
-        currentMount.appendChild(renderer.domElement);
+    currentMount.appendChild(renderer.domElement);
 
 
 
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
 
-        directionalLight.position.set(5, 5, 5);
+    directionalLight.position.set(5, 5, 5);
 
-        scene.add(directionalLight);
+    scene.add(directionalLight);
 
 
 
 
-        const controls = new OrbitControls(camera, renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
 
-        controls.enableDamping = true;
+    controls.enableDamping = true;
 
-        controls.dampingFactor = 0.05;
+    controls.dampingFactor = 0.05;
 
-        controls.enablePan = false;
+    controls.enablePan = false;
 
-        controls.enableZoom = false;
+    controls.enableZoom = false;
 
-        controls.autoRotate = true;
+    controls.autoRotate = true;
 
-        controls.autoRotateSpeed = 0.5;
+    controls.autoRotateSpeed = 0.5;
 
 
 
 
-        const blobGroup = new THREE.Group();
+    const blobGroup = new THREE.Group();
 
-        scene.add(blobGroup);
+    scene.add(blobGroup);
 
 
 
 
-        const coreGeometry = new THREE.SphereGeometry(1, 128, 128);
+    const coreGeometry = new THREE.SphereGeometry(1, 128, 128);
 
-        const coreMaterial = new THREE.ShaderMaterial({
+    const coreMaterial = new THREE.ShaderMaterial({
 
-            vertexShader: coreVertexShader,
+      vertexShader: coreVertexShader,
 
-            fragmentShader: coreFragmentShader,
+      fragmentShader: coreFragmentShader,
 
-            uniforms: {
+      uniforms: {
 
-                u_top_color: { value: new THREE.Color('#ff8c66') },
+        u_top_color: { value: new THREE.Color('#ff8c66') },
 
-                u_bottom_color: { value: new THREE.Color('#7ab8f5') },
+        u_bottom_color: { value: new THREE.Color('#7ab8f5') },
 
-                u_pink_color: { value: new THREE.Color('#ff8cae') },
+        u_pink_color: { value: new THREE.Color('#ff8cae') },
 
-                u_patch1_percentage: { value: 0.6 },
+        u_patch1_percentage: { value: 0.6 },
 
-                u_patch2_percentage: { value: 0.6 },
+        u_patch2_percentage: { value: 0.6 },
 
-                u_patch3_percentage: { value: 0.6 },
+        u_patch3_percentage: { value: 0.6 },
 
-                u_glow_power: { value: 0.7 }
+        u_glow_power: { value: 0.7 }
 
-            },
+      },
 
-            transparent: true,
+      transparent: true,
 
-        });
+    });
 
-        const core = new THREE.Mesh(coreGeometry, coreMaterial);
+    const core = new THREE.Mesh(coreGeometry, coreMaterial);
 
-        blobGroup.add(core);
+    blobGroup.add(core);
 
 
 
 
-        const renderTargetForShell = new THREE.WebGLRenderTarget(currentMount.clientWidth, currentMount.clientHeight);
+    const renderTargetForShell = new THREE.WebGLRenderTarget(currentMount.clientWidth, currentMount.clientHeight);
 
-        const shellGeometry = new THREE.SphereGeometry(1.5, 128, 128);
+    const shellGeometry = new THREE.SphereGeometry(1.5, 128, 128);
 
-        const shellMaterial = new THREE.ShaderMaterial({
+    const shellMaterial = new THREE.ShaderMaterial({
 
-            vertexShader: shellVertexShader,
+      vertexShader: shellVertexShader,
 
-            fragmentShader: shellFragmentShader,
+      fragmentShader: shellFragmentShader,
 
-            uniforms: {
+      uniforms: {
 
-                u_time: { value: 0 },
+        u_time: { value: 0 },
 
-                u_frequency: { value: 2.5 },
+        u_frequency: { value: 2.5 },
 
-                u_amplitude: { value: 0.5 }, 
+        u_amplitude: { value: 0.5 },
 
-                u_scene_texture: { value: renderTargetForShell.texture },
+        u_scene_texture: { value: renderTargetForShell.texture },
 
-                u_refraction_strength: { value: 0.1 },
+        u_refraction_strength: { value: 0.1 },
 
-                u_shell_opacity: { value: 0.2 },
+        u_shell_opacity: { value: 0.2 },
 
-                u_rim_power: { value: 2.5 },
+        u_rim_power: { value: 2.5 },
 
-                u_rim_color: { value: new THREE.Color('#566FE9') },
+        u_rim_color: { value: new THREE.Color('#566FE9') },
 
-                u_shininess: { value: 60.0 },
+        u_shininess: { value: 60.0 },
 
-                u_light_direction: { value: directionalLight.position },
+        u_light_direction: { value: directionalLight.position },
 
-                u_tide_direction: { value: new THREE.Vector3(1, 0, 0) }
+        u_tide_direction: { value: new THREE.Vector3(1, 0, 0) }
 
-            },
+      },
 
-            transparent: true,
+      transparent: true,
 
-        });
+    });
 
-        const shell = new THREE.Mesh(shellGeometry, shellMaterial);
+    const shell = new THREE.Mesh(shellGeometry, shellMaterial);
 
-        blobGroup.add(shell);
+    blobGroup.add(shell);
 
 
 
 
-        blobGroup.scale.set(scale, scale, scale);
+    blobGroup.scale.set(scale, scale, scale);
 
 
 
 
-        const refractionTextureBackground = new THREE.Color('#e0e5f0');
+    const refractionTextureBackground = new THREE.Color('#e0e5f0');
 
 
 
 
-        const clock = new THREE.Clock();
+    const clock = new THREE.Clock();
 
-        const animate = () => {
+    const animate = () => {
 
-            animationFrameId = requestAnimationFrame(animate);
+      animationFrameId = requestAnimationFrame(animate);
 
-            const elapsedTime = clock.getElapsedTime();
+      const elapsedTime = clock.getElapsedTime();
 
 
 
 
-            const tideSpeed = 0.8;
+      const tideSpeed = 0.8;
 
-            shellMaterial.uniforms.u_tide_direction.value.set(
+      shellMaterial.uniforms.u_tide_direction.value.set(
 
-                Math.cos(elapsedTime * tideSpeed),
+        Math.cos(elapsedTime * tideSpeed),
 
-                Math.sin(elapsedTime * tideSpeed * 0.5),
+        Math.sin(elapsedTime * tideSpeed * 0.5),
 
-                Math.sin(elapsedTime * tideSpeed * 0.8)
+        Math.sin(elapsedTime * tideSpeed * 0.8)
 
-            ).normalize();
+      ).normalize();
 
 
 
 
-            shellMaterial.uniforms.u_time.value = elapsedTime * 0.3;
+      shellMaterial.uniforms.u_time.value = elapsedTime * 0.3;
 
 
 
 
-            shell.visible = false;
+      shell.visible = false;
 
-            core.visible = true;
+      core.visible = true;
 
-            scene.background = refractionTextureBackground;
+      scene.background = refractionTextureBackground;
 
-            renderer.setRenderTarget(renderTargetForShell);
+      renderer.setRenderTarget(renderTargetForShell);
 
-            renderer.render(scene, camera);
+      renderer.render(scene, camera);
 
 
 
 
-            renderer.setRenderTarget(null);
+      renderer.setRenderTarget(null);
 
-            scene.background = null;
+      scene.background = null;
 
-            shell.visible = true;
+      shell.visible = true;
 
-            renderer.render(scene, camera);
+      renderer.render(scene, camera);
 
 
 
 
-            controls.update();
+      controls.update();
 
-        };
+    };
 
 
 
 
-        animate();
+    animate();
 
 
 
 
-        const handleResize = () => {
+    const handleResize = () => {
 
-             if (currentMount) {
+      if (currentMount) {
 
-                const width = currentMount.clientWidth;
+        const width = currentMount.clientWidth;
 
-                const height = currentMount.clientHeight;
+        const height = currentMount.clientHeight;
 
-                camera.aspect = width / height;
+        camera.aspect = width / height;
 
-                camera.updateProjectionMatrix();
+        camera.updateProjectionMatrix();
 
-                renderer.setSize(width, height);
+        renderer.setSize(width, height);
 
-                renderTargetForShell.setSize(width, height);
+        renderTargetForShell.setSize(width, height);
 
-            }
+      }
 
-        };
+    };
 
-        window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', handleResize);
 
 
 
 
-        return () => {
+    return () => {
 
-            window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', handleResize);
 
-            cancelAnimationFrame(animationFrameId);
+      cancelAnimationFrame(animationFrameId);
 
-            scene.traverse(object => {
+      scene.traverse(object => {
 
-                if (object instanceof THREE.Mesh) {
+        if (object instanceof THREE.Mesh) {
 
-                    object.geometry.dispose();
+          object.geometry.dispose();
 
-                    if (object.material instanceof THREE.Material) {
+          if (object.material instanceof THREE.Material) {
 
-                        object.material.dispose();
+            object.material.dispose();
 
-                    }
+          }
 
-                }
+        }
 
-            });
+      });
 
-            renderTargetForShell.dispose();
+      renderTargetForShell.dispose();
 
-            controls.dispose();
+      controls.dispose();
 
-            renderer.dispose();
+      renderer.dispose();
 
-            if (currentMount && renderer.domElement) {
+      if (currentMount && renderer.domElement) {
 
-                currentMount.removeChild(renderer.domElement);
+        currentMount.removeChild(renderer.domElement);
 
-            }
+      }
 
-        };
+    };
 
-    }, [scale]);
+  }, [scale]);
 
 
 
 
-    return <div ref={mountRef} className={className} />;
+  return <div ref={mountRef} className={className} />;
 
 };
 
@@ -632,7 +632,7 @@ const SphereComponent: React.FC<SphereProps> = ({ scale = 1.0, className }) => {
 interface LoadingProps {
   showProgress?: boolean;
   customMessage?: string;
-  backgroundOpacity?: 'light' | 'medium' | 'heavy';
+  backgroundOpacity?: 'light' | 'medium' | 'heavy'|'transparent';
   progressDuration?: number; // in seconds
 }
 
@@ -668,7 +668,7 @@ const tips = [
 export default function Loading({
   showProgress = false,
   customMessage,
-  backgroundOpacity = 'heavy',
+  backgroundOpacity ='transparent' ,
   progressDuration = 30
 }: LoadingProps = {}) {
 
@@ -718,8 +718,10 @@ export default function Loading({
   const bgClass = backgroundOpacity === 'light'
     ? 'bg-white/15 backdrop-blur-sm'
     : backgroundOpacity === 'medium'
-    ? 'bg-white/60 backdrop-blur-md'
-    : 'bg-white/95 backdrop-blur-sm';
+      ? 'bg-white/60 backdrop-blur-md'
+      : backgroundOpacity === 'transparent'
+        ? 'bg-transparent'
+        : 'bg-white/95 backdrop-blur-sm';
 
   return (
 

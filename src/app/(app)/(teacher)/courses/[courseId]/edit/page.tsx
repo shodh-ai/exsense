@@ -8,7 +8,7 @@ import { useApiService } from "@/lib/api";
 import { useCourse, useLessons } from "@/hooks/useApi";
 import { useQueryClient } from "@tanstack/react-query";
 import Footer from "@/components/compositions/Footer";
-import { toast } from "sonner";
+import { useSessionStore } from "@/lib/store";
 import { v4 as uuidv4 } from 'uuid';
 
 export default function EditCoursePage() {
@@ -18,6 +18,7 @@ export default function EditCoursePage() {
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const showNotification = useSessionStore((s) => s.showNotification);
 
   const { data: course, isLoading: courseLoading, error: courseError } = useCourse(courseId);
   const { data: lessons = [], isLoading: lessonsLoading, error: lessonsError } = useLessons(courseId);
@@ -59,7 +60,7 @@ export default function EditCoursePage() {
     else setIsSaving(true);
 
     const actionVerb = isPublishAction ? "Publishing" : "Saving";
-    toast.loading(`${actionVerb} curriculum...`);
+    showNotification(`${actionVerb} curriculum...`);
 
     try {
       await api.updateCourse(courseId, {
@@ -100,14 +101,12 @@ export default function EditCoursePage() {
         predicate: (query) => query.queryKey[0] === 'courses' && query.queryKey[1] === 'teacher' && query.queryKey[2] === 'me'
       });
       
-      toast.dismiss();
-      toast.success(isPublishAction ? "Course published successfully!" : "Draft saved successfully!");
+      showNotification(isPublishAction ? "Course published successfully!" : "Draft saved successfully!");
       
       router.push(`/courses/${courseId}`);
 
     } catch (error) {
-      toast.dismiss();
-      toast.error(`Error: Could not ${actionVerb.toLowerCase()} the curriculum.`);
+      showNotification(`Error: Could not ${actionVerb.toLowerCase()} the curriculum.`);
       console.error(`Failed to ${actionVerb}:`, error);
     } finally {
       if (isPublishAction) setIsPublishing(false);
