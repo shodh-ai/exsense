@@ -26,15 +26,6 @@ import { SendModal } from '@/components/compositions/SendModal';
 import { TabManager } from '@/components/session/TabManager';
 import { getBackendValue } from '@/config/environments';
 import { useApiService } from '@/lib/api';
-import { createClient, LiveTranscriptionEvents, LiveSchema } from '@deepgram/sdk';
-
-// Make sure you expose this in your .env.local
-const DEEPGRAM_API_KEY = process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || '';
-// The URL of your browser pod (where we POST events)
-// In production, this might be dynamic based on the session, but for now:
-const BROWSER_POD_HTTP_URL = process.env.NEXT_PUBLIC_BROWSER_POD_URL
-  ? `${process.env.NEXT_PUBLIC_BROWSER_POD_URL}/live-events`
-  : 'http://localhost:8778/live-events';
 
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
 const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
@@ -1084,11 +1075,8 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     const [recordingDuration, setRecordingDuration] = useState(0);
     const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Live, streaming cognitive shadow session state (Deepgram)
+    // Live, streaming cognitive shadow session state (LiveKit mic only)
     const [isLiveSessionActive, setIsLiveSessionActive] = useState<boolean>(false);
-    const deepgramLiveRef = useRef<any>(null);
-    const liveMediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const keepAliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const curriculumId = courseId as string;
 
@@ -1108,139 +1096,45 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         }
     };
 
-    const sendLiveEventToPod = async (eventData: any) => {
-        try {
-            await fetch(BROWSER_POD_HTTP_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(eventData),
-            });
-        } catch (err) {
-            console.error('[LiveEvent] Failed to send event to pod:', err);
-        }
-    };
-
     const handleStartLiveSession = async () => {
-        if (!user?.id || !DEEPGRAM_API_KEY) {
-            setSubmitError('Missing User ID or Deepgram API Key');
-            return;
-        }
+        if (!user?.id) return;
 
         try {
-            setStatusMessage('Initializing Live Cognitive Shadow...');
+            setStatusMessage('Starting Live Cognitive Shadow...');
 
-            // 1. Signal Backend to Start Tasks (Correlator, Workers)
+            // 1. Tell Backend to spin up the Correlator/Workers
             await sendBrowser('start_live_monitoring', {
                 session_id: roomName,
                 environment: imprintingEnvironment,
             });
 
-            // 2. Get Microphone Stream
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // 2. Enable Microphone (LiveKit handles the streaming)
+            if (room) {
+                await room.localParticipant.setMicrophoneEnabled(true);
+            }
 
-            // 3. Initialize Deepgram Client
-            const deepgram = createClient(DEEPGRAM_API_KEY);
-
-            // 4. Setup Live Connection
-            const live = deepgram.listen.live({
-                model: 'nova-2',
-                language: 'en-US',
-                smart_format: true,
-                interim_results: false,
-                utterance_end_ms: '1500',
-                vad_events: true,
-            } as LiveSchema);
-
-            // 5. Event Listeners
-            live.on(LiveTranscriptionEvents.Open, () => {
-                console.log('[Deepgram] Connection opened.');
-                setStatusMessage('Live Session Active. I am listening...');
-                setIsLiveSessionActive(true);
-
-                // KeepAlive logic (Deepgram closes after 10s of silence without this)
-                keepAliveIntervalRef.current = setInterval(() => {
-                    if (live.getReadyState() === 1) {
-                        live.keepAlive();
-                    }
-                }, 5000);
-            });
-
-            live.on(LiveTranscriptionEvents.Transcript, (data: any) => {
-                const transcript = data.channel?.alternatives?.[0]?.transcript;
-                if (transcript && data.is_final && transcript.length > 0) {
-                    sendLiveEventToPod({
-                        event_type: 'transcript_chunk',
-                        text: transcript,
-                        timestamp: Date.now() / 1000,
-                        session_id: roomName,
-                    });
-                }
-            });
-
-            live.on(LiveTranscriptionEvents.UtteranceEnd, () => {
-                console.log('[Deepgram] VAD Trigger (Pause detected)');
-                sendLiveEventToPod({
-                    event_type: 'speech_pause',
-                    duration_ms: 1500,
-                    timestamp: Date.now() / 1000,
-                    session_id: roomName,
-                });
-            });
-
-            live.on(LiveTranscriptionEvents.Error, (err: any) => {
-                console.error('[Deepgram] Error:', err);
-                setStatusMessage('Transcription connection lost.');
-            });
-
-            // 6. Feed Audio to Deepgram
-            const mediaRecorder = new MediaRecorder(stream);
-            liveMediaRecorderRef.current = mediaRecorder;
-
-            mediaRecorder.addEventListener('dataavailable', (event) => {
-                if (event.data.size > 0 && live.getReadyState() === 1) {
-                    live.send(event.data);
-                }
-            });
-
-            mediaRecorder.start(250);
-            deepgramLiveRef.current = live;
+            setStatusMessage('Live Session Active. I am listening...');
+            setIsLiveSessionActive(true);
+            setIsRecording(true);
         } catch (err: any) {
             console.error('[LiveSession] Failed to start:', err);
-            setSubmitError(`Failed to start live session: ${err?.message || String(err)}`);
-            setIsLiveSessionActive(false);
+            setStatusMessage('Failed to start live session.');
         }
     };
 
     const handleStopLiveSession = async () => {
         setStatusMessage('Stopping live session...');
 
-        // 1. Stop Microphone
+        // 1. Disable Microphone
         try {
-            if (liveMediaRecorderRef.current && liveMediaRecorderRef.current.state !== 'inactive') {
-                liveMediaRecorderRef.current.stop();
-                liveMediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
+            if (room) {
+                await room.localParticipant.setMicrophoneEnabled(false);
             }
         } catch (err) {
-            console.warn('[LiveSession] Error stopping live media recorder:', err);
+            console.warn('[LiveSession] Error disabling microphone:', err);
         }
 
-        // 2. Close Deepgram
-        try {
-            if (deepgramLiveRef.current) {
-                deepgramLiveRef.current.finish();
-                deepgramLiveRef.current = null;
-            }
-        } catch (err) {
-            console.warn('[LiveSession] Error finishing Deepgram live session:', err);
-        }
-
-        // 3. Clear Intervals
-        if (keepAliveIntervalRef.current) {
-            clearInterval(keepAliveIntervalRef.current);
-            keepAliveIntervalRef.current = null;
-        }
-
-        // 4. Tell Backend to Stop
+        // 2. Tell Backend to Stop
         try {
             await sendBrowser('stop_live_monitoring', { session_id: roomName });
         } catch (err) {
@@ -1248,6 +1142,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         }
 
         setIsLiveSessionActive(false);
+        setIsRecording(false);
         setStatusMessage('Session ended.');
     };
 
