@@ -973,15 +973,36 @@ export function useLiveKitSession(roomName: string, userName: string, courseId?:
   // Publish arbitrary interaction payloads over LiveKit Data Channel to the browser bot
   const sendBrowserInteraction = useCallback(async (payload: object) => {
     try {
-      if (roomInstance.state !== ConnectionState.Connected) {
-        console.warn('[Interaction] Cannot send, room not connected');
+      const state = roomInstance.state;
+      const lp = roomInstance.localParticipant;
+      if (state !== ConnectionState.Connected) {
+        console.warn('[Interaction] Cannot send, room not connected', {
+          state,
+          hasLocalParticipant: !!lp,
+        });
         return;
       }
+
       // Attach a trace id for correlation with backend actions
       const traceId = (payload as any)?.trace_id || uuidv4();
-      const json = JSON.stringify({ ...(payload as any), trace_id: traceId });
+      const envelope = { ...(payload as any), trace_id: traceId };
+      const json = JSON.stringify(envelope);
       const bytes = new TextEncoder().encode(json);
-      await roomInstance.localParticipant.publishData(bytes);
+
+      console.log('[Interaction] Publishing DataChannel message →', {
+        traceId,
+        state,
+        hasLocalParticipant: !!lp,
+        payloadAction: (payload as any)?.action,
+        payload,
+      });
+
+      await lp.publishData(bytes);
+
+      console.log('[Interaction] DataChannel publish ✓', {
+        traceId,
+        payloadAction: (payload as any)?.action,
+      });
     } catch (e) {
       console.error('[Interaction] Failed to publish data:', e);
     }

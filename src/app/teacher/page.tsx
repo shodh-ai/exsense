@@ -590,10 +590,6 @@ interface TeacherFooterProps {
     // New: navigation buttons and mode
     componentButtons: ButtonConfig[];
     imprintingMode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL';
-    // Live session controls
-    isLiveSessionActive: boolean;
-    onStartLiveSession: () => void;
-    onStopLiveSession: () => void;
 }
 const TeacherFooter = ({ 
     onUploadClick, 
@@ -618,9 +614,6 @@ const TeacherFooter = ({
     isPublishDisabled,
     componentButtons,
     imprintingMode,
-    isLiveSessionActive,
-    onStartLiveSession,
-    onStopLiveSession,
 }: TeacherFooterProps) => {
     const formatTime = (seconds: number) => {
         const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
@@ -739,15 +732,6 @@ const TeacherFooter = ({
                         </div>
                     )
                 )}
-                {/* Live Session toggle (Deepgram streaming) */}
-                <button
-                    onClick={isLiveSessionActive ? onStopLiveSession : onStartLiveSession}
-                    className={`w-[170px] h-[56px] flex items-center justify-center rounded-[50px] py-4 px-5 border transition-colors ${isLiveSessionActive ? 'bg-red-500 text-white border-red-600 hover:bg-red-600' : 'bg-[#E9EBFD] text-[#566FE9] border-[#C7CCF8] hover:bg-[#d8ddff]'}`}
-                    title={isLiveSessionActive ? 'Stop Live Cognitive Shadow' : 'Start Live Cognitive Shadow'}
-                >
-                    <Mic className="w-5 h-5 mr-2" />
-                    {isLiveSessionActive ? 'Stop Live Session' : 'Start Live Session'}
-                </button>
                 {/* Publish Template button (replaces Finalize Topic) */}
                 <button
                     onClick={onPublishTemplateClick}
@@ -1075,9 +1059,6 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     const [recordingDuration, setRecordingDuration] = useState(0);
     const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Live, streaming cognitive shadow session state (LiveKit mic only)
-    const [isLiveSessionActive, setIsLiveSessionActive] = useState<boolean>(false);
-
     const curriculumId = courseId as string;
 
     // VNC session helpers removed
@@ -1094,56 +1075,6 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         } catch (error) {
             setImprintingPhase('SEED_INPUT');
         }
-    };
-
-    const handleStartLiveSession = async () => {
-        if (!user?.id) return;
-
-        try {
-            setStatusMessage('Starting Live Cognitive Shadow...');
-
-            // 1. Tell Backend to spin up the Correlator/Workers
-            await sendBrowser('start_live_monitoring', {
-                session_id: roomName,
-                environment: imprintingEnvironment,
-            });
-
-            // 2. Enable Microphone (LiveKit handles the streaming)
-            if (room) {
-                await room.localParticipant.setMicrophoneEnabled(true);
-            }
-
-            setStatusMessage('Live Session Active. I am listening...');
-            setIsLiveSessionActive(true);
-            setIsRecording(true);
-        } catch (err: any) {
-            console.error('[LiveSession] Failed to start:', err);
-            setStatusMessage('Failed to start live session.');
-        }
-    };
-
-    const handleStopLiveSession = async () => {
-        setStatusMessage('Stopping live session...');
-
-        // 1. Disable Microphone
-        try {
-            if (room) {
-                await room.localParticipant.setMicrophoneEnabled(false);
-            }
-        } catch (err) {
-            console.warn('[LiveSession] Error disabling microphone:', err);
-        }
-
-        // 2. Tell Backend to Stop
-        try {
-            await sendBrowser('stop_live_monitoring', { session_id: roomName });
-        } catch (err) {
-            console.warn('[LiveSession] Failed to notify backend to stop live monitoring:', err);
-        }
-
-        setIsLiveSessionActive(false);
-        setIsRecording(false);
-        setStatusMessage('Session ended.');
     };
 
     // Conceptual audio recording: start/stop-and-send
@@ -1358,35 +1289,74 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     };
 
     const handleStartRecording = async () => {
-        if (!user?.id) return;
+        if (!user?.id) {
+            console.warn('[TeacherPage] handleStartRecording: blocked, missing user.id');
+            return;
+        }
         try {
-            console.log('[TeacherPage] handleStartRecording: begin', { activeView, screenshotIntervalSec });
+            console.log('[TeacherPage] handleStartRecording: begin', {
+                activeView,
+                screenshotIntervalSec,
+                roomName,
+                imprintingEnvironment,
+                hasRoom: !!room,
+                isConnected,
+            });
             setSubmitMessage(null);
             setSubmitError(null);
             setImprintingMode('WORKFLOW');
             setActiveView('vnc');
+
+            // --- Start live monitoring (correlator + worker) and enable LiveKit mic ---
+            try {
+                setStatusMessage('Starting Live Cognitive Shadow...');
+                await sendBrowser('start_live_monitoring', {
+                    session_id: roomName,
+                    environment: imprintingEnvironment,
+                });
+                if (room) {
+                    console.log('[TeacherPage] handleStartRecording: enabling LiveKit mic for localParticipant');
+                    await room.localParticipant.setMicrophoneEnabled(true);
+                    console.log('[TeacherPage] handleStartRecording: mic enable resolved');
+                } else {
+                    console.warn('[TeacherPage] handleStartRecording: no room when trying to enable mic');
+                }
+            } catch (liveErr) {
+                console.warn('[TeacherPage] Failed to start live monitoring (continuing recording anyway):', liveErr);
+            }
+
             setStatusMessage('Initializing recording on server...');
             setPacketsCount(0);
             setStagedAssets([]);
             setIsPaused(false);
-            await sendBrowser('start_recording', { session_id: roomName, screenshot_interval_sec: screenshotIntervalSec, environment: imprintingEnvironment });
+
+            await sendBrowser('start_recording', {
+                session_id: roomName,
+                screenshot_interval_sec: screenshotIntervalSec,
+                environment: imprintingEnvironment,
+            });
             setTimeToNextScreenshot(screenshotIntervalSec);
 
+            // Local audio recorder for offline episode upload / fallback
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             audioChunksRef.current = [];
-            recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data); };
-            recorder.onstop = () => { audioBlobRef.current = new Blob(audioChunksRef.current, { type: 'audio/webm' }); };
+            recorder.ondataavailable = (e) => {
+                if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+            };
+            recorder.onstop = () => {
+                audioBlobRef.current = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            };
             recorder.start();
             mediaRecorderRef.current = recorder;
 
             setIsRecording(true);
             setStatusMessage('Recording...');
-            
+
             setRecordingDuration(0);
-            if(recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
+            if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
             recordingIntervalRef.current = setInterval(() => {
-                setRecordingDuration(prev => prev + 1);
+                setRecordingDuration((prev) => prev + 1);
             }, 1000);
             console.log('[TeacherPage] handleStartRecording: done');
         } catch (err: any) {
@@ -1505,14 +1475,41 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     };
 
     const handleStopRecording = async () => {
-        console.log('[TeacherPage] handleStopRecording: begin');
+        console.log('[TeacherPage] handleStopRecording: begin', {
+            roomName,
+            hasRoom: !!room,
+            isRecording,
+        });
         if (recordingIntervalRef.current) clearInterval(recordingIntervalRef.current);
         try {
             if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
                 mediaRecorderRef.current.stop();
-                mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
+                mediaRecorderRef.current.stream.getTracks().forEach((t) => t.stop());
             }
-        } catch (err) { console.warn('Stop recording warning:', err); }
+        } catch (err) {
+            console.warn('Stop recording warning:', err);
+        }
+
+        // --- Stop live monitoring and disable LiveKit mic ---
+        try {
+            console.log('[TeacherPage] handleStopRecording: sending stop_live_monitoring');
+            await sendBrowser('stop_live_monitoring', { session_id: roomName });
+            console.log('[TeacherPage] handleStopRecording: stop_live_monitoring sent');
+        } catch (err) {
+            console.warn('[TeacherPage] Failed to notify backend to stop live monitoring:', err);
+        }
+        try {
+            if (room) {
+                console.log('[TeacherPage] handleStopRecording: disabling LiveKit mic for localParticipant');
+                await room.localParticipant.setMicrophoneEnabled(false);
+                console.log('[TeacherPage] handleStopRecording: mic disable resolved');
+            } else {
+                console.warn('[TeacherPage] handleStopRecording: no room when trying to disable mic');
+            }
+        } catch (err) {
+            console.warn('[TeacherPage] Error disabling microphone:', err);
+        }
+
         setIsRecording(false);
         setTimeToNextScreenshot(null);
         console.log('[TeacherPage] handleStopRecording: done');
@@ -1926,9 +1923,6 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                                     isPublishDisabled={!courseId || isPublishingTemplate}
                                     componentButtons={componentButtons}
                                     imprintingMode={imprinting_mode}
-                                    isLiveSessionActive={isLiveSessionActive}
-                                    onStartLiveSession={handleStartLiveSession}
-                                    onStopLiveSession={handleStopLiveSession}
                                 />
                                 )}
                             </>
