@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { UploadButton } from '@/components/compositions/UploadButton';
 
 // MODIFICATION: Added Send and RefreshCcw icons
-import { Camera, Plus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic, ExternalLink, RefreshCcw } from 'lucide-react';
+import { Camera, Plus, Minus, Timer, Square, Pause, Wand, CheckCircle, Send, Mic, ExternalLink, RefreshCcw } from 'lucide-react';
 // Keep other existing imports
 import dynamic from 'next/dynamic';
 
@@ -31,6 +31,7 @@ import { useApiService } from '@/lib/api';
 const IntroPage = dynamic(() => import('@/components/session/IntroPage'));
 const LiveKitViewer = dynamic(() => import('@/components/session/LiveKitViewer'), { ssr: false });
 const VideoViewer = dynamic(() => import('@/components/session/VideoViewer'), { ssr: false });
+const Loading = dynamic(() => import('@/app/(app)/loading'));
 
 
 // --- NEW: Type definition for the AI's debrief message ---
@@ -50,9 +51,12 @@ interface ConceptualDebriefViewProps {
   onToggleRecording: () => void;
   isRecording: boolean;
   recordingDuration: number;
+  // nav controls
+  componentButtons: ButtonConfig[];
+  imprintingMode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL';
 }
 
-const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef, onToggleRecording, isRecording, recordingDuration }: ConceptualDebriefViewProps) => {
+const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef, onToggleRecording, isRecording, recordingDuration, componentButtons, imprintingMode }: ConceptualDebriefViewProps) => {
   return (
     // MODIFICATION: Increased padding-bottom to prevent overlap with the new fixed footer.
     <div className="w-full h-full flex flex-col justify-between items-center text-black bg-transparent p-4 md:p-8 pb-[120px]">
@@ -74,28 +78,48 @@ const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inpu
         - Centered the bar and set its width to 97% to match the main content area from AppLayout.
       */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[97%] max-w-[1392px] z-10">
-          <div className="flex items-center justify-between w-full h-[56px] bg-transparent border border-[#C7CCF8] rounded-[600px] pl-5 pr-2 py-2 backdrop-blur-sm">
-            <textarea
-              ref={inputRef as React.RefObject<HTMLTextAreaElement>}
-              value={userInput}
-              onChange={(e) => onUserInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSubmit(); } }}
-              className="w-full h-full bg-transparent focus:outline-none resize-none text-lg text-black placeholder-gray-500"
-              placeholder="Define the in-scope and out-of-scope boundaries for this LO..."
-            />
-            {/* Button Group */}
-            <div className="flex items-center gap-2">
-                {/* Conceptual audio recorder button */}
+          <div className="w-full flex items-center gap-4">
+            {/* Nav buttons (moved here for conceptual side) */}
+            <div className="h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] px-2 rounded-[600px]">
+              {componentButtons.map((button) => (
                 <button
-                    onClick={onToggleRecording}
-                    className={`flex items-center justify-center w-10 h-10 rounded-full ${isRecording ? 'bg-red-600 hover:bg-red-500' : 'bg-[#566FE9] hover:bg-blue-500'} transition-colors`}
-                    title={isRecording ? 'Stop and send' : 'Record an audio answer'}
+                  key={button.key}
+                  onClick={button.onClick}
+                  className={`px-4 h-[45px] mx-1 flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${imprintingMode === button.key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
                 >
-                  {isRecording ? <Square className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}
+                  <img
+                    src={imprintingMode === button.key ? button.activeImagePath : button.inactiveImagePath}
+                    alt={button.label}
+                    className="w-[20px] h-[20px]"
+                  />
+                  {button.label}
                 </button>
-                <button onClick={onSubmit} className="flex items-center justify-center w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 transition-colors">
-                  <Send className="w-5 h-5 text-white" />
-                </button>
+              ))}
+            </div>
+            {/* Input bar */}
+            <div className="flex-1 flex items-center justify-between w-full h-[56px] bg-transparent border border-[#C7CCF8] rounded-[600px] pl-5 pr-2 py-2 backdrop-blur-sm">
+              <textarea
+                ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+                value={userInput}
+                onChange={(e) => onUserInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSubmit(); } }}
+                className="w-full h-full bg-transparent focus:outline-none resize-none text-lg text-black placeholder-gray-500"
+                placeholder="Define the in-scope and out-of-scope boundaries for this LO..."
+              />
+              {/* Button Group */}
+              <div className="flex items-center gap-1 ">
+                  {/* Conceptual audio recorder button */}
+                  <button
+                      onClick={onToggleRecording}
+                      className={`flex items-center justify-center w-10 h-10 rounded-full ${isRecording ? 'bg-red-600 hover:bg-red-500' : 'bg-[#566FE9] hover:bg-blue-500'} transition-colors`}
+                      title={isRecording ? 'Stop and send' : 'Record an audio answer'}
+                  >
+                    {isRecording ? <Square className="w-5 h-5 text-white" /> : <Mic className="w-5 h-5 text-white" />}
+                  </button>
+                  <button onClick={onSubmit} className="flex items-center justify-center w-10 h-10 rounded-full bg-[#566FE9] hover:bg-[#566FE9]/95 transition-colors">
+                    <Send className="w-5 h-5 text-white" />
+                  </button>
+              </div>
             </div>
           </div>
           {isRecording && (
@@ -176,65 +200,9 @@ function SessionContent({
 }: SessionContentProps) {
     const isAwaitingAIResponse = useSessionStore((s: ReturnType<typeof useSessionStore.getState>) => s.isAwaitingAIResponse);
 
-    // --- HOVER LOGIC START ---
-    const [isBarVisible, setIsBarVisible] = useState(false);
-    const hideTimer = useRef<NodeJS.Timeout | null>(null);
-
-    const contentShiftDistance = '76px';
-
-    const handleMouseEnter = () => {
-        if (hideTimer.current) {
-            clearTimeout(hideTimer.current);
-            hideTimer.current = null;
-        }
-        setIsBarVisible(true);
-    };
-
-    const handleMouseLeave = () => {
-        hideTimer.current = setTimeout(() => {
-            setIsBarVisible(false);
-        }, 300);
-    };
-
-    useEffect(() => {
-        return () => {
-            if (hideTimer.current) {
-                clearTimeout(hideTimer.current);
-            }
-        };
-    }, []);
-    // --- HOVER LOGIC END ---
-
     return (
         // Changed height to h-full to occupy the full container space
         <div className='w-full h-full flex flex-col items-center relative'>
-            {/* --- HOVER BAR START --- */}
-            <div
-                className="absolute top-0 left-0 right-0 z-20 h-28 flex justify-center items-start group pointer-events-none"
-                onMouseEnter={handleMouseEnter}
-                onMouseLeave={handleMouseLeave}
-            >
-                <div className={`absolute top-0 w-12 h-1.5 bg-gray-400/70 rounded-b-full transition-opacity duration-300 ease-in-out ${isBarVisible ? 'opacity-0' : 'opacity-50 group-hover:opacity-100'}`} />
-                <div className={`absolute top-0 w-full flex justify-center pointer-events-auto transition-all duration-300 ease-in-out ${isBarVisible ? 'translate-y-5 opacity-100' : '-translate-y-full opacity-0'}`}>
-                    <div className="p-0 w-full md:w-1/2 lg:w-1/3 h-[53px] bg-[#566FE9]/10 rounded-full flex justify-center items-center backdrop-blur-sm border border-white/10">
-                        {componentButtons.map((button) => (
-                            <button
-                                key={button.key}
-                                onClick={button.onClick}
-                                className={`w-[49%] h-[45px] flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${imprintingMode === button.key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
-                            >
-                                <img
-                                    src={imprintingMode === button.key ? button.activeImagePath : button.inactiveImagePath}
-                                    alt={button.label}
-                                    className="w-[20px] h-[20px]"
-                                />
-                                {button.label}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-            {/* --- HOVER BAR END --- */}
 
             <div className="flex-grow relative w-full h-full">
                 {isAwaitingAIResponse && (
@@ -254,15 +222,13 @@ function SessionContent({
                         onToggleRecording={onToggleConceptualRecording}
                         isRecording={isConceptualRecording}
                         recordingDuration={conceptualRecordingDuration}
+                        componentButtons={componentButtons}
+                        imprintingMode={imprintingMode}
                     />
                 </div>
 
-                {/* --- CONTENT SHIFT LOGIC APPLIED HERE --- */}
                 <div
                     className={`${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full transition-transform duration-300 ease-in-out relative`}
-                    style={{
-                        transform: isBarVisible ? `translateY(${contentShiftDistance})` : 'translateY(0px)',
-                    }}
                 >
                     <div className="w-full h-full flex flex-col md:flex-row gap-4">
                         <div className="flex-1 flex flex-col min-h-0">
@@ -292,35 +258,13 @@ function SessionContent({
 
                     {/* WARMUP LOADING OVERLAY - Show only when backend sends warmup_started and not yet completed */}
                     {warmupStarted && !warmupCompleted && (
-                        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-none transition-opacity duration-500">
-                            <div className="flex flex-col items-center gap-6 px-8 py-10 bg-gradient-to-br from-[#566FE9]/20 to-purple-600/20 rounded-2xl border border-white/10 backdrop-blur-xl shadow-2xl max-w-md mx-4">
-                                {/* Animated spinner */}
-                                <div className="relative w-20 h-20">
-                                    <div className="absolute inset-0 border-4 border-[#566FE9]/30 rounded-full"></div>
-                                    <div
-                                        className="absolute inset-0 border-4 border-transparent border-t-[#566FE9] rounded-full animate-spin"
-                                        style={{ animationDuration: '1s' }}
-                                    ></div>
-                                    <div className="absolute inset-2 bg-[#566FE9]/20 rounded-full flex items-center justify-center">
-                                        <span className="text-white text-xs font-semibold">{Math.round(warmupProgress)}%</span>
-                                    </div>
-                                </div>
-
-                                {/* Title */}
-                                <div className="text-center space-y-2">
-                                    <h3 className="text-2xl font-bold text-white font-jakarta-sans">
-                                        Warming Up Session
-                                    </h3>
-                                </div>
-
-                                {/* Progress bar */}
-                                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                                    <div
-                                        className="h-full bg-gradient-to-r from-[#566FE9] to-purple-500 transition-all duration-300 ease-out rounded-full"
-                                        style={{ width: `${warmupProgress}%` }}
-                                    ></div>
-                                </div>
-                            </div>
+                        <div className="absolute inset-0 z-50">
+                            <Loading
+                                showProgress={true}
+                                customMessage="Building your action plan… stay tuned."
+                                backgroundOpacity="light"
+                                progressDuration={30}
+                            />
                         </div>
                     )}
                 </div>
@@ -422,6 +366,7 @@ interface TeacherFooterProps {
     onUploadClick?: () => void;
     onCaptureClick?: () => void;
     onIncreaseTimer: () => void;
+    onDecreaseTimer: () => void;
     screenshotIntervalSec: number;
     onSaveScriptClick?: () => void;
     onVSCodeClick?: () => void;
@@ -438,11 +383,15 @@ interface TeacherFooterProps {
     isShowMeDisabled?: boolean;
     onPublishTemplateClick?: () => void;
     isPublishDisabled?: boolean;
+    // New: navigation buttons and mode
+    componentButtons: ButtonConfig[];
+    imprintingMode: 'WORKFLOW' | 'DEBRIEF_CONCEPTUAL';
 }
 const TeacherFooter = ({ 
     onUploadClick, 
     onCaptureClick, 
     onIncreaseTimer, 
+    onDecreaseTimer,
     screenshotIntervalSec, 
     onSaveScriptClick,
     onVSCodeClick,
@@ -459,6 +408,8 @@ const TeacherFooter = ({
     isShowMeDisabled,
     onPublishTemplateClick,
     isPublishDisabled,
+    componentButtons,
+    imprintingMode,
 }: TeacherFooterProps) => {
     const formatTime = (seconds: number) => {
         const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
@@ -467,15 +418,39 @@ const TeacherFooter = ({
     };
 
     return (
-        <footer className="absolute bottom-[32px] w-full h-[60px] p-4 z-10">
+        <footer className="absolute bottom-[20px] w-full h-[60px] p-4 z-10">
             <div className="absolute top-1/2 left-1/2 flex items-center gap-6" style={{ transform: 'translate(-50%, -50%)' }}>
-                {/* 1st Button Group */}
-                <div className="w-[202px] h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] py-2 pr-2 pl-4 rounded-[600px]">
+                {/* Navigation Buttons moved from hover bar */}
+                <div className="h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] px-2 rounded-[600px]">
+                    {componentButtons.map((button) => (
+                        <button
+                            key={button.key}
+                            onClick={button.onClick}
+                            className={`px-4 h-[45px] mx-1 flex items-center justify-center gap-2 rounded-full border-transparent font-jakarta-sans font-semibold-600 text-sm transition-all duration-200 ${imprintingMode === button.key ? 'bg-[#566FE9] text-[#ffffff]' : 'text-[#566FE9] bg-transparent'}`}
+                        >
+                            <img
+                                src={imprintingMode === button.key ? button.activeImagePath : button.inactiveImagePath}
+                                alt={button.label}
+                                className="w-[20px] h-[20px]"
+                            />
+                            {button.label}
+                        </button>
+                    ))}
+                </div>
+                {/* Workflow controls group */}
+                {imprintingMode === 'WORKFLOW' && (
+                <div className="w-[248px] h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] py-2 pr-2 pl-4 rounded-[600px]">
                     <div className='flex items-center gap-2'>
                         <Timer className="w-6 h-6 text-[#566FE9]" />
                         <span className="font-semibold text-sm text-[#566FE9] font-[500] text-[16px]">{formatTime(screenshotIntervalSec)}</span>
                     </div>
                     <div className='flex items-center gap-2'>
+                        <button 
+                            onClick={onDecreaseTimer}
+                            className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
+                        >
+                            <Minus className="w-5 h-5 text-[#566FE9]" />
+                        </button>
                         <button 
                             onClick={onIncreaseTimer}
                             className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
@@ -490,6 +465,7 @@ const TeacherFooter = ({
                         </button>
                     </div>
                 </div>
+                )}
                 {/* 4th Button */}
                 <button
                     onClick={onVSCodeClick}
@@ -499,54 +475,58 @@ const TeacherFooter = ({
                     <img src="/vscode.svg" alt="Switch to VS Code" className="w-6 h-6" />
                 </button>
                 {/* 6th Button */}
-                <UploadButton
-                    isVisible={true}
-                    onClick={onUploadClick}
-                />
+                {imprintingMode === 'WORKFLOW' && (
+                    <UploadButton
+                        isVisible={true}
+                        onClick={onUploadClick}
+                    />
+                )}
                 {/* 9th Button Group (Recording Controls) */}
-                {!isRecording ? (
-                    <button
-                        onClick={onStartRecording}
-                        className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#E9EBFD] hover:bg-[#566FE9]/20 transition-colors`}
-                    >
-                        <img src="/RecordStart.svg" alt="Start Recording" className="w-6 h-6" />
-                    </button>
-                ) : (
-                    // MODIFICATION: Increased width to fit the new restart button
-                    <div className="w-[252px] h-[56px] flex items-center justify-between bg-[#EBEFFF] py-2 pr-2 pl-4 rounded-[600px]">
-                        <div className='flex items-center gap-2'>
-                            <Timer className="w-6 h-6 text-[#566FE9]" />
-                            <span className="font-semibold text-sm text-[#566FE9] font-[500] text-[16px]">{formatTime(recordingDuration)}</span>
+                {imprintingMode === 'WORKFLOW' && (
+                    !isRecording ? (
+                        <button
+                            onClick={onStartRecording}
+                            className={`w-[56px] h-[56px] rounded-[50%] flex items-center justify-center bg-[#E9EBFD] hover:bg-[#566FE9]/20 transition-colors`}
+                        >
+                            <img src="/RecordStart.svg" alt="Start Recording" className="w-6 h-6" />
+                        </button>
+                    ) : (
+                        // MODIFICATION: Increased width to fit the new restart button
+                        <div className="w-[252px] h-[56px] flex items-center justify-between bg-[#EBEFFF] py-2 pr-2 pl-4 rounded-[600px]">
+                            <div className='flex items-center gap-2'>
+                                <Timer className="w-6 h-6 text-[#566FE9]" />
+                                <span className="font-semibold text-sm text-[#566FE9] font-[500] text-[16px]">{formatTime(recordingDuration)}</span>
+                            </div>
+                            <div className='flex items-center gap-2'>
+                                {/* NEW: Restart Recording Button */}
+                                <button
+                                    onClick={onRestartRecording}
+                                    className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
+                                    aria-label="Restart Recording"
+                                    title="Restart Recording"
+                                >
+                                    <RefreshCcw className="w-5 h-5 text-[#566FE9]" />
+                                </button>
+                                <button 
+                                    onClick={onTogglePauseResume}
+                                    className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
+                                    aria-label={isPaused ? "Resume Recording" : "Pause Recording"}
+                                >
+                                    {isPaused ? (
+                                        <img src="/Play.svg" alt="Resume Recording" className="w-5 h-5" />
+                                    ) : (
+                                        <img src="/Pause.svg" alt="Pause Recording" className="w-5 h-5" />
+                                    )}
+                                </button>
+                                <button
+                                    onClick={onSubmitEpisode}
+                                    className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9] hover:bg-[#4a5fd1] transition-colors"
+                                >
+                                    <Square className="w-5 h-5 text-white" />
+                                </button>
+                            </div>
                         </div>
-                        <div className='flex items-center gap-2'>
-                            {/* NEW: Restart Recording Button */}
-                            <button
-                                onClick={onRestartRecording}
-                                className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
-                                aria-label="Restart Recording"
-                                title="Restart Recording"
-                            >
-                                <RefreshCcw className="w-5 h-5 text-[#566FE9]" />
-                            </button>
-                            <button 
-                                onClick={onTogglePauseResume}
-                                className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9]/10 hover:bg-[#566FE9]/20 transition-colors"
-                                aria-label={isPaused ? "Resume Recording" : "Pause Recording"}
-                            >
-                                {isPaused ? (
-                                    <img src="/Play.svg" alt="Resume Recording" className="w-5 h-5" />
-                                ) : (
-                                    <img src="/Pause.svg" alt="Pause Recording" className="w-5 h-5" />
-                                )}
-                            </button>
-                            <button
-                                onClick={onSubmitEpisode}
-                                className="w-[40px] h-[40px] rounded-full flex items-center justify-center bg-[#566FE9] hover:bg-[#4a5fd1] transition-colors"
-                            >
-                                <Square className="w-5 h-5 text-white" />
-                            </button>
-                        </div>
-                    </div>
+                    )
                 )}
                 {/* Publish Template button (replaces Finalize Topic) */}
                 <button
@@ -1519,6 +1499,10 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         setScreenshotIntervalSec(prev => prev + 5);
     };
 
+    const handleDecreaseTimer = () => {
+        setScreenshotIntervalSec(prev => Math.max(5, prev - 5));
+    };
+
     const handleSwitchToVSCode = () => {
         setImprintingEnvironment('vscode');
         void sendBrowser('navigate', { url: 'http://localhost:4600' });
@@ -1617,27 +1601,30 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                                     
                                 </div>
                                 {imprinting_mode === 'WORKFLOW' && (
-                                    <TeacherFooter
-                                        onUploadClick={() => fileInputRef.current?.click()}
-                                        onCaptureClick={handleCaptureScreenshot}
-                                        onIncreaseTimer={handleIncreaseTimer}
-                                        screenshotIntervalSec={screenshotIntervalSec}
-                                        onSaveScriptClick={handleSaveSetupText}
-                                        onPasteClick={handlePasteFromLocal}
-                                        onVSCodeClick={handleSwitchToVSCode}
-                                        onSalesforceClick={handleOpenSalesforce}
-                                        isRecording={isRecording}
-                                        isPaused={isPaused}
-                                        recordingDuration={recordingDuration}
-                                        onStartRecording={handleStartRecording}
-                                        onTogglePauseResume={handleTogglePauseResume}
-                                        onRestartRecording={handleRestartRecording}
-                                        onSubmitEpisode={handleSubmitEpisode}
-                                        onShowMeClick={handleShowMe}
-                                        isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted || isRecording}
-                                        onPublishTemplateClick={handlePublishTemplateClick}
-                                        isPublishDisabled={!courseId || isPublishingTemplate}
-                                    />
+                                <TeacherFooter
+                                    onUploadClick={() => fileInputRef.current?.click()}
+                                    onCaptureClick={handleCaptureScreenshot}
+                                    onIncreaseTimer={handleIncreaseTimer}
+                                    onDecreaseTimer={handleDecreaseTimer}
+                                    screenshotIntervalSec={screenshotIntervalSec}
+                                    onSaveScriptClick={handleSaveSetupText}
+                                    onPasteClick={handlePasteFromLocal}
+                                    onVSCodeClick={handleSwitchToVSCode}
+                                    onSalesforceClick={handleOpenSalesforce}
+                                    isRecording={isRecording}
+                                    isPaused={isPaused}
+                                    recordingDuration={recordingDuration}
+                                    onStartRecording={handleStartRecording}
+                                    onTogglePauseResume={handleTogglePauseResume}
+                                    onRestartRecording={handleRestartRecording}
+                                    onSubmitEpisode={handleSubmitEpisode}
+                                    onShowMeClick={handleShowMe}
+                                    isShowMeDisabled={(imprinting_mode as unknown as string) !== 'DEBRIEF_CONCEPTUAL' || !conceptualStarted || isRecording}
+                                    onPublishTemplateClick={handlePublishTemplateClick}
+                                    isPublishDisabled={!courseId || isPublishingTemplate}
+                                    componentButtons={componentButtons}
+                                    imprintingMode={imprinting_mode}
+                                />
                                 )}
                             </>
                         )
@@ -1688,14 +1675,7 @@ function TeacherPageWithParams() {
 // Main export with Suspense boundary
 export default function TeacherPage() {
     return (
-        <Suspense fallback={
-            <div className="w-full h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-                    <p className="text-gray-600">Loading teacher session...</p>
-                </div>
-            </div>
-        }>
+        <Suspense fallback={<Loading />}>
             <TeacherPageWithParams />
         </Suspense>
     );

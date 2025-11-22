@@ -5,6 +5,7 @@ import React from 'react';
 interface StatusPillProps {
   message: string;
   type: 'ai' | 'notification';
+  position?: 'bottomCenter' | 'aboveSphere';
 }
 
 // This helper function returns the correct <img> tag for the current state.
@@ -46,15 +47,21 @@ const getIconForState = (message: string, type: 'ai' | 'notification') => {
 };
 
 
-export const StatusPill: React.FC<StatusPillProps> = ({ message, type }) => {
+export const StatusPill: React.FC<StatusPillProps> = ({ message, type, position = 'bottomCenter' }) => {
     if (!message) return null;
 
     // Positioning to align with the buttons on the same x-axis
-    const pillPositionStyle: React.CSSProperties = {
-        bottom: '48px', // aligned with button bottom position
-        left: '50%',
-        transform: 'translateX(-50%)'
-    };
+    const pillPositionStyle: React.CSSProperties =
+        position === 'aboveSphere'
+            ? {
+                bottom: '220px',
+                right: '64px',
+              }
+            : {
+                bottom: '48px',
+                left: '50%',
+                transform: 'translateX(-50%)'
+              };
 
 
     return (

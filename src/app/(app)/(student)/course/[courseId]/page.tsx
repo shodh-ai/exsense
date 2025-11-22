@@ -235,6 +235,7 @@ export default function StudentCoursePage(): JSX.Element {
   const router = useRouter();
   const { isSignedIn } = useAuth();
   const { user } = useUser();
+  const showNotification = useSessionStore((s) => s.showNotification);
   
   // --- REAL DATA FETCHING ---
   const { data: course, isLoading: courseLoading, error: courseError } = useCourse(String(courseId));
@@ -247,6 +248,7 @@ export default function StudentCoursePage(): JSX.Element {
   }, [myEnrollments, courseId]);
 
   const enroll = async () => {
+    showNotification("Enrolling in course...");
     if (!isSignedIn) {
       router.push(`/login?redirect_url=/course/${courseId}`);
       return;
@@ -255,6 +257,7 @@ export default function StudentCoursePage(): JSX.Element {
   };
 
   const startSession = () => {
+    showNotification("Starting session...");
     router.push(`/session?courseId=${courseId}`);
   };
 

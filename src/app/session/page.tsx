@@ -11,12 +11,12 @@ import { useSessionStore } from '@/lib/store';
 import { useApiService, WhiteboardBlockType } from '@/lib/api';
 import { useLiveKitSession } from '@/hooks/useLiveKitSession';
 import { TabManager } from '@/components/session/TabManager';
+import Loading from '@/app/(app)/loading';
 
 import { useUser, SignedIn, SignedOut } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DraggableSphereWrapper } from '@/components/session/DraggableSphereWrapper';
 import { DemoRoleIndicator } from '@/components/session/DemoRoleIndicator';
-
 // Excalidraw and Mermaid conversion libs are imported dynamically in the effect below
 
 const IntroPage = NextDynamic(() => import('@/components/session/IntroPage'));
@@ -53,13 +53,42 @@ interface SessionContentProps {
     openNewTab: (name: string, url: string) => Promise<void>;
     switchTab: (id: string) => Promise<void>;
     closeTab: (id: string) => Promise<void>;
+    // Warmup state
+    warmupStarted: boolean;
+    warmupCompleted: boolean;
+    warmupProgress: number;
 }
 
-function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab }: SessionContentProps) {
+function SessionContent({ activeView, setActiveView, componentButtons, room, livekitUrl, livekitToken, isConnected, isDiagramGenerating, sendBrowserInteraction, openNewTab, switchTab, closeTab, warmupStarted, warmupCompleted, warmupProgress }: SessionContentProps) {
     const whiteboardBlocks = useSessionStore((s) => s.whiteboardBlocks);
+    const courseProgress = useSessionStore((s) => s.courseProgress);
     const whiteboardScrollRef = useRef<HTMLDivElement | null>(null);
     const [isBarVisible, setIsBarVisible] = useState(false);
     const hideTimer = useRef<NodeJS.Timeout | null>(null); // Ref to hold the timer
+
+    // Build shared course details string so it can appear on all blocks
+    const currentChapter = courseProgress?.currentChapter ?? '?';
+    const totalChapters = courseProgress?.totalChapters ?? '?';
+    const chapterTitle = courseProgress?.chapterTitle ?? '?';
+    const currentPage = courseProgress?.currentPage ?? '?';
+    const totalPages = courseProgress?.totalPages ?? '?';
+    const pageTitle = courseProgress?.pageTitle ?? '?';
+
+    const courseDetails = `Chap (${currentChapter}/${totalChapters}): ${chapterTitle} • Page (${currentPage}/${totalPages}): ${pageTitle}`;
+
+    // Debug: log current course progress and derived details on each render
+    if (typeof window !== 'undefined') {
+        console.log('[SessionPage][CourseDetails][Render]', {
+            courseProgress,
+            currentChapter,
+            totalChapters,
+            chapterTitle,
+            currentPage,
+            totalPages,
+            pageTitle,
+            courseDetails,
+        });
+    }
 
     // The vertical distance the content needs to shift down.
     const contentShiftDistance = '76px';
@@ -151,7 +180,8 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                                         <VideoBlockView videoUrl={(block as any).videoUrl} />
                                     )}
                                 </div>
-                                <div className="px-3 pb-3 pt-1 select-none flex items-center justify-center gap-2 text-gray-600">
+                                {/* --- MODIFIED SECTION START --- */}
+                                <div className="px-3 pb-3 pt-1 select-none flex items-start justify-center gap-2 text-gray-600">
                                   <img
                                     src={
                                       block.type === 'excalidraw' ? '/whiteboard-inactive.svg' :
@@ -159,14 +189,20 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                                       '/video-inactive.svg'
                                     }
                                     alt="block icon"
-                                    className="w-4 h-4 opacity-90"
+                                    className="w-4 h-4 opacity-90 mt-1"
                                   />
-                                  <span className="text-xs leading-5">
-                                    {(block as any).summary ||
-                                      (block.type === 'excalidraw' ? 'Whiteboard' :
-                                       block.type === 'video' ? 'Video' : 'Replay')}
-                                  </span>
+                                  <div className="flex flex-col text-xs leading-5 text-center">
+                                      <span>
+                                          {(block as any).summary ||
+                                          (block.type === 'excalidraw' ? 'Whiteboard' :
+                                          block.type === 'video' ? 'Video' : 'Replay')}
+                                      </span>
+                                      <span className="text-gray-500">
+                                          {(block as any).details ?? courseDetails}
+                                      </span>
+                                  </div>
                                 </div>
+                                {/* --- MODIFIED SECTION END --- */}
                             </div>
                         ))}
                     </div>
@@ -180,7 +216,7 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                 {/* This container will now shift down when the bar is visible */}
                 <div className={`
                     ${activeView === 'vnc' ? 'block' : 'hidden'} w-full h-full flex flex-col
-                    transition-transform duration-300 ease-in-out
+                    transition-transform duration-300 ease-in-out relative
                 `}
                 style={{
                     transform: isBarVisible ? `translateY(${contentShiftDistance})` : 'translateY(0px)',
@@ -200,6 +236,18 @@ function SessionContent({ activeView, setActiveView, componentButtons, room, liv
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-300">Connecting to LiveKit...</div>
                     )}
+
+                    {/* WARMUP LOADING OVERLAY - Show only when backend sends warmup_started and not yet completed */}
+                    {warmupStarted && !warmupCompleted && (
+                        <div className="absolute inset-0 z-50">
+                            <Loading
+                                showProgress={true}
+                                customMessage="Building your action plan… stay tuned. "
+                                backgroundOpacity="light"
+                                progressDuration={30}
+                            />
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -213,6 +261,8 @@ function SessionInner() {
     const setBlocks = useSessionStore((s) => s.setBlocks);
     const addBlock = useSessionStore((s) => s.addBlock);
     const updateBlock = useSessionStore((s) => s.updateBlock);
+    const courseProgress = useSessionStore((s) => s.courseProgress);
+    const setCourseProgress = useSessionStore((s) => s.setCourseProgress);
 
     const [isIntroActive, setIsIntroActive] = useState(true);
     const [wbSessionId, setWbSessionId] = useState<string | null>(null);
@@ -264,35 +314,60 @@ function SessionInner() {
         };
 
         const colorizeElements = (elements: any[]): any[] => {
-            // Apply pleasant readable colors to nodes while keeping arrows dark
-            const palette = ['#FDE68A','#A7F3D0','#BFDBFE','#FBCFE8','#DDD6FE','#C7D2FE'];
-            const dark = '#1f2937';
-            let idx = 0;
-            const getContrast = (hex: string) => {
-                const h = hex.replace('#','');
-                const r = parseInt(h.substring(0,2),16);
-                const g = parseInt(h.substring(2,4),16);
-                const b = parseInt(h.substring(4,6),16);
-                const lum = (0.299*r+0.587*g+0.114*b)/255;
-                return lum > 0.5 ? '#111827' : '#ffffff';
-            };
+            // Use vibrant, saturated backgrounds with guaranteed dark text
+            const backgroundColors = [
+                '#FEF3C7', // Light amber
+                '#D1FAE5', // Light emerald
+                '#DBEAFE', // Light blue
+                '#FCE7F3', // Light pink
+                '#EDE9FE', // Light purple
+                '#E0E7FF', // Light indigo
+            ];
+            
+            // Always use very dark gray for text - ensures readability on all light backgrounds
+            const textColor = '#1F2937'; // Gray-800 - very dark, high contrast
+            
+            // Use medium-dark colors for arrows/lines to stand out
+            const lineColor = '#374151'; // Gray-700
+            
+            let backgroundIndex = 0;
+            
             return (elements || []).map((e) => {
                 if (!e || e.isDeleted) return e;
+                
+                // Handle arrows and lines - use dark stroke
                 if (e.type === 'arrow' || e.type === 'line') {
-                    return { ...e, strokeColor: e.strokeColor || dark };
+                return { 
+                    ...e, 
+                    strokeColor: e.strokeColor || lineColor,
+                    strokeWidth: e.strokeWidth || 2,
+                };
                 }
+                
+                // Handle text elements - force dark color for readability
                 if (e.type === 'text') {
-                    // leave text color as-is; if background present, ensure readable
-                    return { ...e };
-                }
-                const fill = palette[idx % palette.length];
-                idx++;
-                const textColor = getContrast(fill);
-                return {
+                return { 
                     ...e,
-                    backgroundColor: e.backgroundColor && e.backgroundColor !== 'transparent' ? e.backgroundColor : fill,
-                    strokeColor: e.strokeColor || dark,
-                    // text elements rendered separately; shapes won't have text
+                    strokeColor: textColor, // Text color
+                    opacity: 100,
+                };
+                }
+                
+                // Handle shapes (rectangles, ellipses, etc.)
+                const bgColor = backgroundColors[backgroundIndex % backgroundColors.length];
+                backgroundIndex++;
+                
+                return {
+                ...e,
+                // Light background for shape fill
+                backgroundColor: e.backgroundColor && e.backgroundColor !== 'transparent' 
+                    ? e.backgroundColor 
+                    : bgColor,
+                // Dark stroke around shapes
+                strokeColor: e.strokeColor || lineColor,
+                strokeWidth: e.strokeWidth || 2,
+                // Ensure opacity is high
+                opacity: e.opacity || 100,
                 };
             });
         };
@@ -340,12 +415,37 @@ function SessionInner() {
                         const ts = new Date();
                         const time = ts.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                         const summary = `${kind} • ${time}`;
-                        addBlock({ id: blockId, type: 'excalidraw', summary, elements: excalidrawElements as any });
+                        
+                        // Build details from centralized courseProgress state (defensive fallbacks)
+                        const currentChapter = courseProgress?.currentChapter ?? '?';
+                        const totalChapters = courseProgress?.totalChapters ?? '?';
+                        const chapterTitle = courseProgress?.chapterTitle ?? '?';
+                        const currentPage = courseProgress?.currentPage ?? '?';
+                        const totalPages = courseProgress?.totalPages ?? '?';
+                        const pageTitle = courseProgress?.pageTitle ?? '?';
+
+                        const courseDetails = `Chap (${currentChapter}/${totalChapters}): ${chapterTitle} • Page (${currentPage}/${totalPages}): ${pageTitle}`;
+                        
+                        // Add the new block to the Zustand store with the 'details' property
+                        addBlock({ 
+                            id: blockId, 
+                            type: 'excalidraw', 
+                            summary, 
+                            details: courseDetails, // The new details property
+                            elements: excalidrawElements as any 
+                        });
+                        
                         // Persist to backend if session exists
                         try {
                           const sid = wbSessionId;
                           if (sid) {
-                            await apiService.addWhiteboardBlock(sid, { type: 'EXCALIDRAW' as WhiteboardBlockType, summary, data: excalidrawElements });
+                            // Also include the new details in the payload to the backend
+                            await apiService.addWhiteboardBlock(sid, { 
+                                type: 'EXCALIDRAW' as WhiteboardBlockType, 
+                                summary, 
+                                details: courseDetails, // Persist details if your API supports it
+                                data: excalidrawElements 
+                            });
                           }
                         } catch (persistErr) {
                           console.warn('[Session] Failed to persist whiteboard block:', persistErr);
@@ -408,8 +508,36 @@ function SessionInner() {
     } = useLiveKitSession(
         shouldInitializeLiveKit ? roomName : '',
         shouldInitializeLiveKit ? userName : '',
-        courseId || undefined
+        courseId || undefined,
+        { spawnAgent: true, spawnBrowser: true }
     );
+
+    // Warmup state (controlled by backend events)
+    const [warmupStarted, setWarmupStarted] = useState(false);
+    const [warmupCompleted, setWarmupCompleted] = useState(true); // Start as true, only show loading when backend sends warmup_started
+    const [warmupProgress, setWarmupProgress] = useState(0);
+
+    // --- Fetch course/session context directly from backend (Option 1) ---
+    useEffect(() => {
+        const loadContext = async () => {
+            console.log('[SessionPage][CourseContext] Effect fired with:', { courseId, sessionManagerSessionId });
+            if (!courseId || !sessionManagerSessionId) {
+                console.log('[SessionPage][CourseContext] Missing courseId or sessionManagerSessionId; skipping fetch');
+                return;
+            }
+            try {
+                console.log('[SessionPage][CourseContext] Fetching course context via ApiService.getSessionContext');
+                const ctx = await apiService.getSessionContext(courseId, sessionManagerSessionId);
+                console.log('[SessionPage][CourseContext] Received context:', ctx);
+                // ctx is expected to match CourseProgress shape from backend
+                setCourseProgress(ctx);
+            } catch (e) {
+                console.error('[SessionPage][CourseContext] Error fetching context:', e);
+            }
+        };
+
+        void loadContext();
+    }, [courseId, sessionManagerSessionId, apiService, setCourseProgress]);
 
     // Suggested responses are now rendered inside the Sphere transcript bubble
     const isAgentSpeaking = useSessionStore((s) => s.isAgentSpeaking);
@@ -420,6 +548,9 @@ function SessionInner() {
     // Extract the latest transcript for the avatar bubble
     const [latestTranscript, setLatestTranscript] = useState("");
     const transcriptClearTimerRef = useRef<number | null>(null);
+    const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+    const [isUserScrolling, setIsUserScrolling] = useState(false);
+    const userScrollTimeoutRef = useRef<number | null>(null);
 
     useEffect(() => {
         // When the array of messages changes, get the last one.
@@ -437,12 +568,30 @@ function SessionInner() {
                     clearTimeout(transcriptClearTimerRef.current);
                     transcriptClearTimerRef.current = null;
                 }
+                
+                // Auto-scroll logic: scroll to bottom if user hasn't manually scrolled
+                requestAnimationFrame(() => {
+                    if (transcriptScrollRef.current && !isUserScrolling) {
+                        const element = transcriptScrollRef.current;
+                        const lineHeight = 24; // Approximate line height in pixels
+                        const twoLinesHeight = lineHeight * 2;
+                        
+                        // Check if content exceeds 2 lines
+                        if (element.scrollHeight > twoLinesHeight) {
+                            // Smooth scroll to show the latest content
+                            element.scrollTo({
+                                top: element.scrollHeight,
+                                behavior: 'smooth'
+                            });
+                        }
+                    }
+                });
             }
         }
         return () => {
             // Do not clear here; speaking effect manages lifecycle
         };
-    }, [transcriptionMessages, isAgentSpeaking]);
+    }, [transcriptionMessages, isAgentSpeaking, isUserScrolling]);
 
     // When agent speaking state changes, clear transcript immediately when AI stops
     useEffect(() => {
@@ -455,6 +604,7 @@ function SessionInner() {
             // Small delay to allow smooth transition
             transcriptClearTimerRef.current = window.setTimeout(() => {
                 setLatestTranscript("");
+                setIsUserScrolling(false); // Reset scroll state when transcript clears
                 transcriptClearTimerRef.current = null;
             }, 500);
         }
@@ -463,11 +613,113 @@ function SessionInner() {
         };
     }, [isAgentSpeaking]);
 
+    // Cleanup scroll timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (userScrollTimeoutRef.current) {
+                clearTimeout(userScrollTimeoutRef.current);
+            }
+        };
+    }, []);
+
     useEffect(() => {
         if (typeof window !== 'undefined') {
             (window as any).__sessionStore = useSessionStore;
         }
     }, []);
+
+    // Listen for warmup events from backend via LiveKit data channel
+    useEffect(() => {
+        if (!room) return;
+
+        const handleDataReceived = (payload: Uint8Array, participant: any) => {
+            try {
+                const decoder = new TextDecoder();
+                const jsonString = decoder.decode(payload);
+                const message = JSON.parse(jsonString);
+
+                console.log('[SessionPage][Warmup] Received event:', message);
+
+                if (message.type === 'warmup_started') {
+                    console.log('[SessionPage][Warmup] Backend warmup started');
+                    setWarmupStarted(true);
+                    setWarmupCompleted(false);
+                    setWarmupProgress(0);
+                } else if (message.type === 'warmup_progress') {
+                    console.log(`[SessionPage][Warmup] Progress: ${Math.round(message.progress)}%`);
+                    setWarmupProgress(message.progress);
+                } else if (message.type === 'warmup_completed') {
+                    console.log('[SessionPage][Warmup] Backend warmup completed!');
+                    setWarmupCompleted(true);
+                    setWarmupProgress(100);
+                } else if (message.type === 'course_progress') {
+                    // Producer: update centralized course progress from backend event
+                    console.log('[SessionPage][CourseProgress] Raw message:', message);
+                    const p = message.progress || message.payload || message;
+                    console.log('[SessionPage][CourseProgress] Extracted payload p:', p);
+                    if (p && typeof p === 'object') {
+                        // Support both camelCase and snake_case payloads from backend
+                        const mapped = {
+                            currentChapter: p.currentChapter ?? p.current_chapter,
+                            totalChapters: p.totalChapters ?? p.total_chapters,
+                            chapterTitle: p.chapterTitle ?? p.chapter_title,
+                            currentPage: p.currentPage ?? p.current_page,
+                            totalPages: p.totalPages ?? p.total_pages,
+                            pageTitle: p.pageTitle ?? p.page_title,
+                        };
+                        console.log('[SessionPage][CourseProgress] Mapped fields to setCourseProgress:', mapped);
+                        setCourseProgress(mapped);
+                        try {
+                            console.log('[SessionPage][CourseProgress] Store state after setCourseProgress:', useSessionStore.getState().courseProgress);
+                        } catch (storeErr) {
+                            console.warn('[SessionPage][CourseProgress] Failed to read store state after update:', storeErr);
+                        }
+                    } else {
+                        console.warn('[SessionPage][CourseProgress] Payload p was not an object, skipping setCourseProgress');
+                    }
+                }
+            } catch (e) {
+                // Not a warmup event, ignore
+            }
+        };
+
+        room.on('dataReceived', handleDataReceived);
+
+        // Query warmup status when room connects (in case warmup already started)
+        const queryWarmupStatus = async () => {
+            try {
+                console.log('[SessionPage][Warmup] Querying initial warmup status...');
+                await sendBrowserInteraction({ action: 'get_warmup_status' });
+            } catch (e) {
+                console.warn('[SessionPage][Warmup] Failed to query warmup status:', e);
+            }
+        };
+
+        // Query status after a short delay to ensure backend is ready
+        const queryTimer = setTimeout(queryWarmupStatus, 1000);
+
+        return () => {
+            room.off('dataReceived', handleDataReceived);
+            clearTimeout(queryTimer);
+        };
+    }, [room, sendBrowserInteraction, setCourseProgress]);
+
+    // Frontend safety timeout: Always hide warmup screen after 30 seconds, regardless of backend
+    useEffect(() => {
+        if (!warmupStarted || warmupCompleted) return;
+
+        console.log('[SessionPage][Warmup] Starting frontend 30-second safety timeout...');
+
+        const safetyTimeout = setTimeout(() => {
+            console.log('[SessionPage][Warmup] ⏱️ Frontend safety timeout reached (30s) - force completing warmup');
+            setWarmupCompleted(true);
+            setWarmupProgress(100);
+        }, 30000); // 30 seconds
+
+        return () => {
+            clearTimeout(safetyTimeout);
+        };
+    }, [warmupStarted, warmupCompleted]);
 
     // Session restoration on initial load
     const restoredRef = useRef<string | null>(null);
@@ -488,7 +740,7 @@ function SessionInner() {
           try {
             const full = await apiService.getWhiteboardSession(session.id);
             const restored = (full.blocks || []).map((b: any) => {
-              if (b.type === 'EXCALIDRAW') return { id: b.id, type: 'excalidraw', summary: b.summary, elements: b.data || [] };
+              if (b.type === 'EXCALIDRAW') return { id: b.id, type: 'excalidraw', summary: b.summary, details: b.details, elements: b.data || [] };
               if (b.type === 'RRWEB') return { id: b.id, type: 'rrweb', summary: b.summary, eventsUrl: b.eventsUrl };
               if (b.type === 'VIDEO') return { id: b.id, type: 'video', summary: b.summary, videoUrl: b.videoUrl };
               return null;
@@ -555,7 +807,7 @@ function SessionInner() {
     // No dynamic session creation required on view change.
 
     if (!isLoaded || isLoading) {
-        return <div className="w-full h-full flex items-center justify-center text-white">Initializing Session...</div>;
+        return <Loading />;
     }
     if (connectionError) {
         return <div className="w-full h-full flex items-center justify-center text-red-400">Connection Error: {connectionError}</div>;
@@ -608,6 +860,9 @@ function SessionInner() {
                         openNewTab={openNewTab}
                         switchTab={switchTab}
                         closeTab={closeTab}
+                        warmupStarted={warmupStarted}
+                        warmupCompleted={warmupCompleted}
+                        warmupProgress={warmupProgress}
                     />
 
                     {/* Bottom Controls Bar - All aligned on same axis */}
@@ -626,11 +881,46 @@ function SessionInner() {
                                 {/* Left side: Transcript or Status Pill */}
                                 <div className="flex-1 flex items-center" style={{ maxWidth: '85%' }}>
                                     {latestTranscript ? (
-                                        <div className="w-full pointer-events-none">
-                                            <div className="flex items-center justify-start min-h-[48px] bg-transparent border border-[#E9EBFD] rounded-full px-6 py-3 ">
-                                                <p className="text-[#394169] text-base font-medium line-clamp-3">
+                                        <div className="w-full pointer-events-auto">
+                                            <div className="flex items-center justify-start min-h-[48px] max-h-[96px] bg-[#E9EBFD] border border-[#E9EBFD] rounded-full px-6 py-3 overflow-hidden">
+                                                <div 
+                                                    ref={transcriptScrollRef}
+                                                    className="text-[#394169] text-base font-medium overflow-y-auto w-full pr-2 custom-scrollbar"
+                                                    style={{ 
+                                                        maxHeight: '72px', // 3 lines * 24px line height
+                                                        lineHeight: '24px',
+                                                        scrollbarWidth: 'thin',
+                                                        scrollbarColor: '#566FE9 transparent'
+                                                    }}
+                                                    onScroll={(e) => {
+                                                        const element = e.currentTarget;
+                                                        const isAtBottom = Math.abs(element.scrollHeight - element.scrollTop - element.clientHeight) < 5;
+                                                        
+                                                        // If user scrolls up (not at bottom), mark as user scrolling
+                                                        if (!isAtBottom) {
+                                                            setIsUserScrolling(true);
+                                                            
+                                                            // Clear existing timeout
+                                                            if (userScrollTimeoutRef.current) {
+                                                                clearTimeout(userScrollTimeoutRef.current);
+                                                            }
+                                                            
+                                                            // Reset user scrolling flag after 3 seconds of no scroll
+                                                            userScrollTimeoutRef.current = window.setTimeout(() => {
+                                                                setIsUserScrolling(false);
+                                                            }, 3000);
+                                                        } else {
+                                                            // User scrolled to bottom, resume auto-scroll
+                                                            setIsUserScrolling(false);
+                                                            if (userScrollTimeoutRef.current) {
+                                                                clearTimeout(userScrollTimeoutRef.current);
+                                                                userScrollTimeoutRef.current = null;
+                                                            }
+                                                        }
+                                                    }}
+                                                >
                                                     {latestTranscript}
-                                                </p>
+                                                </div>
                                             </div>
                                         </div>
                                     ) : isAwaitingAIResponse ? (

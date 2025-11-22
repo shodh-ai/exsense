@@ -279,15 +279,18 @@ function VideoRenderer({ room, track, pub, onInteraction, captureSize }: { room:
           if (!browserId && id.startsWith('browser-bot-')) browserId = id;
         });
       } catch {}
-      try {
-        if (browserId) {
-          await room.localParticipant.publishData(bytes, { destinationIdentities: [browserId], reliable: true } as any);
-        } else {
-          await room.localParticipant.publishData(bytes, { reliable: true } as any);
-        }
-      } catch {
-        // Final fallback: broadcast
-        await room.localParticipant.publishData(bytes);
+
+      if (browserId) {
+        await room.localParticipant.publishData(
+          bytes,
+          { destinationIdentities: [browserId], reliable: true } as any,
+        );
+      } else if (onInteraction) {
+        await onInteraction(payload);
+      } else {
+        try {
+          console.warn('[Interaction] No browser-bot participant; dropping interaction payload.');
+        } catch {}
       }
     } catch (e) {
       console.warn('[Interaction] publishData failed, queuing:', e);

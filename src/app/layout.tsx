@@ -4,6 +4,7 @@ import "./(app)/globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { TelemetryProvider } from "@/components/providers/TelemetryProvider";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { StatusPillProvider } from "@/components/providers/StatusPillProvider";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
   variable: "--font-plus-jakarta-sans",
@@ -35,9 +36,11 @@ export default function RootLayout({
         <body
           className={`${plusJakartaSans.variable} antialiased m-0 p-0`}
         >
-          <TelemetryProvider>
-            {children}
-          </TelemetryProvider>
+          <StatusPillProvider>
+            <TelemetryProvider>
+              {children}
+            </TelemetryProvider>
+          </StatusPillProvider>
           <SpeedInsights />
         </body>
       </html>
