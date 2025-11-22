@@ -9,15 +9,16 @@ import { Card, CardContent } from "@/components/ui/card";
 
 // Interface for Course data (no changes)
 export interface Course {
- id: number | string;
- title: string;
- instructor: string;
- description: string;
- rating: string;
- reviews: string;
- level: string;
- duration: string;
- image: string;
+  id: number | string;
+  title: string;
+  instructor: string;
+  description: string;
+  rating: string;
+  reviews: string;
+  level: string;
+  duration: string;
+  image: string;
+  enrolledAt?: string;
 }
 
 
@@ -32,6 +33,16 @@ interface CourseCardProps {
 
 
 const CourseCard = ({ course, isActive, isEnrolled, onEnroll, onStartSession }: CourseCardProps): JSX.Element => {
+  const getStudiedLabel = (enrollmentDate: string | undefined): string | null => {
+    if (!enrollmentDate) return null;
+    const last = new Date(enrollmentDate);
+    if (isNaN(last.getTime())) return null;
+    const now = new Date();
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const days = Math.floor((now.getTime() - last.getTime()) / msPerDay);
+    if (days <= 0) return 'Studied Today';
+    return `Studied ${days} day${days > 1 ? 's' : ''} ago`;
+  };
  return (
  <Card
  className={cn(
@@ -65,7 +76,8 @@ const CourseCard = ({ course, isActive, isEnrolled, onEnroll, onStartSession }: 
               <h3 className="font-semibold text-lg leading-tight text-black">
                 {course.title}
               </h3>
-              <p className="text-sm text-gray-500">by {course.instructor}</p>
+                            <p className="text-sm text-gray-500">by {course.instructor}</p>
+              {isEnrolled && <p className="text-sm text-gray-500">{getStudiedLabel(course.enrolledAt)}</p>}
             </div>
             <p className="text-sm text-gray-700 line-clamp-2">
               {course.description}
@@ -90,19 +102,12 @@ const CourseCard = ({ course, isActive, isEnrolled, onEnroll, onStartSession }: 
  <span>{course.duration}</span>
  </div>
  </div>
- {isEnrolled ? (
+ {isEnrolled && (
  <Button
  onClick={() => onStartSession?.(course.id)}
  className="h-9 rounded-full px-6 text-sm font-semibold bg-green-600 text-white hover:bg-green-700"
  >
  Start Session
- </Button>
- ) : (
- <Button
- onClick={() => onEnroll(course.id)}
- className="h-9 rounded-full px-6 text-sm font-semibold bg-[#566fe9] text-white hover:bg-[#4a5fcf]"
- >
- Enroll Now
  </Button>
  )}
  </div>

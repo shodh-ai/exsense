@@ -267,7 +267,7 @@ export default function StudentCoursePage(): JSX.Element {
     return !!courseEmail && !!userEmail && courseEmail === userEmail;
   })();
 
-  const computedTeacherName = course?.teacher?.name || course?.teacher?.email || (isViewerCourseTeacher ? (user?.fullName || undefined) : undefined);
+  const computedTeacherName = course?.teacher?.name;
   const computedTeacherTitle = course?.teacher?.title || (isViewerCourseTeacher ? ((user?.unsafeMetadata?.title as string) || undefined) : undefined);
   const computedTeacherImage = (course as any)?.teacher?.imageUrl || (isViewerCourseTeacher ? user?.imageUrl : undefined);
   const computedTeacherBio = course?.teacher?.bio; // already coming from backend

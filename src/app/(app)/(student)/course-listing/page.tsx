@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import CourseCard, { Course } from "@/components/compositions/CourseCard";
 import Sphere from "@/components/compositions/Sphere";
 import Footer from "@/components/compositions/Footer";
-import { useCourses } from "@/hooks/useApi";
+import { useCourses, useMyEnrollments } from "@/hooks/useApi";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -27,6 +27,7 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 
 const CoursesPage = (): JSX.Element => {
   const { data, isLoading, error } = useCourses();
+  const { data: enrollments } = useMyEnrollments();
   const { user } = useUser();
   const router = useRouter();
 
@@ -51,8 +52,9 @@ const CoursesPage = (): JSX.Element => {
       rating: String(c.rating ?? "4.8"),
       reviews: String(c.reviews ?? c.enrollmentCount ?? 0),
       level: c.difficulty ?? "Beginner",
-      duration: c.duration ?? (c.lessonCount ? `${c.lessonCount} lessons` : "Self-paced"),
-      image: "/RectangleImage.png",
+      duration: c.duration ? `${c.duration} weeks` : "",
+      image: c.imageUrl || "/Coursecardcoverimage.svg",
+      enrolledAt: enrollments?.find((e: any) => e.courseId === c.id)?.enrolledAt,
     })) as Course[];
 
     if (mappedCourses.length && activeCourseId === null) {
@@ -145,7 +147,12 @@ const CoursesPage = (): JSX.Element => {
               )}
               {!isLoading && !error && filteredCourses.map((course) => (
                 <div key={course.id} onClick={() => { setActiveCourseId(course.id); router.push(`/course/${course.id}`); }} className="cursor-pointer">
-                  <CourseCard course={course} isActive={activeCourseId === course.id} isEnrolled={false} onEnroll={() => router.push(`/course/${course.id}`)} />
+                                    <CourseCard 
+                    course={course} 
+                    isActive={activeCourseId === course.id} 
+                    isEnrolled={!!enrollments?.find((e: any) => e.courseId === course.id)}
+                    onEnroll={() => router.push(`/course/${course.id}`)} 
+                  />
                 </div>
               ))}
               {/* --- MODIFICATION END --- */}

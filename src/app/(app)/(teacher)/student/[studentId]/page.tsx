@@ -35,7 +35,7 @@ const studentData = [
     value: "78%",
   },
   {
-    icon: "/time.svg",
+    icon: "/CompletionRatelogo.svg",
     label: "Completion Rate",
     value: "65%",
   },
@@ -45,7 +45,7 @@ const studentData = [
     value: "3h 42m",
   },
   {
-    icon: "/accuracy.svg",
+    icon: "/AccuracyRatelogo.svg",
     label: "Accuracy Rate",
     value: "82%",
   },

@@ -169,9 +169,9 @@ export default function TeacherCoursePage(): JSX.Element {
     return [
         { icon: "/Score.svg", label: "Average Test score", value: `${course.analytics.averageTestScore || 'N/A'}%` },
         { icon: "/time.svg", label: "Average Time Spent", value: course.analytics.averageTimeSpent || 'N/A' },
-        { icon: "/completion.svg", label: "Completion Rate", value: `${course.analytics.completionRate || 'N/A'}%` },
+        { icon: "/CompletionRatelogo.svg", label: "Completion Rate", value: `${course.analytics.completionRate || 'N/A'}%` },
         { icon: "/doubt.svg", label: "Unsolved Doubts", value: `${course.analytics.unsolvedDoubts || 0} pending` },
-        { icon: "/accuracy.svg", label: "Accuracy Rate", value: `${course.analytics.accuracyRate || 'N/A'}%` },
+        { icon: "/AccuracyRatelogo.svg", label: "Accuracy Rate", value: `${course.analytics.accuracyRate || 'N/A'}%` },
         { icon: "/satisfaction.svg", label: "Satisfaction level", value: `${course.analytics.satisfactionLevel || 'N/A'}/5.0` },
     ];
   }, [course]);
@@ -194,8 +194,8 @@ export default function TeacherCoursePage(): JSX.Element {
     return !!courseEmail && !!userEmail && courseEmail === userEmail;
   }, [course, user]);
 
-  const computedTeacherName = isViewerCourseTeacher ? (user?.fullName || (user?.unsafeMetadata?.name as string) || course?.teacher?.name) : course?.teacher?.name;
-  const computedTeacherTitle = isViewerCourseTeacher ? ((user?.unsafeMetadata?.title as string) || course?.teacher?.title) : course?.teacher?.title;
+  const computedTeacherName = course?.teacher?.name;
+  const computedTeacherTitle = course?.teacher?.title;
   const computedTeacherImage = (course as any)?.teacher?.imageUrl || (isViewerCourseTeacher ? user?.imageUrl : undefined);
 
   // --- MODIFIED LOADING AND ERROR HANDLING ---

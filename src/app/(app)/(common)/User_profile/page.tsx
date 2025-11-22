@@ -79,18 +79,34 @@ export default function ProfileDetails(): JSX.Element {
 
   useEffect(() => {
     if (isLoaded && isSignedIn && user && !hasInitialized.current) {
-      const userData = {
+      const baseData: Record<string, string> = {
         "first-name": user.firstName || "",
         "last-name": user.lastName || "",
-        "email": user.primaryEmailAddress?.emailAddress || "",
+        // Prefer a custom profile email stored in unsafeMetadata, fallback to Clerk primary email
+        "email": (user.unsafeMetadata?.profileEmail as string) || user.primaryEmailAddress?.emailAddress || "",
         "phone-number": (user.unsafeMetadata?.phoneNumber as string) || user.primaryPhoneNumber?.phoneNumber || "",
-        "bio": (user.unsafeMetadata?.bio as string) || "",
       };
+
+      const roleSpecificData: Record<string, string> =
+        normalizedRole === 'teacher'
+          ? {
+              bio: (user.unsafeMetadata?.bio as string) || "",
+            }
+          : {
+              education: (user.unsafeMetadata?.education as string) || "",
+              country: (user.unsafeMetadata?.country as string) || "",
+            };
+
+      const userData = {
+        ...baseData,
+        ...roleSpecificData,
+      };
+
       setFormData(userData);
       setInitialFormData(userData);
       hasInitialized.current = true;
     }
-  }, [isLoaded, isSignedIn, user]);
+  }, [isLoaded, isSignedIn, user, normalizedRole]);
 
   // One-time sync: ensure existing courses reflect current teacher name
   useEffect(() => {
@@ -137,19 +153,39 @@ export default function ProfileDetails(): JSX.Element {
         setIsSaving(true);
         setSaveStatus("Saving...");
         try {
+          const unsafeMetadataUpdate =
+            normalizedRole === 'teacher'
+              ? {
+                  ...user.unsafeMetadata,
+                  bio: debouncedFormData["bio"],
+                  phoneNumber: debouncedFormData["phone-number"],
+                  // Persist the editable profile email without changing the login email
+                  profileEmail: debouncedFormData["email"],
+                }
+              : {
+                  ...user.unsafeMetadata,
+                  education: debouncedFormData["education"],
+                  country: debouncedFormData["country"],
+                  phoneNumber: debouncedFormData["phone-number"],
+                  // Persist the editable profile email without changing the login email
+                  profileEmail: debouncedFormData["email"],
+                };
+
           await user.update({
             firstName: debouncedFormData["first-name"],
             lastName: debouncedFormData["last-name"],
-            unsafeMetadata: {
-              ...user.unsafeMetadata,
-              bio: debouncedFormData["bio"],
-              phoneNumber: debouncedFormData["phone-number"],
-            }
+            unsafeMetadata: unsafeMetadataUpdate,
           });
           // Propagate teacher name change to all their courses so student pages reflect it
           const prevFullName = `${initialFormData["first-name"] || ""} ${initialFormData["last-name"] || ""}`.trim();
           const newFullName = `${debouncedFormData["first-name"] || ""} ${debouncedFormData["last-name"] || ""}`.trim();
-          if (newFullName && newFullName !== prevFullName && Array.isArray(teacherCourses) && teacherCourses.length > 0) {
+          if (
+            normalizedRole === 'teacher' &&
+            newFullName &&
+            newFullName !== prevFullName &&
+            Array.isArray(teacherCourses) &&
+            teacherCourses.length > 0
+          ) {
             try {
               await Promise.allSettled(
                 teacherCourses.map((c: any) =>
@@ -196,7 +232,7 @@ export default function ProfileDetails(): JSX.Element {
   }, [formData, profileStats]);
 
   // Rename labels for display only (icons and values remain as-is)
-  const labelOverrides = [
+  const teacherLabelOverrides = [
     "Teacher Name",
     "Teaching Style",
     "Rating",
@@ -204,7 +240,17 @@ export default function ProfileDetails(): JSX.Element {
     "Total Time Spent",
     "Resolved Doubts",
   ];
-  // Icon files from public/ for each display label
+
+  const studentLabelOverrides = [
+    "Student Name",
+    "Learning Style",
+    "Average Test Score",
+    "Completion Rate",
+    "Average Time Spent",
+    "Accuracy Rate",
+  ];
+
+  // Icon files from public/ for each display label (currently tuned for teacher view)
   const iconOverrides: Record<string, string> = {
     "Teacher Name": "/TeacherNamelogo.png",
     "Teaching Style": "/TeachingStylelogo.svg",
@@ -213,6 +259,7 @@ export default function ProfileDetails(): JSX.Element {
     "Total Time Spent": "/TotalTimeSpentlogo.svg",
     "Resolved Doubts": "/ResolvedDoubtslogo.svg",
   };
+
   const renamedProfileStats = useMemo(() => {
     const formatMinutes = (mins: number) => {
       const total = Math.max(0, Math.floor(mins || 0));
@@ -230,9 +277,12 @@ export default function ProfileDetails(): JSX.Element {
     const coursesCreated = Array.isArray(teacherCourses) ? teacherCourses.length : ((analytics as any)?.coursesCreated ?? (analytics as any)?.totalCourses ?? null);
     const teachingStyle = (user?.unsafeMetadata?.teachingStyle as string) || "Visual + Theoretical";
 
+    const activeLabelOverrides = normalizedRole === 'teacher' ? teacherLabelOverrides : studentLabelOverrides;
+
     return dynamicProfileStats.map((stat, index) => {
-      const newLabel = labelOverrides[index] || stat.label;
+      const newLabel = activeLabelOverrides[index] || stat.label;
       let value = stat.value;
+      let icon = iconOverrides[newLabel] || (stat as any).icon;
       switch (newLabel) {
         case "Teacher Name": {
           const fullName = `${formData["first-name"] || ""} ${formData["last-name"] || ""}`.trim();
@@ -263,14 +313,22 @@ export default function ProfileDetails(): JSX.Element {
           break;
         }
       }
+
+      // Force our custom icons for these labels regardless of what the API sends
+      if (newLabel.toLowerCase().includes("completion rate")) {
+        icon = "/CompletionRatelogo.svg";
+      } else if (newLabel.toLowerCase().includes("accuracy rate")) {
+        icon = "/AccuracyRatelogo.svg";
+      }
+
       return {
         ...stat,
         label: newLabel,
-        icon: iconOverrides[newLabel] || (stat as any).icon,
+        icon,
         value,
       };
     });
-  }, [dynamicProfileStats, labelOverrides, iconOverrides, formData, analytics, teacherCourses, user]);
+  }, [dynamicProfileStats, teacherLabelOverrides, studentLabelOverrides, iconOverrides, formData, analytics, teacherCourses, user, normalizedRole]);
 
   const firstColumnStats = renamedProfileStats.filter((_, index) => index % 2 === 0);
   const secondColumnStats = renamedProfileStats.filter((_, index) => index % 2 !== 0);
@@ -318,7 +376,7 @@ export default function ProfileDetails(): JSX.Element {
           </nav>
           <section className="flex w-full flex-col items-start gap-6">
             <h1 className="text-3xl font-bold text-[#394169]">
-              {normalizedRole === 'teacher' ? 'Profile Details' : 'Student Profile'}
+              {normalizedRole === 'teacher' ? 'Profile Details' : 'Profile Details'}
             </h1>
             <form className="w-full">
               <Card className="w-full rounded-xl border border-solid border-[#c7ccf8] p-4">
@@ -349,50 +407,119 @@ export default function ProfileDetails(): JSX.Element {
                     </div>
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    {formFieldsTemplate.map((field) => (
-                      field.id === 'bio' ? (
-                        <div key={field.id} className="flex flex-col gap-2 md:col-span-2">
-                          <div className="flex items-center justify-between w-[818px]">
-                            <Label htmlFor={field.id} className="font-semibold text-[#394169]">{field.label}</Label>
-                            <span className="font-sans font-semibold text-[14px] leading-[15px] text-[#8187a0]">{(formData[field.id] || "").length}/500</span>
-                          </div>
-                          <textarea
-                            id={field.id}
-                            name={field.id}
-                            value={formData[field.id] || ""}
+                    {normalizedRole === 'student' ? (
+                      <>
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="first-name" className="font-semibold text-[#394169]">First Name</Label>
+                          <Input
+                            id="first-name"
+                            name="first-name"
+                            value={formData["first-name"] || ""}
                             onChange={handleInputChange}
-                            maxLength={500}
-                            className="w-[818px] h-[170px] rounded-xl border border-solid border-[#c7ccf8] bg-white px-5 py-3 font-medium text-[#394169] opacity-100 focus:outline-none focus:border-[#8187a0]"
-                            placeholder="Write a short bio..."
+                            className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
                           />
                         </div>
-                      ) : (
-                        <div key={field.id} className="flex flex-col gap-2">
-                          <Label htmlFor={field.id} className="font-semibold text-[#394169]">{field.label}</Label>
-                          {field.id === 'phone-number' ? (
-                            <Input
-                              id={field.id}
-                              name={field.id}
-                              type="tel"
-                              inputMode="tel"
-                              autoComplete="tel"
-                              value={formData[field.id] || ""}
-                              onChange={handleInputChange}
-                              className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
-                            />
-                          ) : (
-                            <Input
-                              id={field.id}
-                              name={field.id}
-                              value={formData[field.id] || ""}
-                              onChange={handleInputChange}
-                              className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
-                              disabled={field.id === 'email'}
-                            />
-                          )}
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="last-name" className="font-semibold text-[#394169]">Last Name</Label>
+                          <Input
+                            id="last-name"
+                            name="last-name"
+                            value={formData["last-name"] || ""}
+                            onChange={handleInputChange}
+                            className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
+                          />
                         </div>
-                      )
-                    ))}
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="email" className="font-semibold text-[#394169]">Email</Label>
+                          <Input
+                            id="email"
+                            name="email"
+                            value={formData["email"] || ""}
+                            onChange={handleInputChange}
+                            className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="phone-number" className="font-semibold text-[#394169]">Phone Number</Label>
+                          <Input
+                            id="phone-number"
+                            name="phone-number"
+                            type="tel"
+                            inputMode="tel"
+                            autoComplete="tel"
+                            value={formData["phone-number"] || ""}
+                            onChange={handleInputChange}
+                            className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="education" className="font-semibold text-[#394169]">Education</Label>
+                          <Input
+                            id="education"
+                            name="education"
+                            value={formData["education"] || ""}
+                            onChange={handleInputChange}
+                            className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <Label htmlFor="country" className="font-semibold text-[#394169]">Country</Label>
+                          <Input
+                            id="country"
+                            name="country"
+                            value={formData["country"] || ""}
+                            onChange={handleInputChange}
+                            className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {formFieldsTemplate.map((field) => (
+                          field.id === 'bio' ? (
+                            <div key={field.id} className="flex flex-col gap-2 md:col-span-2">
+                              <div className="flex items-center justify-between w-[818px]">
+                                <Label htmlFor={field.id} className="font-semibold text-[#394169]">{field.label}</Label>
+                                <span className="font-sans font-semibold text-[14px] leading-[15px] text-[#8187a0]">{(formData[field.id] || "").length}/500</span>
+                              </div>
+                              <textarea
+                                id={field.id}
+                                name={field.id}
+                                value={formData[field.id] || ""}
+                                onChange={handleInputChange}
+                                maxLength={500}
+                                className="w-[818px] h-[170px] rounded-xl border border-solid border-[#c7ccf8] bg-white px-5 py-3 font-medium text-[#394169] opacity-100 focus:outline-none focus:border-[#8187a0]"
+                                placeholder="Write a short bio..."
+                              />
+                            </div>
+                          ) : (
+                            <div key={field.id} className="flex flex-col gap-2">
+                              <Label htmlFor={field.id} className="font-semibold text-[#394169]">{field.label}</Label>
+                              {field.id === 'phone-number' ? (
+                                <Input
+                                  id={field.id}
+                                  name={field.id}
+                                  type="tel"
+                                  inputMode="tel"
+                                  autoComplete="tel"
+                                  value={formData[field.id] || ""}
+                                  onChange={handleInputChange}
+                                  className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
+                                />
+                              ) : (
+                                <Input
+                                  id={field.id}
+                                  name={field.id}
+                                  value={formData[field.id] || ""}
+                                  onChange={handleInputChange}
+                                  className="h-[50px] w-full rounded-full border border-solid border-[#c7ccf8] bg-white px-5 font-medium text-[#394169] transition-colors focus:border-[#8187a0]"
+                                />
+                              )}
+                            </div>
+                          )
+                        ))}
+                      </>
+                    )}
                   </div>
                   <div className="mt-6 flex justify-end gap-4">
                     {saveStatus && <span className="text-gray-500">{saveStatus}</span>}
