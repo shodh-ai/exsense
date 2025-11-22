@@ -194,8 +194,14 @@ export default function TeacherCoursePage(): JSX.Element {
     return !!courseEmail && !!userEmail && courseEmail === userEmail;
   }, [course, user]);
 
-  const computedTeacherName = course?.teacher?.name;
+  const computedTeacherName = useMemo(() => {
+    if (!isViewerCourseTeacher) return course?.teacher?.name;
+    const fullName = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
+    return fullName || course?.teacher?.name;
+  }, [course, isViewerCourseTeacher, user]);
+
   const computedTeacherTitle = course?.teacher?.title;
+
   const computedTeacherImage = (course as any)?.teacher?.imageUrl || (isViewerCourseTeacher ? user?.imageUrl : undefined);
 
   // --- MODIFIED LOADING AND ERROR HANDLING ---
