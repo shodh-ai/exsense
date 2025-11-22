@@ -64,7 +64,7 @@ const StudentDashboard = (): JSX.Element => {
   return (
     <>
       <Sphere />
-      <div className="relative w-full max-h-[87%] overflow-x-hidden ">
+      <div className="relative w-full max-h-[87%] overflow-x-hidden">
         <div className="flex flex-col w-full max-w-4xl mx-auto pt-16 px-4 sm:px-6 lg:px-8 pb-10 relative z-10">
           
           {/* My Performance Summary section */}

@@ -5,6 +5,9 @@ import React, { JSX, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
+import { useSessionStore } from "@/lib/store";
+import Loading from "../../../loading";
+import ErrorPage from "../../../error";
 
 // --- UI Components ---
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -256,8 +259,14 @@ export default function StudentCoursePage(): JSX.Element {
   };
 
   // --- LOADING AND ERROR STATES ---
-  if (courseLoading) return <div className="p-6 text-center text-lg">Loading course details...</div>;
-  if (courseError) return <div className="p-6 text-center text-red-500">Error: {(courseError as any)?.message || "Failed to load the course."}</div>;
+  if (courseLoading) return <Loading />;
+  if (courseError)
+    return (
+      <ErrorPage
+        error={(courseError as Error) ?? new Error("Failed to load the course.")}
+        reset={() => router.refresh()}
+      />
+    );
   if (!course) return <div className="p-6 text-center">Course not found.</div>;
 
   // --- DATA MAPPING FOR UI ---
