@@ -22,5 +22,4 @@ jobs:
           npm ci || npm i
       - name: Run unit tests
         run: |
-          cd exsense
           npm test -- --ci --runInBand
