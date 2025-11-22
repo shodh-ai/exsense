@@ -2,6 +2,7 @@
 
 import { ChevronDownIcon, SearchIcon, ChevronLeftIcon, Link } from "lucide-react";
 import React, { JSX, useMemo, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import CourseCard, { Course } from "@/components/compositions/CourseCard";
 import Sphere from "@/components/compositions/Sphere";
 import Footer from "@/components/compositions/Footer";
-import { useCourses } from "@/hooks/useApi";
+import { useCourses, useMyEnrollments } from "@/hooks/useApi";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -26,6 +27,8 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 
 const CoursesPage = (): JSX.Element => {
   const { data, isLoading, error } = useCourses();
+  const { data: enrollments } = useMyEnrollments();
+  const { user } = useUser();
   const router = useRouter();
 
   const [activeCourseId, setActiveCourseId] = useState<number | string | null>(null);
@@ -38,12 +41,20 @@ const CoursesPage = (): JSX.Element => {
       id: c.id,
       title: c.title,
       description: c.description || "No description available.",
-      instructor: c?.teacher?.name || c?.teacher?.email || "Unknown Instructor",
+      instructor: (() => {
+        const teacherName = c?.teacher?.name;
+        const teacherEmail = c?.teacher?.email?.toLowerCase?.();
+        const viewerEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase?.();
+        if (teacherName && teacherName.trim().length > 0) return teacherName;
+        if (teacherEmail && viewerEmail && teacherEmail === viewerEmail && user?.fullName) return user.fullName;
+        return c?.teacher?.email || "Unknown Instructor";
+      })(),
       rating: String(c.rating ?? "4.8"),
       reviews: String(c.reviews ?? c.enrollmentCount ?? 0),
       level: c.difficulty ?? "Beginner",
-      duration: c.duration ?? (c.lessonCount ? `${c.lessonCount} lessons` : "Self-paced"),
-      image: c.imageUrl ?? "/1.png",
+      duration: c.duration ? `${c.duration} weeks` : "",
+      image: c.imageUrl || "/Coursecardcoverimage.svg",
+      enrolledAt: enrollments?.find((e: any) => e.courseId === c.id)?.enrolledAt,
     })) as Course[];
 
     if (mappedCourses.length && activeCourseId === null) {
@@ -51,7 +62,7 @@ const CoursesPage = (): JSX.Element => {
     }
 
     return mappedCourses;
-  }, [data, activeCourseId]);
+  }, [data, activeCourseId, user]);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -75,27 +86,30 @@ const CoursesPage = (): JSX.Element => {
         <main className="relative w-full h-[90%] max-w-4xl self-center rounded-3xl p-6 md:p-8 z-10 flex flex-col mt-0 overflow-hidden custom-scrollbar pr-2">
           <div className="sticky top-0 bg-transparent z-20 pb-6">
             <nav className="flex items-center gap-3 mb-4">
-              <Button variant="outline" size="icon" className="h-7 w-7 rounded-full border-0 bg-white transition-colors hover:bg-gray-100" asChild>
-                <Link href="/student_dashboard">
-                  <ChevronLeftIcon className="h-6 w-6" />
-                </Link>
-              </Button>
               <Breadcrumb>
-                <BreadcrumbList className="inline-flex items-center gap-2">
+                <BreadcrumbList className="inline-flex items-center gap-[19px]">
                   <BreadcrumbItem>
                     <BreadcrumbLink href="/student_dashboard" className="font-medium text-[#8187a0] transition-colors hover:text-[#394169]">
-                      Dashboard
+                      <span className="inline-flex items-center gap-1">
+                        <img src="/ChevronBackIcon.png" alt="Chevron" className="h-4 w-4" />
+                        <span>Dashboard</span>
+                      </span>
                     </BreadcrumbLink>
                   </BreadcrumbItem>
-                  <BreadcrumbSeparator>·</BreadcrumbSeparator>
+                  <span
+                    className="inline-flex items-center justify-center w-[3px] h-4 opacity-100 text-[#8187A0] text-[12px] leading-4 font-semibold tracking-[-0.3px]"
+                    style={{ fontFamily: 'Inter Display' }}
+                  >
+                    ·
+                  </span>
                   <BreadcrumbItem>
-                    <span className="font-medium text-[#394169]">Explore Courses</span>
+                    <span className="font-medium text-[#8187a0]">Explore Courses</span>
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
             </nav>
             <div className="w-full flex justify-between items-center mb-8">
-              <h1 className="font-semibold text-black text-xl md:text-2xl">
+              <h1 className="font-semibold text-[#394169] text-xl md:text-2xl">
                 Our Interactive Session
               </h1>
             </div>
@@ -109,7 +123,7 @@ const CoursesPage = (): JSX.Element => {
               <div className="flex w-full flex-grow items-center rounded-full border border-solid border-gray-300/70 bg-white/80 transition-all duration-300">
                 <Input
                   className="border-0 bg-transparent shadow-none w-full h-[48px] pl-5 pr-2 text-black placeholder:text-gray-400 placeholder:font-medium placeholder:text-sm placeholder:leading-normal focus:ring-0"
-                  placeholder="Search for anything..."
+                  placeholder="Search Course"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -120,7 +134,7 @@ const CoursesPage = (): JSX.Element => {
             </div>
           </div>
 
-          <div className="overflow-y-auto h-full mt-8 custom-scrollbar pr-4">
+          <div className="overflow-y-auto h-full mt-0 custom-scrollbar pr-4">
             <div className="grid gap-6 auto-rows-fr">
               {isLoading && <p>Loading courses...</p>}
               {error && <p className="text-red-500">Error: {(error as any)?.message || 'Failed to load courses'}</p>}
@@ -133,7 +147,12 @@ const CoursesPage = (): JSX.Element => {
               )}
               {!isLoading && !error && filteredCourses.map((course) => (
                 <div key={course.id} onClick={() => { setActiveCourseId(course.id); router.push(`/course/${course.id}`); }} className="cursor-pointer">
-                  <CourseCard course={course} isActive={activeCourseId === course.id} isEnrolled={false} onEnroll={() => router.push(`/course/${course.id}`)} />
+                                    <CourseCard 
+                    course={course} 
+                    isActive={activeCourseId === course.id} 
+                    isEnrolled={!!enrollments?.find((e: any) => e.courseId === course.id)}
+                    onEnroll={() => router.push(`/course/${course.id}`)} 
+                  />
                 </div>
               ))}
               {/* --- MODIFICATION END --- */}

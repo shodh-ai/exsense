@@ -63,6 +63,7 @@ export const useTeacherAnalytics = () => {
     retry: (failureCount, error: any) => {
       const status = error?.status as number | undefined;
       if (status === 401 || status === 403) return false;
+      if (status === 429) return false;
       return failureCount < 2;
     },
   });
@@ -78,7 +79,7 @@ export const useTeacherCourses = () => {
     enabled: isSignedIn && !!userId,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    refetchOnMount: true,
+
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: (failureCount, error: any) => {

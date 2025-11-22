@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeftIcon, Trash2Icon, PlusIcon } from "lucide-react";
 import { toast } from "sonner";
+import { useUser } from "@clerk/nextjs";
 
 // --- State Management & API Hooks ---
 import { useNewCourseStore } from "@/lib/newCourseStore";
@@ -69,6 +70,7 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
   const router = useRouter();
   const api = useApiService();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useUser();
 
   const isEditMode = !!courseId;
 
@@ -151,6 +153,15 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
       try {
         // In a real application, you would handle the bannerImage upload here
         // and get back a URL to save in the course details.
+        const fullName = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
+        const teacherPayload = user
+          ? {
+              name: fullName || undefined,
+              email: (user.primaryEmailAddress?.emailAddress as string | undefined) || undefined,
+              title: (user.unsafeMetadata?.title as string | undefined) || undefined,
+              bio: (user.unsafeMetadata?.bio as string | undefined) || undefined,
+            }
+          : undefined;
         const coursePayload = {
           title: globalState.title,
           description: globalState.description,
@@ -159,6 +170,7 @@ export default function CourseForm({ courseId }: { courseId?: string }) {
           learningOutcomes: globalState.learningOutcomes,
           difficulty: globalState.difficulty,
           language: globalState.language,
+          teacher: teacherPayload,
         };
 
         const newCourse = await createCourseMutation.mutateAsync(coursePayload);

@@ -3,9 +3,11 @@
 import { Star } from "lucide-react";
 import React, { JSX, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { useSessionStore } from "@/lib/store";
+import Loading from "../../../loading";
+import ErrorPage from "../../../error";
 
 // --- UI Components ---
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -149,13 +151,13 @@ const WhatYouWillLearnSection = ({ skills, outcomes }: { skills?: string[], outc
   </section>
 );
 
-const TeacherProfileSection = ({ teacherName, teacherTitle, teacherBio }: { teacherName?: string, teacherTitle?: string, teacherBio?: string }) => (
+const TeacherProfileSection = ({ teacherName, teacherTitle, teacherBio, teacherImageUrl }: { teacherName?: string, teacherTitle?: string, teacherBio?: string, teacherImageUrl?: string }) => (
   <section className="flex flex-col gap-6">
     <h2 className="text-xl font-bold text-[#394169]">Meet your teacher</h2>
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-4">
         <Avatar className="h-14 w-14">
-          <AvatarImage src="/teacher1.svg" alt={teacherName} />
+          <AvatarImage src={teacherImageUrl || "/teacher1.svg"} alt={teacherName} />
         </Avatar>
         <div className="flex flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2.5">
@@ -232,6 +234,7 @@ export default function StudentCoursePage(): JSX.Element {
   const { courseId } = useParams<{ courseId: string }>();
   const router = useRouter();
   const { isSignedIn } = useAuth();
+  const { user } = useUser();
   const showNotification = useSessionStore((s) => s.showNotification);
   
   // --- REAL DATA FETCHING ---
@@ -259,11 +262,31 @@ export default function StudentCoursePage(): JSX.Element {
   };
 
   // --- LOADING AND ERROR STATES ---
-  if (courseLoading) return <div className="p-6 text-center text-lg">Loading course details...</div>;
-  if (courseError) return <div className="p-6 text-center text-red-500">Error: {(courseError as any)?.message || "Failed to load the course."}</div>;
+  if (courseLoading) return <Loading />;
+  if (courseError)
+    return (
+      <ErrorPage
+        error={(courseError as Error) ?? new Error("Failed to load the course.")}
+        reset={() => router.refresh()}
+      />
+    );
   if (!course) return <div className="p-6 text-center">Course not found.</div>;
 
   // --- DATA MAPPING FOR UI ---
+  const isViewerCourseTeacher = (() => {
+    const courseEmail = course?.teacher?.email?.toLowerCase?.();
+    const userEmail = user?.primaryEmailAddress?.emailAddress?.toLowerCase?.();
+    return !!courseEmail && !!userEmail && courseEmail === userEmail;
+  })();
+
+  const computedTeacherName = (() => {
+    if (!isViewerCourseTeacher) return course?.teacher?.name;
+    const fullName = `${user?.firstName || ""} ${user?.lastName || ""}`.trim();
+    return fullName || course?.teacher?.name;
+  })();
+  const computedTeacherTitle = course?.teacher?.title || (isViewerCourseTeacher ? ((user?.unsafeMetadata?.title as string) || undefined) : undefined);
+  const computedTeacherImage = (course as any)?.teacher?.imageUrl || (isViewerCourseTeacher ? user?.imageUrl : undefined);
+  const computedTeacherBio = course?.teacher?.bio; // already coming from backend
   const courseDetails: CourseDetail[] = [
     { icon: "/difficulty.svg", label: "Difficulty", value: course.difficulty ?? "N/A" },
     { icon: "/star.svg", label: "Rating", value: "Not Rated Yet" },
@@ -295,7 +318,7 @@ export default function StudentCoursePage(): JSX.Element {
               <CourseDetailsSection details={courseDetails} onEnroll={enroll} onStartSession={startSession} isEnrolling={enrollMutation.isPending} isEnrolled={isEnrolled} />
               <WhatYouWillLearnSection skills={course.skills} outcomes={course.learningOutcomes} />
               <CourseMap />
-              <TeacherProfileSection teacherName={course.teacher?.name} teacherTitle={course.teacher?.title} teacherBio={course.teacher?.bio} />
+              <TeacherProfileSection teacherName={computedTeacherName} teacherTitle={computedTeacherTitle} teacherBio={computedTeacherBio} teacherImageUrl={computedTeacherImage} />
               <ReviewsSection reviews={course.reviews} />
               <FaqSection faqs={course.faqs} />
             </div>

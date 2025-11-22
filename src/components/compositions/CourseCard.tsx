@@ -9,15 +9,16 @@ import { Card, CardContent } from "@/components/ui/card";
 
 // Interface for Course data (no changes)
 export interface Course {
- id: number | string;
- title: string;
- instructor: string;
- description: string;
- rating: string;
- reviews: string;
- level: string;
- duration: string;
- image: string;
+  id: number | string;
+  title: string;
+  instructor: string;
+  description: string;
+  rating: string;
+  reviews: string;
+  level: string;
+  duration: string;
+  image: string;
+  enrolledAt?: string;
 }
 
 
@@ -32,6 +33,16 @@ interface CourseCardProps {
 
 
 const CourseCard = ({ course, isActive, isEnrolled, onEnroll, onStartSession }: CourseCardProps): JSX.Element => {
+  const getStudiedLabel = (enrollmentDate: string | undefined): string | null => {
+    if (!enrollmentDate) return null;
+    const last = new Date(enrollmentDate);
+    if (isNaN(last.getTime())) return null;
+    const now = new Date();
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const days = Math.floor((now.getTime() - last.getTime()) / msPerDay);
+    if (days <= 0) return 'Studied Today';
+    return `Studied ${days} day${days > 1 ? 's' : ''} ago`;
+  };
  return (
  <Card
  className={cn(
@@ -42,39 +53,40 @@ const CourseCard = ({ course, isActive, isEnrolled, onEnroll, onStartSession }: 
  
  // 2. Keep the transparent ring to prevent size shifts on click and set the initial border color.
  "border ring-2 shadow-sm",
- "border-[#C7CCF8] ring-transparent", // MODIFIED: Changed border-transparent to border-[#ffffff]
- 
- // 3. Apply active styles by changing color, not size.
- isActive && "border-blue-500 ring-blue-200/50"
- )}
- >
- {/* Course Image */}
- <img
- className="h-32 w-full rounded-lg object-cover sm:h-full sm:w-32"
- alt={`Cover image for ${course.title}`}
- src={course.image}
- />
+
+        // 2. Keep the transparent ring to prevent size shifts on click and set the initial border color.
+        "border ring-2 shadow-sm",
+        "border-[#C7CCF8] ring-transparent", // MODIFIED: Changed border-transparent to border-[#ffffff]
+
+        // 3. Apply active styles by changing color, not size.
+        isActive && "border-blue-500 ring-blue-200/50"
+      )}
+    >
+      {/* Course Image */}
+      <img
+        className="w-[260px] h-[168px] rounded-[8px] object-cover opacity-100"
+        alt={`Cover image for ${course.title}`}
+        src={course.image}
+      />
+      <CardContent className="flex flex-1 flex-col p-0">
+        {/* This container will grow to push the button section to the bottom */}
+        <div className="flex-1">
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col">
+              <h3 className="font-semibold text-lg leading-tight text-black">
+                {course.title}
+              </h3>
+                            <p className="text-sm text-gray-500">by {course.instructor}</p>
+              {isEnrolled && <p className="text-sm text-gray-500">{getStudiedLabel(course.enrolledAt)}</p>}
+            </div>
+            <p className="text-sm text-gray-700 line-clamp-2">
+              {course.description}
+            </p>
+          </div>
+        </div>
 
 
- {/* Course Content */}
- <CardContent className="flex flex-1 flex-col p-0">
- {/* This container will grow to push the button section to the bottom */}
- <div className="flex-1">
- <div className="flex flex-col gap-2">
- <div className="flex flex-col">
- <h3 className="font-semibold text-lg leading-tight text-black">
- {course.title}
- </h3>
- <p className="text-sm text-gray-500">by {course.instructor}</p>
- </div>
- <p className="text-sm text-gray-700 line-clamp-2">
- {course.description}
- </p>
- </div>
- </div>
-
-
- {/* Details and Button Section */}
+        {/* Details and Button Section */}
  <div className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between">
  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-600">
  <div className="flex items-center gap-1">
@@ -90,19 +102,12 @@ const CourseCard = ({ course, isActive, isEnrolled, onEnroll, onStartSession }: 
  <span>{course.duration}</span>
  </div>
  </div>
- {isEnrolled ? (
+ {isEnrolled && (
  <Button
  onClick={() => onStartSession?.(course.id)}
  className="h-9 rounded-full px-6 text-sm font-semibold bg-green-600 text-white hover:bg-green-700"
  >
  Start Session
- </Button>
- ) : (
- <Button
- onClick={() => onEnroll(course.id)}
- className="h-9 rounded-full px-6 text-sm font-semibold bg-[#566fe9] text-white hover:bg-[#4a5fcf]"
- >
- Enroll Now
  </Button>
  )}
  </div>
