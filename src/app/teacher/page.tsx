@@ -170,9 +170,11 @@ interface ConceptualDebriefViewProps {
   pendingQuestions: PendingQuestion[];
   draftTreeProposal: TreePlanProposal | null;
   onApprovePlan: () => void;
+  replyingToQuestion: PendingQuestion | null;
+  onSelectQuestion: (q: PendingQuestion | null) => void;
 }
 
-const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef, onToggleRecording, isRecording, recordingDuration, componentButtons, imprintingMode, liveGraph, pendingQuestions, draftTreeProposal, onApprovePlan }: ConceptualDebriefViewProps) => {
+const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inputRef, onToggleRecording, isRecording, recordingDuration, componentButtons, imprintingMode, liveGraph, pendingQuestions, draftTreeProposal, onApprovePlan, replyingToQuestion, onSelectQuestion }: ConceptualDebriefViewProps) => {
   return (
     // MODIFICATION: Increased padding-bottom to prevent overlap with the new fixed footer.
     <div className="w-full h-full flex flex-col justify-between items-center text-black bg-transparent p-4 md:p-8 pb-[120px]">
@@ -232,16 +234,35 @@ const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inpu
                 <div className="text-xs text-gray-400 italic p-2">AI is listening... no questions yet.</div>
               ) : (
                 <div className="space-y-3">
-                  {pendingQuestions.map((q: any, idx: number) => (
-                    <div key={idx} className="bg-white border border-blue-100 p-3 rounded-lg shadow-sm hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="text-[10px] font-bold text-[#566FE9] uppercase tracking-wider">
-                          {q.priority || 'Normal'} Priority
-                        </span>
+                  {pendingQuestions.map((q: any, idx: number) => {
+                    const isSelected = replyingToQuestion?.text === (q.text || q.question || '');
+                    return (
+                      <div
+                        key={idx}
+                        onClick={() => onSelectQuestion(isSelected ? null : q)}
+                        className={`p-3 rounded-lg shadow-sm transition-all cursor-pointer border ${
+                          isSelected
+                            ? 'bg-blue-50 border-[#566FE9] ring-1 ring-[#566FE9]'
+                            : 'bg-white border-blue-100 hover:border-[#566FE9] hover:shadow-md'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="text-[10px] font-bold text-[#566FE9] uppercase tracking-wider">
+                            {q.priority || 'Normal'} Priority
+                          </span>
+                          {isSelected && (
+                            <span className="text-[10px] font-bold text-green-600">Replying...</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-800 leading-relaxed">{q.text || q.question || ''}</p>
+                        {q.context_replay && (
+                          <div className="mt-2 flex items-center gap-1 text-[10px] text-gray-500 bg-gray-100 px-2 py-1 rounded w-fit">
+                            <span>▶️ Play Context</span>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-sm text-gray-800 leading-relaxed">{q.text || q.question || ''}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -276,6 +297,19 @@ const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inpu
         - Centered the bar and set its width to 97% to match the main content area from AppLayout.
       */}
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[97%] max-w-[1392px] z-10">
+          {replyingToQuestion && (
+            <div className="mb-2 mx-auto w-fit max-w-2xl bg-[#566FE9] text-white px-4 py-2 rounded-full flex items-center gap-3 shadow-lg">
+              <span className="text-xs font-medium truncate max-w-[300px]">
+                Replying to: "{replyingToQuestion.text}"
+              </span>
+              <button
+                onClick={() => onSelectQuestion(null)}
+                className="hover:bg-white/20 rounded-full p-0.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+          )}
           <div className="w-full flex items-center gap-4">
             {/* Nav buttons (moved here for conceptual side) */}
             <div className="h-[56px] flex items-center justify-between bg-transparent border border-[#C7CCF8] px-2 rounded-[600px]">
@@ -295,14 +329,14 @@ const ConceptualDebriefView = ({ debrief, userInput, onUserInput, onSubmit, inpu
               ))}
             </div>
             {/* Input bar */}
-            <div className="flex-1 flex items-center justify-between w-full h-[56px] bg-transparent border border-[#C7CCF8] rounded-[600px] pl-5 pr-2 py-2 backdrop-blur-sm">
+            <div className={`flex-1 flex items-center justify-between w-full h-[56px] bg-transparent rounded-[600px] pl-5 pr-2 py-2 backdrop-blur-sm border ${replyingToQuestion ? 'border-[#566FE9] ring-1 ring-[#566FE9]' : 'border-[#C7CCF8]'}`}>
               <textarea
                 ref={inputRef as React.RefObject<HTMLTextAreaElement>}
                 value={userInput}
                 onChange={(e) => onUserInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSubmit(); } }}
                 className="w-full h-full bg-transparent focus:outline-none resize-none text-lg text-black placeholder-gray-500"
-                placeholder="Define the in-scope and out-of-scope boundaries for this LO..."
+                placeholder={replyingToQuestion ? 'Type your answer...' : 'Define the in-scope and out-of-scope boundaries for this LO...'}
               />
               {/* Button Group */}
               <div className="flex items-center gap-1 ">
@@ -371,6 +405,8 @@ interface SessionContentProps {
     pendingQuestions: any[];
     draftTreeProposal: any | null;
     onApprovePlan: () => void;
+    replyingToQuestion: PendingQuestion | null;
+    onSelectQuestion: (q: PendingQuestion | null) => void;
 }
 
 function SessionContent({
@@ -403,6 +439,8 @@ function SessionContent({
     pendingQuestions,
     draftTreeProposal,
     onApprovePlan,
+    replyingToQuestion,
+    onSelectQuestion,
 }: SessionContentProps) {
     const isAwaitingAIResponse = useSessionStore((s: ReturnType<typeof useSessionStore.getState>) => s.isAwaitingAIResponse);
 
@@ -428,6 +466,8 @@ function SessionContent({
                         pendingQuestions={pendingQuestions}
                         draftTreeProposal={draftTreeProposal}
                         onApprovePlan={onApprovePlan}
+                        replyingToQuestion={replyingToQuestion}
+                        onSelectQuestion={onSelectQuestion}
                     />
                 </div>
 
@@ -867,6 +907,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
     const [pendingQuestions, setPendingQuestions] = useState<PendingQuestion[]>([]);
     const [draftTreeProposal, setDraftTreeProposal] = useState<TreePlanProposal | null>(null);
     const [proposalStatus, setProposalStatus] = useState<string>('idle');
+    const [replyingToQuestion, setReplyingToQuestion] = useState<PendingQuestion | null>(null);
 
     // Listen for warmup and cognitive shadow events from backend via LiveKit data channel
     useEffect(() => {
@@ -894,8 +935,27 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                     setWarmupProgress(100);
                 } else if (message.type === 'cognitive_shadow_update') {
                     console.log('[TeacherPage][Shadow] Received update:', message);
+                    let normalizedForSummary: LiveGraphData | null = null;
                     if (message.live_graph) {
-                        setLiveGraph(message.live_graph);
+                        try {
+                            const raw: any = message.live_graph;
+                            const steps = Array.isArray(raw.steps)
+                                ? raw.steps
+                                : (raw.steps_package || []);
+                            const concepts = Array.isArray(raw.concepts)
+                                ? raw.concepts
+                                : ([...(raw.concepts_from_steps || []), ...(raw.concepts_from_memory || [])]);
+                            const normalized: LiveGraphData = {
+                                ...(raw as any),
+                                steps,
+                                concepts,
+                            };
+                            normalizedForSummary = normalized;
+                            setLiveGraph(normalized);
+                        } catch {
+                            // Fallback to raw payload if normalization fails
+                            setLiveGraph(message.live_graph as any);
+                        }
                     }
                     if (message.pending_questions) {
                         setPendingQuestions(message.pending_questions);
@@ -904,6 +964,28 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                         setDraftTreeProposal(message.tree_proposal);
                         setProposalStatus('draft_ready');
                         setStatusMessage('AI has proposed a lesson plan.');
+                    }
+
+                    try {
+                        const stepsCount = normalizedForSummary
+                            ? (normalizedForSummary.steps || []).length
+                            : Array.isArray(message.live_graph?.steps_package)
+                                ? message.live_graph.steps_package.length
+                                : Array.isArray(message.live_graph?.steps)
+                                    ? message.live_graph.steps.length
+                                    : 0;
+                        const pendingCount = Array.isArray(message.pending_questions)
+                            ? message.pending_questions.length
+                            : Array.isArray(message.pending_questions)
+                                ? message.pending_questions.length
+                                : 0;
+                        const pendingLabel = pendingCount === 1 ? 'question' : 'questions';
+                        setDebriefMessage({
+                            hypothesis: 'Live Cognitive Shadow updated.',
+                            text: `New live moment processed: ${stepsCount} steps captured, ${pendingCount} pending ${pendingLabel}.`,
+                        });
+                    } catch {
+                        // Best-effort UI nudge; ignore failures
                     }
                 }
             } catch (e) {
@@ -930,7 +1012,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
             room.off('dataReceived', handleDataReceived);
             clearTimeout(queryTimer);
         };
-    }, [room, sendBrowserInteraction]);
+    }, [room, sendBrowserInteraction, setDebriefMessage]);
 
     // Frontend safety timeout: Always hide warmup screen after 30 seconds, regardless of backend
     useEffect(() => {
@@ -1121,6 +1203,9 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                         session_id: roomName,
                         imprinting_mode: 'DEBRIEF_CONCEPTUAL',
                         latest_expert_audio_b64: audio_b64,
+                        in_response_to_question: replyingToQuestion
+                            ? `The attached audio is an answer to: "${replyingToQuestion.text}"`
+                            : undefined,
                         current_lo: currentLO || undefined,
                         imprinting_environment: imprintingEnvironment,
                     });
@@ -1140,6 +1225,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                     setConceptualStarted(true);
                     setStatusMessage('AI replied to your audio answer.');
                     setIsStartAllowed(!(aiText && /\?/.test(aiText)));
+                    setReplyingToQuestion(null);
                 } catch (e: any) {
                     console.error('[TeacherPage] Conceptual audio turn failed', e);
                     setDebriefMessage({ text: `Sorry, I encountered an error processing your audio. ${e?.message || e}` });
@@ -1313,6 +1399,8 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                 await sendBrowser('start_live_monitoring', {
                     session_id: roomName,
                     environment: imprintingEnvironment,
+                    curriculum_id: curriculumId,
+                    current_lo: currentLO || lessonTitle || lessonId || undefined,
                 });
                 if (room) {
                     console.log('[TeacherPage] handleStartRecording: enabling LiveKit mic for localParticipant');
@@ -1403,7 +1491,13 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
         const msg = (topicInput || '').trim();
         if (!msg) return;
 
+        let finalMessage = msg;
+        if (replyingToQuestion) {
+            finalMessage = `[Answer to Question: "${replyingToQuestion.text}"]: ${msg}`;
+        }
+
         setTopicInput('');
+        setReplyingToQuestion(null);
         setStatusMessage('Sending response...');
 
         if (MOCK_BACKEND) {
@@ -1426,7 +1520,7 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                     curriculum_id: curriculumId,
                     session_id: roomName,
                     imprinting_mode: 'DEBRIEF_CONCEPTUAL',
-                    latest_expert_response: msg,
+                    latest_expert_response: finalMessage,
                     current_lo: currentLO || undefined,
                      imprinting_environment: imprintingEnvironment,
                     
@@ -1896,6 +1990,12 @@ function TeacherPageContent({ searchParams }: { searchParams: ReadonlyURLSearchP
                                         warmupStarted={warmupStarted}
                                         warmupCompleted={warmupCompleted}
                                         warmupProgress={warmupProgress}
+                                        liveGraph={liveGraph}
+                                        pendingQuestions={pendingQuestions}
+                                        draftTreeProposal={draftTreeProposal}
+                                        onApprovePlan={handleApprovePlan}
+                                        replyingToQuestion={replyingToQuestion}
+                                        onSelectQuestion={setReplyingToQuestion}
                                     />
                                     
                                 </div>
